@@ -1,5 +1,5 @@
 # Unreal Tournament VulkanDrv
-This project is a vulkan render device for Unreal Tournament (UT99). It also includes a new window manager.
+This project implements a vulkan render device for Unreal Tournament (UT99). It also includes a new window manager.
 
 The primary features are:
 
@@ -11,7 +11,7 @@ The primary features are:
 
 ## Compiling the source
 
-The project files were made for Visual Studio 2020. Simply open it, select the release configuration and press build.
+The project files were made for Visual Studio 2019. Open it, select the release configuration and press build.
 
 ## Usage
 
@@ -55,7 +55,7 @@ Last, add the following sections to the end of the file:
 	ShinySurfaces=True
 	VolumetricLighting=True
 
-Adjust FullscreenViewportX and FullscreenViewportY to match your monitor resolution. And that's it! Unreal Tournament should now be rendered using vulkan.
+Adjust FullscreenViewportX and FullscreenViewportY to match your monitor resolution. And that's it! Unreal Tournament should now be using vulkan.
 
 ## License
 
