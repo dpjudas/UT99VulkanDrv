@@ -11,7 +11,7 @@ The primary features are:
 
 ## Compiling the source
 
-The project files were made for Visual Studio 2019. Open it, select the release configuration and press build.
+The project files were made for Visual Studio 2019. Open VulkanDrv.sln, select the release configuration and press build.
 
 ## Usage
 
