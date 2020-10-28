@@ -1,0 +1,16 @@
+[Setup]
+LocalProduct=Unreal Fusion Map Pack
+ReadMe=Help\ReadMeFusion.htm
+SetupWindowTitle=Unreal Setup
+ProductURL=http://www.unreal.com/
+VersionURL=http://unreal.epicgames.com/versions.htm
+Developer=Epic Games, Inc.
+DeveloperURL=http://www.epicgames.com/
+Logo=Help\Logo.bmp
+
+[UnrealRequirement]
+LocalProduct=Unreal
+ProductURL=http://www.unreal.com/
+VersionURL=http://unreal.epicgames.com/versions.htm
+Developer=Epic Games, Inc.
+DeveloperURL=http://www.epicgames.com/

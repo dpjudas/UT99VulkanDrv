@@ -1,0 +1,48 @@
+[Setup]
+LocalProduct=Unreal
+DefaultFolder=C:\Unreal
+ReadMe=Help\ReadMe.htm
+SetupWindowTitle=Unreal
+AutoplayWindowTitle=Unreal Options
+ProductURL=http://www.unreal.com/
+VersionURL=http://unreal.epicgames.com/versions.htm
+Developer=Epic Games, Inc.
+DeveloperURL=http://www.epicgames.com/
+Logo=Help\Logo.bmp
+
+[General]
+PlayLevelCommand=&Play this Unreal level
+OpenLinkCommand=&Open this Unreal link
+InstallModuleCommand=&Install this Unreal module
+EditLevelCommand=&Edit this Unreal level
+
+[ContentGroup]
+Caption=Spielinhalt
+Description=Wählen Sie diese Option, um die beste Leistung zu erhalten. Wenn Sie diese Option deaktivieren, wird der Spielinhalt während des Spiels von der CD geladen. Das spart zwar Festplattenspeicher, mindert jedoch die Leistung.
+
+[GameGroup]
+Caption=Unreal - das Spiel
+Description=Die Installation ist erforderlich.
+
+[DirectXGroup]
+Caption=DirectX
+Description=Microsoft DirectX 6.
+
+[EditorGroup]
+Caption=Unreal Editor
+Description=Unreal world editor, for creating your own 3D Unreal environments. For advanced users; installation is optional.
+
+[PlayShortcut]
+Caption=Unreal spielen
+
+[SafeModeShortcut]
+Caption=Unreal – Sicherheitsmodus
+
+[EditorShortcut]
+Caption=Unreal Editor
+
+[DocumentationShortcut]
+Caption=Dokumentation
+
+[WebShortcut]
+Caption=Unreal – Web-Seite

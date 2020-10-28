@@ -1,0 +1,9 @@
+[Setup]
+LocalProduct=Unreal Public Source
+DefaultFolder=C:\Unreal
+ReadMe=Help\ReadMeSrc.htm
+SetupWindowTitle=Unreal Public Source Setup
+ProductURL=http://unreal.epicgames.com/
+VersionURL=http://unreal.epicgames.com/versions.htm
+Developer=Epic Games, Inc.
+DeveloperURL=http://www.epicgames.com/

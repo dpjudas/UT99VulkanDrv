@@ -1,0 +1,79 @@
+<html>
+
+<head>
+<title></title>
+</head>
+
+<body>
+
+<h1>Unreal Public Source Distribution</h1>
+
+<h3>Copyright</h3>
+
+<p>All files contained here are the property of <a href="http://www.epicgames.com/">Epic
+Games, Inc</a>.&nbsp; They are provided without warranty, and under the same terms as the
+Unreal retail license agreement: You may use them for your personal, non-profit enjoyment,
+but you may not sell or otherwise commercially exploit the source or things you created
+based on the source.</p>
+
+<h3>Installation</h3>
+
+<p>Unzip the source distribution into your root Unreal directory, for example c:\Unreal.
+&nbsp; You <em>must</em> use the exact same version of Unreal patch and public source
+distribution.&nbsp; If you have different versions, then the DLL's you recompile with the
+source distribution will almost certainly fail to run.</p>
+
+<h3>Tools Required</h3>
+
+<p>To recompile the source, you must have Microsoft Visual C++ 6.0, either with no service
+packs, or with SP1.&nbsp; The source does not work with previous versions of Visual
+C++.&nbsp; The source may or may not work with subsequent versions and service
+packs.&nbsp; If you are using anything other than this exact version, don't even think
+about emailing us asking why it doesn't work.</p>
+
+<h3>How Each Package (.DLL) Is Structured</h3>
+
+<p>Unreal packages are described in detail in the <a
+href="http://unreal.epicgames.com/Packages.htm">Package Documentation</a>.&nbsp; The
+source code for each package (for example, MyPackage) that contains a C++ .DLL component
+is as follows: 
+
+<ul>
+  <li>C:\Unreal\MyPackage\Src\MyPackage.dsp: Microsoft Developer Studio project files.</li>
+  <li>C:\Unreal\MyPackage\Src\*.cpp: C++ source code.</li>
+  <li>C:\Unreal\MyPackage\Src\*.h: Private C++ header files, which are only used internally by
+    this package.</li>
+  <li>C:\Unreal\MyPackage\Inc\*.h: Public C++ header files, which are exposed to all other
+    packages.</li>
+  <li>C:\Unreal\MyPackage\Classes\*.upkg: UnrealScript package definition file.</li>
+  <li>C:\Unreal\MyPackage\Classes\*.uc: UnrealScript class source files.</li>
+</ul>
+
+<h3>Directory Structure</h3>
+
+<ul>
+  <li>\Unreal\UnrealPubSrc.dsw: Microsoft Visual C++ workspace file.</li>
+  <li>\Unreal\Core: Unreal engine core components (non-game code, such as low-level object
+    handling, script interpretter, file processing, configuration, and platform-specific
+    support).</li>
+  <li>\Unreal\Engine: Unreal engine game components.</li>
+  <li>\Unreal\Setup: Unreal Windows installer/uninstaller (Setup.exe).</li>
+  <li>\Unreal\GlideDrv: Unreal Glide support.&nbsp; Note: To compile this code, you need the
+    latest version of the Glide SDK from 3dfx's web site.</li>
+  <li>\Unreal\Help: A small amount of documentation.</li>
+  <li>\Unreal\Launch: Unreal Windows startup code (Unreal.exe).</li>
+  <li>\Unreal\OpenGLDrv: Unreal's OpenGL support.</li>
+  <li>\Unreal\System: Unreal's system directory.</li>
+  <li>\Unreal\UCC: Platform-neutral command line runner. Launches &quot;commandlets&quot; such
+    as the script compiler, installation generator, and command-line server.</li>
+  <li>\Unreal\Window: Windows encapsulation.</li>
+</ul>
+
+<h3>Additional Documentation</h3>
+
+<p>Visit the <a href="http://unreal.epicgames.com/">Unreal Technology Page</a> for our
+complete online documentation.</p>
+
+<h3>End</h3>
+</body>
+</html>

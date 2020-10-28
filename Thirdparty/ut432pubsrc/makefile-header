@@ -1,0 +1,392 @@
+#=============================================================================
+# makefile-header: Global definitions for Unreal project.
+#
+# Makefiles must define UNREAL_DIR before including makefile-header.
+#
+# Revision history:
+# 	* Created by Mike Danylchuk
+#	* Updated to support multiple link type by Brandon Reinhart.
+#=============================================================================
+
+#-----------------------------------------------------------------------------
+# Configuration.
+#-----------------------------------------------------------------------------
+
+# Specify version here.  Used for object storage directory.
+VERSION			= 413
+
+# Specify link method here.  Either [static] or [shared].
+LINKSTYLE		= static
+
+# Target type.  Either [linux] or [psx2]
+TARGETTYPE		= psx2
+
+# Machine type.  Either [i386] or [mips-ee]
+MACHTYPE		= mips-ee
+
+# Specify build here.  Either [release] or [debug].
+# Make sure there isn't any trailing space on the line.
+BUILD			= release
+
+#-----------------------------------------------------------------------------
+
+
+
+
+SHELL = /bin/sh
+BUILD_SUBDIR		= $(BUILD)-$(TARGETTYPE)-$(MACHTYPE)-$(LINKSTYLE)
+
+# Release build.
+ifeq ($(BUILD),release)
+ifeq ($(TARGETTYPE),linux)
+BUILD_CXXFLAGS = -O2 -Werror -fomit-frame-pointer -m386 -D_REENTRANT
+endif
+ifeq ($(TARGETTYPE),psx2)
+BUILD_CXXFLAGS = -O3 -fno-strict-aliasing -ffast-math -Werror -Wa,-al -fno-common -G0 -msingle-float
+endif
+endif
+
+# Debug build.
+ifeq ($(BUILD),debug)
+ifeq ($(TARGETTYPE),linux)
+BUILD_CXXFLAGS = -O2 -Werror -m386 -D_REENTRANT -ggdb
+endif
+ifeq ($(TARGETTYPE),psx2)
+BUILD_CXXFLAGS = -O3 -fno-strict-aliasing -ffast-math -Werror -Wa,-al -fno-common -G0 -ggdb -msingle-float
+endif
+endif
+
+# Shared build.
+ifeq ($(LINKSTYLE),shared)
+STATICLINK = 0
+LIBSUFFIX  = so
+endif
+
+# Static build.
+ifeq ($(LINKSTYLE),static)
+STATICLINK = 1
+LIBSUFFIX  = a
+endif
+
+#-----------------------------------------------------------------------------
+# Directories.
+#-----------------------------------------------------------------------------
+
+# PSX2 support directories.
+PSX2_DIR		= /usr/local/sce/ee
+PSX2_LIB		= $(PSX2_DIR)/lib
+PSX2_INC		= $(PSX2_DIR)/include
+PSX2_COMMON_INC		= /usr/local/sce/common/include
+
+# Core directories.
+CORE_SRC		= $(UNREAL_DIR)/Core/Src
+CORE_INC		= $(UNREAL_DIR)/Core/Inc
+CORE_BUILD		= $(UNREAL_DIR)/Core/$(BUILD_SUBDIR)
+CORE_OUT		= $(UNREAL_DIR)/System
+
+# Engine directories.
+ENGINE_SRC		= $(UNREAL_DIR)/Engine/Src
+ENGINE_INC		= $(UNREAL_DIR)/Engine/Inc
+ENGINE_BUILD		= $(UNREAL_DIR)/Engine/$(BUILD_SUBDIR)
+ENGINE_OUT		= $(UNREAL_DIR)/System
+
+# IpDrv directories.
+IPDRV_SRC		= $(UNREAL_DIR)/HackedIpDrv/Src
+IPDRV_INC		= $(UNREAL_DIR)/HackedIpDrv/Inc
+IPDRV_BUILD		= $(UNREAL_DIR)/HackedIpDrv/$(BUILD_SUBDIR)
+IPDRV_OUT		= $(UNREAL_DIR)/System
+
+# Fire directories.
+FIRE_SRC		= $(UNREAL_DIR)/Fire/Src
+FIRE_INC		= $(UNREAL_DIR)/Fire/Inc
+FIRE_BUILD		= $(UNREAL_DIR)/Fire/$(BUILD_SUBDIR)
+FIRE_OUT		= $(UNREAL_DIR)/System
+
+# Editor directories.
+EDITOR_SRC		= $(UNREAL_DIR)/Editor/Src
+EDITOR_INC		= $(UNREAL_DIR)/Editor/Inc
+EDITOR_BUILD		= $(UNREAL_DIR)/Editor/$(BUILD_SUBDIR)
+EDITOR_OUT		= $(UNREAL_DIR)/System
+
+# UCC directories.
+UCC_SRC			= $(UNREAL_DIR)/UCC/Src
+UCC_INC			= $(UNREAL_DIR)/UCC/Inc
+UCC_BUILD		= $(UNREAL_DIR)/UCC/$(BUILD_SUBDIR)
+UCC_OUT			= $(UNREAL_DIR)/System
+
+# XLaunch directories.
+XLAUNCH_SRC		= $(UNREAL_DIR)/XLaunch/Src
+XLAUNCH_INC		= $(UNREAL_DIR)/XLaunch/Inc
+XLAUNCH_BUILD		= $(UNREAL_DIR)/XLaunch/$(BUILD_SUBDIR)
+XLAUNCH_OUT		= $(UNREAL_DIR)/System
+
+# PSXLaunch directories.
+PSXLAUNCH_SRC		= $(UNREAL_DIR)/PSXLaunch/Src
+PSXLAUNCH_INC		= $(UNREAL_DIR)/PSXLaunch/Inc
+PSXLAUNCH_BUILD		= $(UNREAL_DIR)/PSXLaunch/$(BUILD_SUBDIR)
+PSXLAUNCH_OUT		= $(UNREAL_DIR)/System
+
+# Render directories.
+RENDER_SRC		= $(UNREAL_DIR)/Render/Src
+RENDER_INC		= $(UNREAL_DIR)/Render/Inc
+RENDER_BUILD		= $(UNREAL_DIR)/Render/$(BUILD_SUBDIR)
+RENDER_OUT		= $(UNREAL_DIR)/System
+
+# OpenGLDrv directories.
+OPENGLDRV_SRC		= $(UNREAL_DIR)/OpenGLDrv/Src
+OPENGLDRV_INC		= $(UNREAL_DIR)/OpenGLDrv/Src
+OPENGLDRV_BUILD		= $(UNREAL_DIR)/OpenGLDrv/$(BUILD_SUBDIR)
+OPENGLDRV_OUT		= $(UNREAL_DIR)/System
+
+# XMesaGLDrv directories.
+XMESAGLDRV_SRC		= $(UNREAL_DIR)/XMesaGLDrv/Src
+XMESAGLDRV_INC		= $(UNREAL_DIR)/XMesaGLDrv/Src
+XMESAGLDRV_BUILD	= $(UNREAL_DIR)/XMesaGLDrv/$(BUILD_SUBDIR)
+XMESAGLDRV_OUT		= $(UNREAL_DIR)/System
+
+# XDrv directories.
+XDRV_SRC		= $(UNREAL_DIR)/XDrv/Src
+XDRV_INC		= $(UNREAL_DIR)/XDrv/Inc
+XDRV_BUILD		= $(UNREAL_DIR)/XDrv/$(BUILD_SUBDIR)
+XDRV_OUT		= $(UNREAL_DIR)/System
+
+# NullDrv directories.
+NULLDRV_SRC		= $(UNREAL_DIR)/NullDrv/Src
+NULLDRV_INC		= $(UNREAL_DIR)/NullDrv/Inc
+NULLDRV_BUILD		= $(UNREAL_DIR)/NullDrv/$(BUILD_SUBDIR)
+NULLDRV_OUT		= $(UNREAL_DIR)/System
+
+# PSX2Drv directories.
+PSX2DRV_SRC		= $(UNREAL_DIR)/PSX2Drv/Src
+PSX2DRV_INC		= $(UNREAL_DIR)/PSX2Drv/Inc
+PSX2DRV_BUILD		= $(UNREAL_DIR)/PSX2Drv/$(BUILD_SUBDIR)
+PSX2DRV_OUT		= $(UNREAL_DIR)/System
+
+# GlideDrv directories.
+GLIDEDRV_SRC		= $(UNREAL_DIR)/GlideDrv/Src
+GLIDEDRV_INC		= $(UNREAL_DIR)/GlideDrv/Inc
+GLIDEDRV_BUILD		= $(UNREAL_DIR)/GlideDrv/$(BUILD_SUBDIR)
+GLIDEDRV_OUT		= $(UNREAL_DIR)/System
+
+# Unreal audio subsystem directories.
+AUDIO_SRC		= $(UNREAL_DIR)/Audio/Src
+AUDIO_INC		= $(UNREAL_DIR)/Audio/Inc
+AUDIO_BUILD		= $(UNREAL_DIR)/Audio/$(BUILD_SUBDIR)
+AUDIO_OUT		= $(UNREAL_DIR)/System
+
+# UWeb
+UWEB_SRC		= $(UNREAL_DIR)/UWeb/Src
+UWEB_INC		= $(UNREAL_DIR)/UWeb/Inc
+UWEB_BUILD		= $(UNREAL_DIR)/UWeb/$(BUILD_SUBDIR)
+UWEB_OUT		= $(UNREAL_DIR)/System
+
+# Null Render
+NULLRENDER_SRC		= $(UNREAL_DIR)/NullRender/Src
+NULLRENDER_INC		= $(UNREAL_DIR)/NullRender/Inc
+NULLRENDER_BUILD	= $(UNREAL_DIR)/NullRender/$(BUILD_SUBDIR)
+NULLRENDER_OUT		= $(UNREAL_DIR)/System
+
+# PSX Render
+PSX2RENDER_SRC		= $(UNREAL_DIR)/PSX2Render/Src
+PSX2RENDER_INC		= $(UNREAL_DIR)/PSX2Render/Inc
+PSX2RENDER_BUILD	= $(UNREAL_DIR)/PSX2Render/$(BUILD_SUBDIR)
+PSX2RENDER_OUT		= $(UNREAL_DIR)/System
+
+# PSX Audio
+PSX2AUDIO_SRC		= $(UNREAL_DIR)/PSX2Audio/Src
+PSX2AUDIO_INC		= $(UNREAL_DIR)/PSX2Audio/Inc
+PSX2AUDIO_BUILD		= $(UNREAL_DIR)/PSX2Audio/$(BUILD_SUBDIR)
+PSX2AUDIO_OUT		= $(UNREAL_DIR)/System
+
+# Null Net Driver
+NULLNETDRIVER_SRC	= $(UNREAL_DIR)/NullNetDriver/Src
+NULLNETDRIVER_INC	= $(UNREAL_DIR)/NullNetDriver/Inc
+NULLNETDRIVER_BUILD	= $(UNREAL_DIR)/NullNetDriver/$(BUILD_SUBDIR)
+NULLNETDRIVER_OUT	= $(UNREAL_DIR)/System
+
+# PSX iLink Network Driver
+PSX2ILINKDRV_SRC	= $(UNREAL_DIR)/PSX2iLinkDrv/Src
+PSX2ILINKDRV_INC	= $(UNREAL_DIR)/PSX2iLinkDrv/Inc
+PSX2ILINKDRV_IOPMODULE = $(UNREAL_DIR)/PSX2iLinkDrv/IOPModule
+PSX2ILINKDRV_BUILD	= $(UNREAL_DIR)/PSX2iLinkDrv/$(BUILD_SUBDIR)
+PSX2ILINKDRV_OUT	= $(UNREAL_DIR)/System
+
+
+# Source directories.
+ALL_SRC_DIRS 	= $(CORE_INC) $(CORE_SRC) \
+		  $(ENGINE_INC) $(ENGINE_SRC) \
+		  $(IPDRV_INC) $(IPDRV_SRC) \
+		  $(FIRE_INC) $(FIRE_SRC) \
+		  $(UCC_INC) $(UCC_SRC) \
+		  $(RENDER_INC) $(RENDER_SRC) \
+		  $(EDITOR_SRC) $(EDITOR_INC) \
+		  $(OPENGLDRV_SRC) $(OPENGLDRV_INC) \
+		  $(XMESAGLDRV_SRC) $(XMESAGLDRV_INC) \
+		  $(GLIDEDRV_SRC) $(GLIDEDRV_INC) \
+		  $(XDRV_SRC) $(XDRV_INC) \
+		  $(XLAUNCH_SRC) $(XLAUNCH_INC) \
+		  $(AUDIO_SRC) $(AUDIO_INC) \
+		  $(UWEB_SRC) $(UWEB_INC) \
+		  $(NULLRENDER_SRC) $(NULLRENDER_INC)
+
+# Backup directory.
+BACKUP_DIR		= $(UNREAL_DIR)/backup
+
+# XWindows libs.
+XLIBS			= -L/usr/X11/lib -L/usr/X11R6/lib -lX11 -lXext -lXmu \
+			  -lXt -lXi -lSM -lICE -lXpm
+
+# GL libs.
+GLIDEINC		= -I/usr/include/glide -I../Inc
+GLIDELIBS		= -lglide2x
+
+#-----------------------------------------------------------------------------
+# Output files.
+#-----------------------------------------------------------------------------
+
+# Core library
+CORE			= $(CORE_OUT)/Core.$(LIBSUFFIX)
+CORE_SONAME		= Core.so
+
+# Engine library
+ENGINE			= $(ENGINE_OUT)/Engine.$(LIBSUFFIX)
+ENGINE_SONAME		= Engine.so
+
+# IpDrv library
+IPDRV			= $(IPDRV_OUT)/IpDrv.$(LIBSUFFIX)
+IPDRV_SONAME		= IpDrv.so
+
+# Fire library
+FIRE			= $(FIRE_OUT)/Fire.$(LIBSUFFIX)
+FIRE_SONAME		= Fire.so
+
+# Editor library
+EDITOR			= $(EDITOR_OUT)/Editor.$(LIBSUFFIX)
+EDITOR_SONAME		= Editor.so
+
+# UCC executable
+UCC			= $(UCC_OUT)/ucc
+
+# XLaunch executable
+XLAUNCH			= $(XLAUNCH_OUT)/UnrealTournament
+
+# Playstation executable
+PSXLAUNCH		= $(PSXLAUNCH_OUT)/UnrealTournament
+
+# Render library
+RENDER			= $(RENDER_OUT)/Render.$(LIBSUFFIX)
+RENDER_SONAME		= Render.so
+
+# OpenGLDrv library
+OPENGLDRV		= $(OPENGLDRV_OUT)/OpenGLDrv.$(LIBSUFFIX)
+OPENGLDRV_SONAME	= OpenGLDrv.so
+
+# XMesaGLDrv library
+XMESAGLDRV		= $(XMESAGLDRV_OUT)/XMesaGLDrv.$(LIBSUFFIX)
+XMESAGLDRV_SONAME	= XMesaGLDrv.so
+
+# XDrv library
+XDRV			= $(XDRV_OUT)/XDrv.$(LIBSUFFIX)
+XDRV_SONAME		= XDrv.so
+
+# GlideDrv library
+GLIDEDRV		= $(GLIDEDRV_OUT)/GlideDrv.$(LIBSUFFIX)
+GLIDEDRV_SONAME		= GlideDrv.so
+
+# Audio library
+AUDIO			= $(AUDIO_OUT)/Audio.$(LIBSUFFIX)
+AUDIO_SONAME		= Audio.so
+
+# UWeb library
+UWEB			= $(UWEB_OUT)/UWeb.$(LIBSUFFIX)
+UWEB_SONAME		= UWeb.so
+
+# NullRender library
+NULLRENDER		= $(NULLRENDER_OUT)/NullRender.$(LIBSUFFIX)
+NULLRENDER_SONAME	= NullRender.so
+
+# NullNetDriver library
+NULLNETDRIVER		= $(NULLNETDRIVER_OUT)/NullNetDriver.$(LIBSUFFIX)
+NULLNETDRIVER_SONAME	= NullNetDriver.so
+
+# NullDrv library
+NULLDRV			= $(NULLDRV_OUT)/NullDrv.$(LIBSUFFIX)
+NULLDRV_SONAME		= NullDrv.so
+
+# PSX2Drv library
+PSX2DRV			= $(PSX2DRV_OUT)/PSX2Drv.$(LIBSUFFIX)
+PSX2DRV_SONAME		= PSX2Drv.so
+
+# PSX2Render library
+PSX2RENDER		= $(PSX2RENDER_OUT)/PSX2Render.$(LIBSUFFIX)
+PSX2RENDER_SONAME	= PSX2Render.so
+
+# PSX2Audio library
+PSX2AUDIO		= $(PSX2AUDIO_OUT)/PSX2Audio.$(LIBSUFFIX)
+PSX2AUDIO_SONAME	= PSX2Audio.so
+
+# PSX2iLinkDrv library
+PSX2ILINKDRV		= $(PSX2ILINKDRV_OUT)/PSX2iLinkDrv.$(LIBSUFFIX)
+PSX2ILINKDRV_SONAME	= psx2iLinkDrv.so
+
+#-----------------------------------------------------------------------------
+# Standard compiler/linker options.
+#-----------------------------------------------------------------------------
+
+ifeq ($(TARGETTYPE),linux)
+STD_CXX		= gcc 
+STD_CXXFLAGS	= -D__LINUX_X86__ -D__STATIC_LINK=$(STATICLINK) \
+			-fno-for-scope $(BUILD_CXXFLAGS)
+STD_LDFLAGS	= -Wl,-rpath,.
+STD_LIBS	= -lm -ldl -lnsl -lpthread
+
+STD_AR		= ar
+endif
+
+ifeq ($(TARGETTYPE),psx2)
+STD_CXX		= ee-g++
+STD_CXXFLAGS	= -D__PSX2_EE__ -D__STATIC_LINK=$(STATICLINK) \
+			-fno-for-scope $(BUILD_CXXFLAGS)
+STD_AS		= ee-g++
+STD_ASFLAGS	= -c -xassembler-with-cpp -Wal,-al
+STD_DVPASM	= ee-dvp-as
+STD_DVPASMFLAGS	= -g
+STD_LDFLAGS	= -Wl,-Map,$(TARGET).map -nostartfiles -L$(PSX2_LIB)
+STD_LIBS	=
+STD_OBJDUMP	= ee-objdump
+RUN		= dsedb -r run
+
+STD_AR		= ee-ar
+endif
+
+#-----------------------------------------------------------------------------
+# Tags.
+#-----------------------------------------------------------------------------
+
+CORE_TAG	= $(CORE_INC)/*.h $(CORE_SRC)/*.h $(CORE_SRC)/*.cpp
+ENGINE_TAG	= $(ENGINE_INC)/*.h $(ENGINE_SRC)/*.h $(ENGINE_SRC)/*.cpp
+IPDRV_TAG	= $(IPDRV_INC)/*.h $(IPDRV_SRC)/*.h $(IPDRV_SRC)/*.cpp
+FIRE_TAG	= $(FIRE_INC)/*.h $(FIRE_SRC)/*.h $(FIRE_SRC)/*.cpp
+EDITOR_TAG	= $(EDITOR_INC)/*.h $(EDITOR_SRC)/*.h $(EDITOR_SRC)/*.cpp
+UCC_TAG		= $(UCC_INC)/*.h $(UCC_SRC)/*.h $(UCC_SRC)/*.cpp
+RENDER_TAG	= $(RENDER_INC)/*.h $(RENDER_SRC)/*.h $(RENDER_SRC)/*.cpp
+OPENGLDRV_TAG	= $(OPENGLDRV_INC)/*.h $(OPENGLDRV_SRC)/*.h $(OPENGLDRV_SRC)/*.cpp
+XMESAGLDRV_TAG	= $(XMESAGLDRV_INC)/*.h $(XMESAGLDRV_SRC)/*.h $(XMESAGLDRV_SRC)/*.cpp
+GLIDEDRV_TAG	= $(GLIDEDRV_INC)/*.h $(GLIDEDRV_SRC)/*.h $(GLIDEDRV_SRC)/*.cpp
+XDRV_TAG	= $(XDRV_INC)/*.h $(XDRV_INC)/*.h $(XDRV_SRC)/*.cpp
+XLAUNCH_TAG	= $(XLAUNCH_INC)/*.h $(XLAUNCH_SRC)/*.h $(XLAUNCH_SRC)/*.cpp
+AUDIO_TAG	= $(AUDIO_INC)/*.h $(AUDIO_SRC)/*.h $(AUDIO_SRC)/*.cpp
+UWEB_TAG	= $(UWEB_INC)/*.h $(UWEB_SRC)/*.h $(UWEB_SRC)/*.cpp
+NULLRENDER_TAG	= $(NULLRENDER_INC)/*.h $(NULLRENDER_SRC)/*.h $(NULLRENDER_SRC)/*.cpp
+STD_TAG		= /usr/include/*.h /usr/include/sys/*.h /usr/include/arpa/*.h \
+			/usr/include/netinet/*.h
+
+ALL_TAGS	= $(CORE_TAG) $(ENGINE_TAG) $(IPDRV_TAG) $(FIRE_TAG) \
+			$(EDITOR_TAG) $(UCC_TAG) $(RENDER_TAG) \
+			$(OPENGLDRV_TAG) $(XMESAGLDRV_TAG) $(XLAUNCH_TAG) \
+			$(XDRV_TAG) $(GLIDEDRV_TAG) $(AUDIO_TAG) \
+			$(UWEB_TAG) $(NULLRENDER_TAG) $(STD_TAG)
+
+#-----------------------------------------------------------------------------
+# The End.
+#-----------------------------------------------------------------------------

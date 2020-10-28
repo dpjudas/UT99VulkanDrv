@@ -1,0 +1,44 @@
+#pragma once
+
+#include "VulkanObjects.h"
+#include "vec.h"
+#include "mat.h"
+#include <array>
+
+class VulkanPipeline;
+class VulkanPipelineLayout;
+class VulkanRenderPass;
+class VulkanFramebuffer;
+class VulkanDescriptorSetLayout;
+class VulkanDescriptorPool;
+class UVulkanViewport;
+
+class SceneRenderPass
+{
+public:
+	SceneRenderPass(UVulkanViewport* renderer);
+	~SceneRenderPass();
+
+	void begin(VulkanCommandBuffer *cmdbuffer);
+	void end(VulkanCommandBuffer *cmdbuffer);
+
+	VulkanPipeline* getPipeline(DWORD polyflags);
+
+private:
+	void createRenderPass();
+	void createPipeline();
+	void createFramebuffer();
+
+	UVulkanViewport* renderer = nullptr;
+
+	std::unique_ptr<VulkanShader> vertexShader;
+	std::unique_ptr<VulkanShader> fragmentShader;
+	std::unique_ptr<VulkanShader> fragmentShaderAlphaTest;
+
+	std::unique_ptr<VulkanRenderPass> renderPass;
+	std::unique_ptr<VulkanFramebuffer> sceneFramebuffer;
+	std::unique_ptr<VulkanPipeline> pipeline[32];
+
+	SceneRenderPass(const SceneRenderPass &) = delete;
+	SceneRenderPass &operator=(const SceneRenderPass &) = delete;
+};

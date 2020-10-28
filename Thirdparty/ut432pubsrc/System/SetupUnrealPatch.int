@@ -1,0 +1,18 @@
+[Setup]
+LocalProduct=Unreal
+DefaultFolder=C:\Unreal
+ReadMe=Help\ReleaseNotes.htm
+SetupWindowTitle=Unreal Setup
+AutoplayWindowTitle=Unreal Options
+ProductURL=http://www.unreal.com/
+VersionURL=http://unreal.epicgames.com/versions.htm
+Developer=Epic Games, Inc.
+DeveloperURL=http://www.epicgames.com/
+Logo=Help\Logo.bmp
+
+[UnrealRequirement]
+LocalProduct=Unreal
+ProductURL=http://www.unreal.com/
+VersionURL=http://unreal.epicgames.com/versions.htm
+Developer=Epic Games, Inc.
+DeveloperURL=http://www.epicgames.com/

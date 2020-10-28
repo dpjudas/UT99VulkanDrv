@@ -1,0 +1,49 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClInclude Include="UVulkanRenderDevice.h" />
+    <ClInclude Include="UVulkanClient.h" />
+    <ClInclude Include="VulkanBuilders.h" />
+    <ClInclude Include="VulkanDevice.h" />
+    <ClInclude Include="VulkanObjects.h" />
+    <ClInclude Include="VulkanSwapChain.h" />
+    <ClInclude Include="Precomp.h" />
+    <ClInclude Include="VulkanPostprocess.h" />
+    <ClInclude Include="SceneBuffers.h" />
+    <ClInclude Include="halffloat.h" />
+    <ClInclude Include="mat.h" />
+    <ClInclude Include="quaternion.h" />
+    <ClInclude Include="vec.h" />
+    <ClInclude Include="Postprocess.h" />
+    <ClInclude Include="PixelBuffer.h" />
+    <ClInclude Include="UVulkanViewport.h" />
+    <ClInclude Include="FileResource.h" />
+    <ClInclude Include="SceneRenderPass.h" />
+    <ClInclude Include="SceneSamplers.h" />
+    <ClInclude Include="VulkanTexture.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="VulkanDrv.cpp" />
+    <ClCompile Include="UVulkanRenderDevice.cpp" />
+    <ClCompile Include="UVulkanClient.cpp" />
+    <ClCompile Include="VulkanBuilders.cpp" />
+    <ClCompile Include="VulkanDevice.cpp" />
+    <ClCompile Include="VulkanSwapChain.cpp" />
+    <ClCompile Include="..\Thirdparty\volk\volk.c" />
+    <ClCompile Include="..\Thirdparty\vk_mem_alloc\vk_mem_alloc.cpp" />
+    <ClCompile Include="Precomp.cpp" />
+    <ClCompile Include="VulkanPostprocess.cpp" />
+    <ClCompile Include="SceneBuffers.cpp" />
+    <ClCompile Include="halffloat.cpp" />
+    <ClCompile Include="mat.cpp" />
+    <ClCompile Include="Postprocess.cpp" />
+    <ClCompile Include="UVulkanViewport.cpp" />
+    <ClCompile Include="FileResource.cpp" />
+    <ClCompile Include="SceneRenderPass.cpp" />
+    <ClCompile Include="SceneSamplers.cpp" />
+    <ClCompile Include="VulkanTexture.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\VulkanDrv.int" />
+  </ItemGroup>
+</Project>
