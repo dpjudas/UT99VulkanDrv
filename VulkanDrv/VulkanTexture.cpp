@@ -11,192 +11,415 @@ VulkanTexture::VulkanTexture(Renderer* renderer, const FTextureInfo& Info, DWORD
 	Update(renderer, Info, PolyFlags);
 }
 
+VulkanTexture::~VulkanTexture()
+{
+}
+
 void VulkanTexture::Update(Renderer* renderer, const FTextureInfo& Info, DWORD PolyFlags)
 {
-	INT MaxLogUOverV = 12;
-	INT MaxLogVOverU = 12;
-	INT MinLogTextureSize = 0;
-	INT MaxLogTextureSize = 12;
+	UMult = 1.0f / (Info.UScale * Info.USize);
+	VMult = 1.0f / (Info.VScale * Info.VSize);
 
-	INT BaseMip = Min(0, Info.NumMips - 1);
-	INT UCopyBits = 0;
-	INT VCopyBits = 0;
-	INT UBits = Info.Mips[BaseMip]->UBits;
-	INT VBits = Info.Mips[BaseMip]->VBits;
-
-	if (UBits - VBits > MaxLogUOverV)
+	UploadedData data;
+	if ((uint32_t)Info.USize > renderer->Device->physicalDevice.properties.limits.maxImageDimension2D || (uint32_t)Info.VSize > renderer->Device->physicalDevice.properties.limits.maxImageDimension2D)
 	{
-		VCopyBits += (UBits - VBits) - MaxLogUOverV;
-		VBits = UBits - MaxLogUOverV;
+		// To do: texture is too big. find the first mipmap level that fits and use that as the base size
+		data = UploadWhite(renderer, Info, PolyFlags);
 	}
-	if (VBits - UBits > MaxLogVOverU)
+	else
 	{
-		UCopyBits += (VBits - UBits) - MaxLogVOverU;
-		UBits = VBits - MaxLogVOverU;
-	}
-	if (UBits < MinLogTextureSize)
-	{
-		UCopyBits += MinLogTextureSize - UBits;
-		UBits += MinLogTextureSize - UBits;
-	}
-	if (VBits < MinLogTextureSize)
-	{
-		VCopyBits += MinLogTextureSize - VBits;
-		VBits += MinLogTextureSize - VBits;
-	}
-	if (UBits > MaxLogTextureSize)
-	{
-		BaseMip += UBits - MaxLogTextureSize;
-		VBits -= UBits - MaxLogTextureSize;
-		UBits = MaxLogTextureSize;
-		if (VBits < 0)
+		switch (Info.Format)
 		{
-			VCopyBits = -VBits;
-			VBits = 0;
+		case TEXF_P8: data = UploadP8(renderer, Info, PolyFlags); break;
+		case TEXF_RGBA7: data = UploadRGBA7(renderer, Info, PolyFlags); break;
+		case TEXF_RGB16: data = UploadRGB16(renderer, Info, PolyFlags); break;
+		case TEXF_DXT1: data = UploadDXT1(renderer, Info, PolyFlags); break;
+		case TEXF_RGB8: data = UploadRGB8(renderer, Info, PolyFlags); break;
+		case TEXF_RGBA8: data = UploadRGBA8(renderer, Info, PolyFlags); break;
+		default: data = UploadWhite(renderer, Info, PolyFlags); break;
 		}
 	}
-	if (VBits > MaxLogTextureSize)
-	{
-		BaseMip += VBits - MaxLogTextureSize;
-		UBits -= VBits - MaxLogTextureSize;
-		VBits = MaxLogTextureSize;
-		if (UBits < 0)
-		{
-			UCopyBits = -UBits;
-			UBits = 0;
-		}
-	}
-
-	UMult = 1.0f / (Info.UScale * (Info.USize << UCopyBits));
-	VMult = 1.0f / (Info.VScale * (Info.VSize << VCopyBits));
-
-	//BYTE* ScaleR = &ScaleByte[PYR(Info.MaxColor->R)];
-	//BYTE* ScaleG = &ScaleByte[PYR(Info.MaxColor->G)];
-	//BYTE* ScaleB = &ScaleByte[PYR(Info.MaxColor->B)];
-
-	FColor NewPal[256];
-	if (Info.Palette)
-	{
-		for (INT i = 0; i < 256; i++)
-		{
-			FColor& Src = Info.Palette[i];
-			NewPal[i].R = Src.R; // ScaleR[Src.R];
-			NewPal[i].G = Src.G; // ScaleG[Src.G];
-			NewPal[i].B = Src.B; // ScaleB[Src.B];
-			NewPal[i].A = Src.A;
-		}
-		if (PolyFlags & PF_Masked)
-			NewPal[0] = FColor(0, 0, 0, 0);
-	}
-
-	bool SkipMipmaps = Info.NumMips == 1;
-
-	size_t pixelsSize = (1 << (UBits + VBits)) * 4;
-	if (!SkipMipmaps)
-		pixelsSize += (pixelsSize + 2) / 3;
-
-	BufferBuilder builder;
-	builder.setUsage(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
-	builder.setSize(pixelsSize);
-	auto stagingbuffer = builder.create(renderer->Device);
-	auto data = (FColor*)stagingbuffer->Map(0, pixelsSize);
-
-	std::vector<VkBufferImageCopy> miplevels;
-	FColor* Ptr = data;
-	for (INT Level = 0; Level <= Max(UBits, VBits); Level++)
-	{
-		INT MipIndex = BaseMip + Level;
-		INT StepBits = 0;
-		if (MipIndex >= Info.NumMips)
-		{
-			StepBits = MipIndex - (Info.NumMips - 1);
-			MipIndex = Info.NumMips - 1;
-		}
-
-		FMipmapBase* Mip = Info.Mips[MipIndex];
-		DWORD Mask = Mip->USize - 1;
-		if (Mip->DataPtr)
-		{
-			uint32_t mipwidth = (1 << Max(0, UBits - Level));
-			uint32_t mipheight = (1 << Max(0, VBits - Level));
-
-			VkBufferImageCopy region = {};
-			region.bufferOffset = (VkDeviceSize)((uint8_t*)Ptr - (uint8_t*)data);
-			region.bufferRowLength = 0;
-			region.bufferImageHeight = 0;
-			region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-			region.imageSubresource.mipLevel = Level;
-			region.imageSubresource.baseArrayLayer = 0;
-			region.imageSubresource.layerCount = 1;
-			region.imageOffset = { 0, 0, 0 };
-			region.imageExtent = { mipwidth, mipheight, 1 };
-			miplevels.push_back(region);
-
-			if (Info.Palette)
-			{
-				for (uint32_t i = 0; i < mipheight; i++)
-				{
-					BYTE* Base = (BYTE*)Mip->DataPtr + ((i << StepBits) & (Mip->VSize - 1)) * Mip->USize;
-					for (INT j = 0; j < (1 << Max(0, UBits - Level + StepBits)); j += (1 << StepBits))
-					{
-						*Ptr++ = NewPal[Base[j & Mask]];
-					}
-				}
-			}
-			else
-			{
-				for (uint32_t i = 0; i < mipheight; i++)
-				{
-					FColor* Base = (FColor*)Mip->DataPtr + Min<DWORD>((i << StepBits) & (Mip->VSize - 1), Info.VClamp - 1) * Mip->USize;
-					for (INT j = 0; j < (1 << Max(0, UBits - Level + StepBits)); j += (1 << StepBits))
-					{
-						FColor& Src = Base[Min<DWORD>(j & Mask, Info.UClamp - 1)];
-						Ptr->R = Src.B; // ScaleR[Src.B];
-						Ptr->G = Src.G; // ScaleG[Src.G];
-						Ptr->B = Src.R; // ScaleB[Src.R];
-						Ptr->A = Src.A * 2;
-						Ptr++;
-					}
-				}
-			}
-		}
-
-		if (SkipMipmaps)
-			break;
-	}
-
-	stagingbuffer->Unmap();
 
 	if (!image)
 	{
-		VkFormat imageFormat = VK_FORMAT_R8G8B8A8_UNORM;
-
 		ImageBuilder imgbuilder;
-		imgbuilder.setFormat(imageFormat);
-		imgbuilder.setSize(1 << UBits, 1 << VBits, miplevels.size());
+		imgbuilder.setFormat(data.imageFormat);
+		imgbuilder.setSize(data.width, data.height, data.miplevels.size());
 		imgbuilder.setUsage(VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
 		image = imgbuilder.create(renderer->Device);
 
 		ImageViewBuilder viewbuilder;
-		viewbuilder.setImage(image.get(), imageFormat);
+		viewbuilder.setImage(image.get(), data.imageFormat);
 		imageView = viewbuilder.create(renderer->Device);
 	}
 
 	auto cmdbuffer = renderer->GetTransferCommands();
 
 	PipelineBarrier imageTransition0;
-	imageTransition0.addImage(image.get(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_ASPECT_COLOR_BIT, 0, miplevels.size());
+	imageTransition0.addImage(image.get(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_ASPECT_COLOR_BIT, 0, data.miplevels.size());
 	imageTransition0.execute(cmdbuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 
-	cmdbuffer->copyBufferToImage(stagingbuffer->buffer, image->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, miplevels.size(), miplevels.data());
+	cmdbuffer->copyBufferToImage(data.stagingbuffer->buffer, image->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, data.miplevels.size(), data.miplevels.data());
 
 	PipelineBarrier imageTransition1;
-	imageTransition1.addImage(image.get(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT, 0, miplevels.size());
+	imageTransition1.addImage(image.get(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT, 0, data.miplevels.size());
 	imageTransition1.execute(cmdbuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
 
-	renderer->FrameDeleteList->buffers.push_back(std::move(stagingbuffer));
+	renderer->FrameDeleteList->buffers.push_back(std::move(data.stagingbuffer));
 }
 
-VulkanTexture::~VulkanTexture()
+UploadedData VulkanTexture::UploadP8(Renderer* renderer, const FTextureInfo& Info, DWORD PolyFlags)
 {
+	if (!Info.Palette)
+		return UploadWhite(renderer, Info, PolyFlags);
+
+	FColor NewPal[256];
+	for (INT i = 0; i < 256; i++)
+	{
+		FColor& Src = Info.Palette[i];
+		NewPal[i].R = Src.R; // ScaleR[Src.R];
+		NewPal[i].G = Src.G; // ScaleG[Src.G];
+		NewPal[i].B = Src.B; // ScaleB[Src.B];
+		NewPal[i].A = Src.A;
+	}
+	if (PolyFlags & PF_Masked)
+		NewPal[0] = FColor(0, 0, 0, 0);
+
+	UploadedData result;
+	result.imageFormat = VK_FORMAT_R8G8B8A8_UNORM;
+	result.width = Info.USize;
+	result.height = Info.VSize;
+
+	bool SkipMipmaps = Info.NumMips == 1;
+	size_t pixelsSize = result.width * result.height * 4;
+	if (Info.NumMips > 1)
+		pixelsSize += (pixelsSize + 2) / 3;
+
+	BufferBuilder builder;
+	builder.setUsage(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+	builder.setSize(pixelsSize);
+	result.stagingbuffer = builder.create(renderer->Device);
+
+	auto data = (FColor*)result.stagingbuffer->Map(0, pixelsSize);
+
+	FColor* Ptr = data;
+	for (INT level = 0; level < Info.NumMips; level++)
+	{
+		FMipmapBase* Mip = Info.Mips[level];
+		if (Mip->DataPtr)
+		{
+			uint32_t mipwidth = Mip->USize;
+			uint32_t mipheight = Mip->VSize;
+
+			VkBufferImageCopy region = {};
+			region.bufferOffset = (VkDeviceSize)((uint8_t*)Ptr - (uint8_t*)data);
+			region.bufferRowLength = 0;
+			region.bufferImageHeight = 0;
+			region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			region.imageSubresource.mipLevel = level;
+			region.imageSubresource.baseArrayLayer = 0;
+			region.imageSubresource.layerCount = 1;
+			region.imageOffset = { 0, 0, 0 };
+			region.imageExtent = { mipwidth, mipheight, 1 };
+			result.miplevels.push_back(region);
+
+			for (uint32_t y = 0; y < mipheight; y++)
+			{
+				BYTE* line = (BYTE*)Mip->DataPtr + y * Mip->USize;
+				for (uint32_t x = 0; x < mipwidth; x++)
+				{
+					*Ptr++ = NewPal[line[x]];
+				}
+			}
+		}
+	}
+
+	result.stagingbuffer->Unmap();
+	return result;
+}
+
+UploadedData VulkanTexture::UploadRGBA7(Renderer* renderer, const FTextureInfo& Info, DWORD PolyFlags)
+{
+	UploadedData result;
+	result.imageFormat = VK_FORMAT_R8G8B8A8_UNORM;
+	result.width = Info.USize;
+	result.height = Info.VSize;
+
+	bool SkipMipmaps = Info.NumMips == 1;
+	size_t pixelsSize = result.width * result.height * 4;
+	if (Info.NumMips > 1)
+		pixelsSize += (pixelsSize + 2) / 3;
+
+	BufferBuilder builder;
+	builder.setUsage(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+	builder.setSize(pixelsSize);
+	result.stagingbuffer = builder.create(renderer->Device);
+
+	auto data = (FColor*)result.stagingbuffer->Map(0, pixelsSize);
+
+	FColor* Ptr = data;
+	for (INT level = 0; level < Info.NumMips; level++)
+	{
+		FMipmapBase* Mip = Info.Mips[level];
+		if (Mip->DataPtr)
+		{
+			uint32_t mipwidth = Mip->USize;
+			uint32_t mipheight = Mip->VSize;
+
+			VkBufferImageCopy region = {};
+			region.bufferOffset = (VkDeviceSize)((uint8_t*)Ptr - (uint8_t*)data);
+			region.bufferRowLength = 0;
+			region.bufferImageHeight = 0;
+			region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			region.imageSubresource.mipLevel = level;
+			region.imageSubresource.baseArrayLayer = 0;
+			region.imageSubresource.layerCount = 1;
+			region.imageOffset = { 0, 0, 0 };
+			region.imageExtent = { mipwidth, mipheight, 1 };
+			result.miplevels.push_back(region);
+
+			for (uint32_t y = 0; y < mipheight; y++)
+			{
+				FColor* line = (FColor*)Mip->DataPtr + y * Mip->USize;
+				for (uint32_t x = 0; x < mipwidth; x++)
+				{
+					const FColor& Src = line[x];
+					Ptr->R = Src.B; // ScaleR[Src.B];
+					Ptr->G = Src.G; // ScaleG[Src.G];
+					Ptr->B = Src.R; // ScaleB[Src.R];
+					Ptr->A = Src.A * 2;
+					Ptr++;
+				}
+			}
+		}
+	}
+
+	result.stagingbuffer->Unmap();
+	return result;
+}
+
+UploadedData VulkanTexture::UploadRGB16(Renderer* renderer, const FTextureInfo& Info, DWORD PolyFlags)
+{
+	UploadedData result;
+	result.imageFormat = VK_FORMAT_R5G6B5_UNORM_PACK16;
+	result.width = Info.USize;
+	result.height = Info.VSize;
+
+	bool SkipMipmaps = Info.NumMips == 1;
+	size_t pixelsSize = result.width * result.height * 3;
+	if (Info.NumMips > 1)
+		pixelsSize += (pixelsSize + 2) / 3;
+
+	BufferBuilder builder;
+	builder.setUsage(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+	builder.setSize(pixelsSize);
+	result.stagingbuffer = builder.create(renderer->Device);
+
+	auto data = (BYTE*)result.stagingbuffer->Map(0, pixelsSize);
+	auto Ptr = data;
+
+	for (INT level = 0; level < Info.NumMips; level++)
+	{
+		FMipmapBase* Mip = Info.Mips[level];
+		if (Mip->DataPtr)
+		{
+			uint32_t mipwidth = Mip->USize;
+			uint32_t mipheight = Mip->VSize;
+
+			VkBufferImageCopy region = {};
+			region.bufferOffset = (VkDeviceSize)((uint8_t*)Ptr - (uint8_t*)data);
+			region.bufferRowLength = 0;
+			region.bufferImageHeight = 0;
+			region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			region.imageSubresource.mipLevel = level;
+			region.imageSubresource.baseArrayLayer = 0;
+			region.imageSubresource.layerCount = 1;
+			region.imageOffset = { 0, 0, 0 };
+			region.imageExtent = { mipwidth, mipheight, 1 };
+			result.miplevels.push_back(region);
+
+			INT mipsize = Mip->USize * Mip->VSize * 2;
+			memcpy(Ptr, Mip->DataPtr, mipsize);
+			Ptr += mipsize;
+		}
+	}
+
+	result.stagingbuffer->Unmap();
+	return result;
+}
+
+UploadedData VulkanTexture::UploadDXT1(Renderer* renderer, const FTextureInfo& Info, DWORD PolyFlags)
+{
+	UploadedData result;
+	result.imageFormat = VK_FORMAT_BC1_RGBA_UNORM_BLOCK;
+	result.width = Info.USize;
+	result.height = Info.VSize;
+
+	bool SkipMipmaps = Info.NumMips == 1;
+	size_t pixelsSize = (result.width * result.height + result.width + 1) / 2;
+	if (Info.NumMips > 1)
+		pixelsSize += (pixelsSize + 2) / 3;
+
+	BufferBuilder builder;
+	builder.setUsage(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+	builder.setSize(pixelsSize);
+	result.stagingbuffer = builder.create(renderer->Device);
+
+	auto data = (BYTE*)result.stagingbuffer->Map(0, pixelsSize);
+	auto Ptr = data;
+
+	for (INT level = 0; level < Info.NumMips; level++)
+	{
+		FMipmapBase* Mip = Info.Mips[level];
+		if (Mip->DataPtr)
+		{
+			uint32_t mipwidth = Mip->USize;
+			uint32_t mipheight = Mip->VSize;
+
+			VkBufferImageCopy region = {};
+			region.bufferOffset = (VkDeviceSize)((uint8_t*)Ptr - (uint8_t*)data);
+			region.bufferRowLength = 0;
+			region.bufferImageHeight = 0;
+			region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			region.imageSubresource.mipLevel = level;
+			region.imageSubresource.baseArrayLayer = 0;
+			region.imageSubresource.layerCount = 1;
+			region.imageOffset = { 0, 0, 0 };
+			region.imageExtent = { mipwidth, mipheight, 1 };
+			result.miplevels.push_back(region);
+
+			INT mipsize = Mip->USize * Mip->VSize / 2;
+			memcpy(Ptr, Mip->DataPtr, mipsize);
+			Ptr += mipsize;
+		}
+	}
+
+	result.stagingbuffer->Unmap();
+	return result;
+}
+
+UploadedData VulkanTexture::UploadRGB8(Renderer* renderer, const FTextureInfo& Info, DWORD PolyFlags)
+{
+	UploadedData result;
+	result.imageFormat = VK_FORMAT_R8G8B8_UNORM;
+	result.width = Info.USize;
+	result.height = Info.VSize;
+
+	bool SkipMipmaps = Info.NumMips == 1;
+	size_t pixelsSize = result.width * result.height * 3;
+	if (Info.NumMips > 1)
+		pixelsSize += (pixelsSize + 2) / 3;
+
+	BufferBuilder builder;
+	builder.setUsage(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+	builder.setSize(pixelsSize);
+	result.stagingbuffer = builder.create(renderer->Device);
+
+	auto data = (BYTE*)result.stagingbuffer->Map(0, pixelsSize);
+	auto Ptr = data;
+
+	for (INT level = 0; level < Info.NumMips; level++)
+	{
+		FMipmapBase* Mip = Info.Mips[level];
+		if (Mip->DataPtr)
+		{
+			uint32_t mipwidth = Mip->USize;
+			uint32_t mipheight = Mip->VSize;
+
+			VkBufferImageCopy region = {};
+			region.bufferOffset = (VkDeviceSize)((uint8_t*)Ptr - (uint8_t*)data);
+			region.bufferRowLength = 0;
+			region.bufferImageHeight = 0;
+			region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			region.imageSubresource.mipLevel = level;
+			region.imageSubresource.baseArrayLayer = 0;
+			region.imageSubresource.layerCount = 1;
+			region.imageOffset = { 0, 0, 0 };
+			region.imageExtent = { mipwidth, mipheight, 1 };
+			result.miplevels.push_back(region);
+
+			INT mipsize = Mip->USize * Mip->VSize * 3;
+			memcpy(Ptr, Mip->DataPtr, mipsize);
+			Ptr += mipsize;
+		}
+	}
+
+	result.stagingbuffer->Unmap();
+	return result;
+}
+
+UploadedData VulkanTexture::UploadRGBA8(Renderer* renderer, const FTextureInfo& Info, DWORD PolyFlags)
+{
+	UploadedData result;
+	result.imageFormat = VK_FORMAT_R8G8B8A8_UNORM;
+	result.width = Info.USize;
+	result.height = Info.VSize;
+
+	bool SkipMipmaps = Info.NumMips == 1;
+	size_t pixelsSize = result.width * result.height * 4;
+	if (Info.NumMips > 1)
+		pixelsSize += (pixelsSize + 2) / 3;
+
+	BufferBuilder builder;
+	builder.setUsage(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+	builder.setSize(pixelsSize);
+	result.stagingbuffer = builder.create(renderer->Device);
+
+	auto data = (FColor*)result.stagingbuffer->Map(0, pixelsSize);
+	FColor* Ptr = data;
+
+	for (INT level = 0; level < Info.NumMips; level++)
+	{
+		FMipmapBase* Mip = Info.Mips[level];
+		if (Mip->DataPtr)
+		{
+			uint32_t mipwidth = Mip->USize;
+			uint32_t mipheight = Mip->VSize;
+
+			VkBufferImageCopy region = {};
+			region.bufferOffset = (VkDeviceSize)((uint8_t*)Ptr - (uint8_t*)data);
+			region.bufferRowLength = 0;
+			region.bufferImageHeight = 0;
+			region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			region.imageSubresource.mipLevel = level;
+			region.imageSubresource.baseArrayLayer = 0;
+			region.imageSubresource.layerCount = 1;
+			region.imageOffset = { 0, 0, 0 };
+			region.imageExtent = { mipwidth, mipheight, 1 };
+			result.miplevels.push_back(region);
+
+			INT mipsize = Mip->USize * Mip->VSize;
+			memcpy(Ptr, Mip->DataPtr, mipsize * 4);
+			Ptr += mipsize;
+		}
+	}
+
+	result.stagingbuffer->Unmap();
+	return result;
+}
+
+UploadedData VulkanTexture::UploadWhite(Renderer* renderer, const FTextureInfo& Info, DWORD PolyFlags)
+{
+	UploadedData result;
+	result.imageFormat = VK_FORMAT_R8G8B8A8_UNORM;
+	result.width = 1;
+	result.height = 1;
+
+	BufferBuilder builder;
+	builder.setUsage(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+	builder.setSize(4);
+	result.stagingbuffer = builder.create(renderer->Device);
+	auto data = (uint32_t*)result.stagingbuffer->Map(0, 4);
+
+	data[0] = 0xffffffff;
+
+	result.stagingbuffer->Unmap();
+
+	VkBufferImageCopy region = {};
+	region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	region.imageSubresource.layerCount = 1;
+	region.imageExtent = { 1, 1, 1 };
+	result.miplevels.push_back(region);
+
+	return result;
 }

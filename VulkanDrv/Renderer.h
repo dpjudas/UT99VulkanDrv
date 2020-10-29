@@ -18,8 +18,6 @@ public:
 	Renderer(HWND windowHandle);
 	~Renderer();
 
-	void FreeResources();
-
 	void SubmitCommands(bool present);
 	VulkanCommandBuffer* GetTransferCommands();
 	VulkanCommandBuffer* GetDrawCommands();

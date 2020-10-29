@@ -41,10 +41,6 @@ Renderer::Renderer(HWND windowHandle) : WindowHandle(windowHandle)
 
 Renderer::~Renderer()
 {
-}
-
-void Renderer::FreeResources()
-{
 	if (Device) vkDeviceWaitIdle(Device->device);
 	DeleteFrameObjects();
 	if (SceneVertices) { SceneVertexBuffer->Unmap(); SceneVertices = nullptr; }
