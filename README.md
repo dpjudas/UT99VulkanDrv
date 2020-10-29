@@ -1,26 +1,34 @@
 # Unreal Tournament VulkanDrv
 This project implements a vulkan render device for Unreal Tournament (UT99). It also includes a new window manager.
 
-The primary features are:
-
-- Uses vulkan to render the game
-- No microstutters when used with a 144 hz monitor
-- Raw input for the mouse
-- Instant alt-tabbing to and from the game
-- High quality backbuffer (rgba16f)
-
 ## Compiling the source
 
 The project files were made for Visual Studio 2019. Open VulkanDrv.sln, select the release configuration and press build.
 
-## Usage
+## Using VulkanDrv as the render device
 
-1. Copy VulkanDrv.dll and VulkanDrv.int to the UT system folder.
-2. Open UnrealTournament.ini
-3. In the [Engine.Engine] section, change GameRenderDevice to VulkanDrv.VulkanRenderDevice
-4. In the [Engine.Engine] section, change ViewportManager to VulkanDrv.VulkanClient
+In the [Engine.Engine] section of UnrealTournament.ini, change GameRenderDevice to VulkanDrv.VulkanRenderDevice
 
-Last, add the following sections to the end of the file:
+Add the following section to the file:
+
+	[VulkanDrv.VulkanRenderDevice]
+	UsePrecache=False
+	VSync=True
+	DetailTextures=True
+	DescFlags=0
+	Description=
+	HighDetailActors=True
+	Coronas=True
+	ShinySurfaces=True
+	VolumetricLighting=True
+
+## Using VulkanDrv as the window manager
+
+Optionally, you can also replace the window manager. This makes UT always use raw input for the mouse. It also fixes the system mouse cursor sometimes appearing when you alt-tab to and from UT. Please note that this window manager is only compatible with VulkanDrv as the render device (for now).
+
+In the [Engine.Engine] section of UnrealTournament.ini, change ViewportManager to VulkanDrv.VulkanClient
+
+Add the following section to the file:
 
 	[VulkanDrv.VulkanClient]
 	StartupFullscreen=True
@@ -44,18 +52,7 @@ Last, add the following sections to the end of the file:
 	WindowedViewportY=900
 	WindowedColorBits=32
 
-	[VulkanDrv.VulkanRenderDevice]
-	UsePrecache=False
-	VSync=True
-	DetailTextures=True
-	DescFlags=0
-	Description=
-	HighDetailActors=True
-	Coronas=True
-	ShinySurfaces=True
-	VolumetricLighting=True
-
-Adjust FullscreenViewportX and FullscreenViewportY to match your monitor resolution. And that's it! Unreal Tournament should now be using vulkan.
+Adjust FullscreenViewportX and FullscreenViewportY to match your monitor resolution.
 
 ## License
 
