@@ -11,12 +11,12 @@ class VulkanRenderPass;
 class VulkanFramebuffer;
 class VulkanDescriptorSetLayout;
 class VulkanDescriptorPool;
-class UVulkanViewport;
+class Renderer;
 
 class SceneRenderPass
 {
 public:
-	SceneRenderPass(UVulkanViewport* renderer);
+	SceneRenderPass(Renderer* renderer);
 	~SceneRenderPass();
 
 	void begin(VulkanCommandBuffer *cmdbuffer);
@@ -29,7 +29,7 @@ private:
 	void createPipeline();
 	void createFramebuffer();
 
-	UVulkanViewport* renderer = nullptr;
+	Renderer* renderer = nullptr;
 
 	std::unique_ptr<VulkanShader> vertexShader;
 	std::unique_ptr<VulkanShader> fragmentShader;

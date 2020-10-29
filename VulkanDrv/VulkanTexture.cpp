@@ -4,14 +4,14 @@
 #include "VulkanObjects.h"
 #include "VulkanBuilders.h"
 #include "PixelBuffer.h"
-#include "UVulkanViewport.h"
+#include "Renderer.h"
 
-VulkanTexture::VulkanTexture(UVulkanViewport* renderer, const FTextureInfo& Info, DWORD PolyFlags)
+VulkanTexture::VulkanTexture(Renderer* renderer, const FTextureInfo& Info, DWORD PolyFlags)
 {
 	Update(renderer, Info, PolyFlags);
 }
 
-void VulkanTexture::Update(UVulkanViewport* renderer, const FTextureInfo& Info, DWORD PolyFlags)
+void VulkanTexture::Update(Renderer* renderer, const FTextureInfo& Info, DWORD PolyFlags)
 {
 	INT MaxLogUOverV = 12;
 	INT MaxLogVOverU = 12;

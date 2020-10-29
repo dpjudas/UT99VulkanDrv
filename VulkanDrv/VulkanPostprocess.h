@@ -1,6 +1,6 @@
 #pragma once
 
-#include "UVulkanViewport.h"
+#include "Renderer.h"
 #include "VulkanObjects.h"
 #include "VulkanBuilders.h"
 #include "Postprocess.h"
@@ -44,7 +44,7 @@ private:
 class VulkanPostprocess
 {
 public:
-	VulkanPostprocess(UVulkanViewport *renderer);
+	VulkanPostprocess(Renderer *renderer);
 	~VulkanPostprocess();
 
 	void beginFrame();
@@ -62,7 +62,7 @@ public:
 private:
 	VulkanSampler *getSampler(PPFilterMode filter, PPWrapMode wrap);
 
-	UVulkanViewport* renderer;
+	Renderer* renderer;
 	std::array<std::unique_ptr<VulkanSampler>, 16> mSamplers;
 	std::map<VulkanPPRenderPassKey, std::unique_ptr<VulkanPPRenderPassSetup>> mRenderPassSetup;
 	std::unique_ptr<VulkanDescriptorPool> mDescriptorPool;
@@ -78,7 +78,7 @@ private:
 class VulkanPPShader : public PPShaderBackend
 {
 public:
-	VulkanPPShader(UVulkanViewport* renderer, const PPShader *shader);
+	VulkanPPShader(Renderer* renderer, const PPShader *shader);
 
 	std::unique_ptr<VulkanShader> vertexShader;
 	std::unique_ptr<VulkanShader> fragmentShader;
@@ -90,7 +90,7 @@ private:
 class VulkanPPTexture : public PPTextureBackend
 {
 public:
-	VulkanPPTexture(UVulkanViewport* renderer, PPTexture *texture);
+	VulkanPPTexture(Renderer* renderer, PPTexture *texture);
 
 	std::unique_ptr<VulkanImage> image;
 	std::unique_ptr<VulkanImageView> view;
@@ -102,9 +102,9 @@ public:
 class VulkanPPRenderPassSetup
 {
 public:
-	VulkanPPRenderPassSetup(UVulkanViewport* renderer, const VulkanPPRenderPassKey &key);
+	VulkanPPRenderPassSetup(Renderer* renderer, const VulkanPPRenderPassKey &key);
 
-	UVulkanViewport* renderer;
+	Renderer* renderer;
 	std::unique_ptr<VulkanDescriptorSetLayout> descriptorLayout;
 	std::unique_ptr<VulkanPipelineLayout> pipelineLayout;
 	std::unique_ptr<VulkanRenderPass> renderPass;
@@ -121,7 +121,7 @@ private:
 class VulkanPPRenderState : public PPRenderState
 {
 public:
-	VulkanPPRenderState(UVulkanViewport* renderer);
+	VulkanPPRenderState(Renderer* renderer);
 
 	void draw() override;
 
@@ -143,5 +143,5 @@ private:
 	};
 	TextureImage getTexture(const PPTextureType &type, PPTexture *tex);
 
-	UVulkanViewport* renderer;
+	Renderer* renderer;
 };

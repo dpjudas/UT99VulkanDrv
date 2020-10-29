@@ -20,7 +20,7 @@ CVarFloat r_gamma("r_gamma", 1.0f, [](float v) {
 });
 */
 
-VulkanPostprocess::VulkanPostprocess(UVulkanViewport* renderer) : renderer(renderer)
+VulkanPostprocess::VulkanPostprocess(Renderer* renderer) : renderer(renderer)
 {
 }
 
@@ -221,7 +221,7 @@ VulkanSampler *VulkanPostprocess::getSampler(PPFilterMode filter, PPWrapMode wra
 
 /////////////////////////////////////////////////////////////////////////////
 
-VulkanPPTexture::VulkanPPTexture(UVulkanViewport* renderer, PPTexture *texture)
+VulkanPPTexture::VulkanPPTexture(Renderer* renderer, PPTexture *texture)
 {
 	int pixelsize;
 	switch (texture->format)
@@ -292,7 +292,7 @@ VulkanPPTexture::VulkanPPTexture(UVulkanViewport* renderer, PPTexture *texture)
 
 /////////////////////////////////////////////////////////////////////////////
 
-VulkanPPShader::VulkanPPShader(UVulkanViewport* renderer, const PPShader *shaderdesc)
+VulkanPPShader::VulkanPPShader(Renderer* renderer, const PPShader *shaderdesc)
 {
 	std::string decl;
 
@@ -310,8 +310,8 @@ VulkanPPShader::VulkanPPShader(UVulkanViewport* renderer, const PPShader *shader
 		decl += "};\n";
 	}
 
-	vertexShader = UVulkanViewport::CreateVertexShader(renderer->Device, "shaders/PPStep.vert");
-	fragmentShader = UVulkanViewport::CreateFragmentShader(renderer->Device, shaderdesc->fragmentShader, decl + shaderdesc->defines);
+	vertexShader = Renderer::CreateVertexShader(renderer->Device, "shaders/PPStep.vert");
+	fragmentShader = Renderer::CreateFragmentShader(renderer->Device, shaderdesc->fragmentShader, decl + shaderdesc->defines);
 }
 
 const char *VulkanPPShader::getTypeStr(UniformType type)
@@ -337,7 +337,7 @@ const char *VulkanPPShader::getTypeStr(UniformType type)
 
 /////////////////////////////////////////////////////////////////////////////
 
-VulkanPPRenderState::VulkanPPRenderState(UVulkanViewport* renderer) : renderer(renderer)
+VulkanPPRenderState::VulkanPPRenderState(Renderer* renderer) : renderer(renderer)
 {
 	model = renderer->PostprocessModel;
 }
@@ -533,7 +533,7 @@ VulkanPPTexture *VulkanPPRenderState::getVulkanTexture(PPTexture *texture)
 
 /////////////////////////////////////////////////////////////////////////////
 
-VulkanPPRenderPassSetup::VulkanPPRenderPassSetup(UVulkanViewport* renderer, const VulkanPPRenderPassKey &key) : renderer(renderer)
+VulkanPPRenderPassSetup::VulkanPPRenderPassSetup(Renderer* renderer, const VulkanPPRenderPassKey &key) : renderer(renderer)
 {
 	createDescriptorLayout(key);
 	createPipelineLayout(key);

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "UVulkanViewport.h"
+#include "Renderer.h"
 
 class UVulkanRenderDevice : public URenderDevice
 {
@@ -33,7 +33,7 @@ public:
 	void SetSceneNode(FSceneNode* Frame) override;
 	void PrecacheTexture(FTextureInfo& Info, DWORD PolyFlags) override;
 
-	UVulkanViewport* GetViewport() { return (UVulkanViewport*)Viewport; }
+	Renderer* renderer = nullptr;
 
 private:
 	UBOOL UsePrecache = 0;

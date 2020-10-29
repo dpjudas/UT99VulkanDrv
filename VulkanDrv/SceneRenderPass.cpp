@@ -4,13 +4,13 @@
 #include "SceneBuffers.h"
 #include "VulkanObjects.h"
 #include "VulkanBuilders.h"
-#include "UVulkanViewport.h"
+#include "Renderer.h"
 
-SceneRenderPass::SceneRenderPass(UVulkanViewport* renderer) : renderer(renderer)
+SceneRenderPass::SceneRenderPass(Renderer* renderer) : renderer(renderer)
 {
-	vertexShader = UVulkanViewport::CreateVertexShader(renderer->Device, "shaders/Scene.vert");
-	fragmentShader = UVulkanViewport::CreateFragmentShader(renderer->Device, "shaders/Scene.frag");
-	fragmentShaderAlphaTest = UVulkanViewport::CreateFragmentShader(renderer->Device, "shaders/Scene.frag", "#define ALPHATEST");
+	vertexShader = Renderer::CreateVertexShader(renderer->Device, "shaders/Scene.vert");
+	fragmentShader = Renderer::CreateFragmentShader(renderer->Device, "shaders/Scene.frag");
+	fragmentShaderAlphaTest = Renderer::CreateFragmentShader(renderer->Device, "shaders/Scene.frag", "#define ALPHATEST");
 
 	createRenderPass();
 	createPipeline();

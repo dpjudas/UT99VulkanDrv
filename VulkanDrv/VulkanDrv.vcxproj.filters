@@ -21,6 +21,7 @@
     <ClInclude Include="SceneRenderPass.h" />
     <ClInclude Include="SceneSamplers.h" />
     <ClInclude Include="VulkanTexture.h" />
+    <ClInclude Include="Renderer.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="VulkanDrv.cpp" />
@@ -42,6 +43,7 @@
     <ClCompile Include="SceneRenderPass.cpp" />
     <ClCompile Include="SceneSamplers.cpp" />
     <ClCompile Include="VulkanTexture.cpp" />
+    <ClCompile Include="Renderer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\VulkanDrv.int" />
