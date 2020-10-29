@@ -235,7 +235,7 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 	VulkanTexture* lightmap = renderer->GetTexture(Surface.LightMap, 0);
 
 	cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->SceneRenderPass->getPipeline(Surface.PolyFlags));
-	cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->ScenePipelineLayout, 0, renderer->GetTextureDescriptorSet(tex, lightmap));
+	cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->ScenePipelineLayout, 0, renderer->GetTextureDescriptorSet(Surface.PolyFlags, tex, lightmap));
 
 	FLOAT UDot = Facet.MapCoords.XAxis | Facet.MapCoords.Origin;
 	FLOAT VDot = Facet.MapCoords.YAxis | Facet.MapCoords.Origin;
@@ -311,7 +311,7 @@ void UVulkanRenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& In
 	VulkanTexture* tex = renderer->GetTexture(&Info, PolyFlags);
 
 	cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->SceneRenderPass->getPipeline(PolyFlags));
-	cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->ScenePipelineLayout, 0, renderer->GetTextureDescriptorSet(tex));
+	cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->ScenePipelineLayout, 0, renderer->GetTextureDescriptorSet(PolyFlags, tex));
 
 	float UMult = tex ? tex->UMult : 0.0f;
 	float VMult = tex ? tex->VMult : 0.0f;
@@ -375,7 +375,7 @@ void UVulkanRenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT 
 	VulkanTexture* tex = renderer->GetTexture(&Info, PolyFlags);
 
 	cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->SceneRenderPass->getPipeline(PolyFlags));
-	cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->ScenePipelineLayout, 0, renderer->GetTextureDescriptorSet(tex));
+	cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->ScenePipelineLayout, 0, renderer->GetTextureDescriptorSet(PolyFlags, tex));
 
 	float UMult = tex ? tex->UMult : 0.0f;
 	float VMult = tex ? tex->VMult : 0.0f;

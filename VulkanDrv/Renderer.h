@@ -34,7 +34,7 @@ public:
 	void CreateNullTexture();
 
 	VulkanTexture* GetTexture(FTextureInfo* texture, DWORD polyFlags);
-	VulkanDescriptorSet* GetTextureDescriptorSet(VulkanTexture* tex, VulkanTexture* lightmap = nullptr);
+	VulkanDescriptorSet* GetTextureDescriptorSet(DWORD PolyFlags, VulkanTexture* tex, VulkanTexture* lightmap = nullptr);
 	void ClearTextureCache();
 
 	HWND WindowHandle = 0;
@@ -79,11 +79,21 @@ public:
 
 	struct TexDescriptorKey
 	{
-		TexDescriptorKey(VulkanTexture* tex, VulkanTexture* lightmap) : tex(tex), lightmap(lightmap) { }
-		bool operator<(const TexDescriptorKey& other) const { return tex != other.tex ? tex < other.tex : lightmap < other.lightmap; }
+		TexDescriptorKey(VulkanTexture* tex, VulkanTexture* lightmap, bool nosmooth) : tex(tex), lightmap(lightmap), nosmooth(nosmooth) { }
+
+		bool operator<(const TexDescriptorKey& other) const
+		{
+			if (tex != other.tex)
+				return tex < other.tex;
+			else if (lightmap != other.lightmap)
+				return lightmap < other.lightmap;
+			else
+				return nosmooth < other.nosmooth;
+		}
 
 		VulkanTexture* tex;
 		VulkanTexture* lightmap;
+		bool nosmooth;
 	};
 
 	std::map<QWORD, VulkanTexture*> TextureCache;
