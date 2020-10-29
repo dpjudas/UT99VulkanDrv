@@ -1,6 +1,7 @@
 #pragma once
 
 #include "VulkanObjects.h"
+#include <functional>
 
 class Renderer;
 struct FTextureInfo;
@@ -29,11 +30,6 @@ public:
 	std::unique_ptr<VulkanImageView> imageView;
 
 private:
-	UploadedData UploadP8(Renderer* renderer, const FTextureInfo& Info, DWORD PolyFlags);
-	UploadedData UploadRGBA7(Renderer* renderer, const FTextureInfo& Info, DWORD PolyFlags);
-	UploadedData UploadRGB16(Renderer* renderer, const FTextureInfo& Info, DWORD PolyFlags);
-	UploadedData UploadDXT1(Renderer* renderer, const FTextureInfo& Info, DWORD PolyFlags);
-	UploadedData UploadRGB8(Renderer* renderer, const FTextureInfo& Info, DWORD PolyFlags);
-	UploadedData UploadRGBA8(Renderer* renderer, const FTextureInfo& Info, DWORD PolyFlags);
+	UploadedData UploadData(Renderer* renderer, const FTextureInfo& Info, DWORD PolyFlags, VkFormat imageFormat, std::function<int(FMipmapBase* mip)> calcMipSize, std::function<void(FMipmapBase* mip, void* dst)> copyMip = {});
 	UploadedData UploadWhite(Renderer* renderer, const FTextureInfo& Info, DWORD PolyFlags);
 };
