@@ -219,8 +219,8 @@ void UVulkanRenderDevice::Unlock(UBOOL Blit)
 	auto pp = renderer->PostprocessModel;
 
 	VulkanPPRenderState renderstate(renderer);
-	pp->exposure.render(&renderstate, sceneWidth, sceneHeight);
-	pp->bloom.renderBloom(&renderstate, sceneWidth, sceneHeight);
+	//pp->exposure.render(&renderstate, sceneWidth, sceneHeight);
+	//pp->bloom.renderBloom(&renderstate, sceneWidth, sceneHeight);
 	pp->tonemap.render(&renderstate, sceneWidth, sceneHeight);
 	//pp->bloom.renderBlur(&renderstate, sceneWidth, sceneHeight);
 
@@ -545,11 +545,39 @@ void UVulkanRenderDevice::ReadPixels(FColor* Pixels)
 void UVulkanRenderDevice::EndFlash()
 {
 	guard(UVulkanRenderDevice::EndFlash);
-	if ((FlashScale != FPlane(0.5f, 0.5f, 0.5f, 0.0f)) || (FlashFog != FPlane(0.0f, 0.0f, 0.0f, 0.0f)))
+	if (FlashScale != FPlane(0.5f, 0.5f, 0.5f, 0.0f) || FlashFog != FPlane(0.0f, 0.0f, 0.0f, 0.0f))
 	{
-		// SetBlend(PF_Highlighted);
-		// SetScreenQuadColor4f(FlashFog.X, FlashFog.Y, FlashFog.Z, 1.0f - Min(FlashScale.X * 2.0f, 1.0f));
-		// DrawScreenQuad();
+		float r = FlashFog.X;
+		float g = FlashFog.Y;
+		float b = FlashFog.Z;
+		float a = 1.0f - Min(FlashScale.X * 2.0f, 1.0f);
+		r *= a;
+		g *= a;
+		b *= a;
+
+		auto cmdbuffer = renderer->GetDrawCommands();
+
+		ScenePushConstants pushconstants;
+		pushconstants.objectToProjection = mat4::identity();
+		cmdbuffer->pushConstants(renderer->ScenePipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ScenePushConstants), &pushconstants);
+
+		cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->SceneRenderPass->getEndFlashPipeline());
+		cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->ScenePipelineLayout, 0, renderer->GetTextureDescriptorSet(0, nullptr));
+
+		SceneVertex* v = &renderer->SceneVertices[renderer->SceneVertexPos];
+
+		v[0] = { 0, -1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, r, g, b, a };
+		v[1] = { 0,  1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, r, g, b, a };
+		v[2] = { 0,  1.0f,  1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, r, g, b, a };
+		v[3] = { 0, -1.0f,  1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, r, g, b, a };
+
+		size_t start = renderer->SceneVertexPos;
+		size_t count = 4;
+		renderer->SceneVertexPos += count;
+		cmdbuffer->draw(count, 1, start, 0);
+
+		if (CurrentFrame)
+			SetSceneNode(CurrentFrame);
 	}
 	unguard;
 }
@@ -558,6 +586,7 @@ void UVulkanRenderDevice::SetSceneNode(FSceneNode* Frame)
 {
 	guard(UVulkanRenderDevice::SetSceneNode);
 
+	CurrentFrame = Frame;
 	Aspect = Frame->FY / Frame->FX;
 	RProjZ = (float)appTan(radians(Viewport->Actor->FovAngle) * 0.5f);
 	RFX2 = 2.0f * RProjZ / Frame->FX;

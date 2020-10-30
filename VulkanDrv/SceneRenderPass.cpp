@@ -79,6 +79,11 @@ VulkanPipeline* SceneRenderPass::getPipeline(DWORD PolyFlags)
 	return pipeline[index].get();
 }
 
+VulkanPipeline* SceneRenderPass::getEndFlashPipeline()
+{
+	return pipeline[2].get();
+}
+
 void SceneRenderPass::createPipeline()
 {
 	for (int i = 0; i < 32; i++)

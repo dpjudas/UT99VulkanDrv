@@ -39,6 +39,7 @@ private:
 	UBOOL UsePrecache = 0;
 	FPlane FlashScale;
 	FPlane FlashFog;
+	FSceneNode* CurrentFrame = nullptr;
 	float Aspect;
 	float RProjZ;
 	float RFX2;

@@ -23,6 +23,7 @@ public:
 	void end(VulkanCommandBuffer *cmdbuffer);
 
 	VulkanPipeline* getPipeline(DWORD polyflags);
+	VulkanPipeline* getEndFlashPipeline();
 
 private:
 	void createRenderPass();
