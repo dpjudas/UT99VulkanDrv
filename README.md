@@ -7,6 +7,8 @@ The project files were made for Visual Studio 2019. Open VulkanDrv.sln, select t
 
 ## Using VulkanDrv as the render device
 
+Copy the VulkanDrv.dll and VulkanDrv.int files to the Unreal Tournament system folder.
+
 In the [Engine.Engine] section of UnrealTournament.ini, change GameRenderDevice to VulkanDrv.VulkanRenderDevice
 
 Add the following section to the file:
