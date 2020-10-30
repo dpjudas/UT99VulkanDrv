@@ -20,8 +20,6 @@ void VulkanTexture::Update(Renderer* renderer, const FTextureInfo& Info, DWORD P
 	UMult = 1.0f / (Info.UScale * Info.USize);
 	VMult = 1.0f / (Info.VScale * Info.VSize);
 
-	// MaxColor = Info.MaxColor->Plane();
-
 	UploadedData data;
 	if ((uint32_t)Info.USize > renderer->Device->physicalDevice.properties.limits.maxImageDimension2D || (uint32_t)Info.VSize > renderer->Device->physicalDevice.properties.limits.maxImageDimension2D)
 	{

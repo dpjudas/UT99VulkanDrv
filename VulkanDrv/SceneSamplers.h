@@ -7,6 +7,5 @@ class SceneSamplers
 public:
 	SceneSamplers(VulkanDevice *device);
 
-	std::unique_ptr<VulkanSampler> repeat;
-	std::unique_ptr<VulkanSampler> nosmooth;
+	std::unique_ptr<VulkanSampler> samplers[4];
 };

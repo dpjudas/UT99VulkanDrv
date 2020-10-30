@@ -277,10 +277,13 @@ VulkanTexture* Renderer::GetTexture(FTextureInfo* texture, DWORD polyFlags)
 	return tex;
 }
 
-VulkanDescriptorSet* Renderer::GetTextureDescriptorSet(DWORD PolyFlags, VulkanTexture* tex, VulkanTexture* lightmap, VulkanTexture* macrotex, VulkanTexture* detailtex)
+VulkanDescriptorSet* Renderer::GetTextureDescriptorSet(DWORD PolyFlags, VulkanTexture* tex, VulkanTexture* lightmap, VulkanTexture* macrotex, VulkanTexture* detailtex, bool clamp)
 {
-	bool nosmooth = (PolyFlags & PF_NoSmooth) == PF_NoSmooth;
-	auto& descriptorSet = TextureDescriptorSets[{ tex, lightmap, detailtex, macrotex, nosmooth }];
+	uint32_t samplermode = 0;
+	if (PolyFlags & PF_NoSmooth) samplermode |= 1;
+	if (clamp) samplermode |= 2;
+
+	auto& descriptorSet = TextureDescriptorSets[{ tex, lightmap, detailtex, macrotex, samplermode }];
 	if (!descriptorSet)
 	{
 		if (SceneDescriptorPoolSetsLeft == 0)
@@ -299,7 +302,7 @@ VulkanDescriptorSet* Renderer::GetTextureDescriptorSet(DWORD PolyFlags, VulkanTe
 		int i = 0;
 		for (VulkanTexture* texture : { tex, lightmap, macrotex, detailtex })
 		{
-			VulkanSampler* sampler = (i == 0 && nosmooth) ? SceneSamplers->nosmooth.get() : SceneSamplers->repeat.get();
+			VulkanSampler* sampler = (i == 0) ? SceneSamplers->samplers[samplermode].get() : SceneSamplers->samplers[0].get();
 
 			if (texture)
 				writes.addCombinedImageSampler(descriptorSet, i++, texture->imageView.get(), sampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);

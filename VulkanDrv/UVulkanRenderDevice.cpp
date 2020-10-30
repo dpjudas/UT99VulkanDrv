@@ -285,10 +285,6 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 	cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->ScenePipelineLayout, 0, renderer->GetTextureDescriptorSet(Surface.PolyFlags, tex, lightmap, macrotex, detailtex));
 
 	float r = 1.0f, g = 1.0f, b = 1.0f, a = 1.0f;
-	/*for (VulkanTexture* layer : { tex, macrotex, lightmap, fogmap })
-	{
-		if (layer) { r *= layer->MaxColor.X; g *= layer->MaxColor.Y; b *= layer->MaxColor.Z; }
-	}*/
 
 	for (FSavedPoly* Poly = Facet.Polys; Poly; Poly = Poly->Next)
 	{
@@ -333,9 +329,6 @@ void UVulkanRenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& In
 {
 	guard(UVulkanRenderDevice::DrawGouraudPolygon);
 
-	BITFIELD UseVertexSpecular = 0;
-	UBOOL DoFog = UseVertexSpecular && ((PolyFlags & (PF_RenderFog | PF_Translucent | PF_Modulated)) == PF_RenderFog);
-
 	auto cmdbuffer = renderer->GetDrawCommands();
 
 	cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->SceneRenderPass->getPipeline(PolyFlags));
@@ -345,7 +338,6 @@ void UVulkanRenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& In
 
 	float UMult = tex ? tex->UMult : 0.0f;
 	float VMult = tex ? tex->VMult : 0.0f;
-	FPlane MaxColor = tex ? tex->MaxColor : FPlane(1.0f, 1.0f, 1.0f, 1.0f);
 
 	SceneVertex* vertexdata = &renderer->SceneVertices[renderer->SceneVertexPos];
 
@@ -368,35 +360,16 @@ void UVulkanRenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& In
 
 		if (PolyFlags & PF_Modulated)
 		{
-			// v.specularR = 0.0f;
-			// v.specularG = 0.0f;
-			// v.specularB = 0.0f;
-			// v.specularA = 0.0f;
 			v.r = 1.0f;
 			v.g = 1.0f;
 			v.b = 1.0f;
 			v.a = 1.0f;
 		}
-		else if (DoFog)
-		{
-			// v.specularR = P->Fog.X;
-			// v.specularG = P->Fog.Y;
-			// v.specularB = P->Fog.Z;
-			// v.specularA = 1.0f;
-			v.r = P->Light.X * MaxColor.X;
-			v.g = P->Light.Y * MaxColor.Y;
-			v.b = P->Light.Z * MaxColor.Z;
-			v.a = 120.0f / 255.0f;
-		}
 		else
 		{
-			// v.specularR = 0.0f;
-			// v.specularG = 0.0f;
-			// v.specularB = 0.0f;
-			// v.specularA = 0.0f;
-			v.r = P->Light.X * MaxColor.X;
-			v.g = P->Light.Y * MaxColor.Y;
-			v.b = P->Light.Z * MaxColor.Z;
+			v.r = P->Light.X;
+			v.g = P->Light.Y;
+			v.b = P->Light.Z;
 			v.a = 1.0f;
 		}
 	}
@@ -414,23 +387,35 @@ void UVulkanRenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT 
 {
 	guard(UVulkanRenderDevice::DrawTile);
 
+	if ((PolyFlags & (PF_Modulated)) == (PF_Modulated) && Info.Format == TEXF_P8)
+		PolyFlags = PF_Modulated;
+
 	auto cmdbuffer = renderer->GetDrawCommands();
 
 	VulkanTexture* tex = renderer->GetTexture(&Info, PolyFlags);
 
 	cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->SceneRenderPass->getPipeline(PolyFlags));
-	cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->ScenePipelineLayout, 0, renderer->GetTextureDescriptorSet(PolyFlags, tex));
+	cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->ScenePipelineLayout, 0, renderer->GetTextureDescriptorSet(PolyFlags, tex, nullptr, nullptr, nullptr, true));
 
 	float UMult = tex ? tex->UMult : 0.0f;
 	float VMult = tex ? tex->VMult : 0.0f;
-	FPlane MaxColor = tex ? tex->MaxColor : FPlane(1.0f, 1.0f, 1.0f, 1.0f);
 
 	SceneVertex* v = &renderer->SceneVertices[renderer->SceneVertexPos];
 
-	float r = Color.X * MaxColor.X;
-	float g = Color.Y * MaxColor.Y;
-	float b = Color.Z * MaxColor.Z;
-	float a = 1.0f;
+	float r, g, b, a;
+	if (PolyFlags & PF_Modulated)
+	{
+		r = 1.0f;
+		g = 1.0f;
+		b = 1.0f;
+	}
+	else
+	{
+		r = Color.X;
+		g = Color.Y;
+		b = Color.Z;
+	}
+	a = 1.0f;
 
 	v[0] = { 0, RFX2 * Z * (X - Frame->FX2),      RFY2 * Z * (Y - Frame->FY2),      Z, U * UMult,        V * VMult,        0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, r, g, b, a };
 	v[1] = { 0, RFX2 * Z * (X + XL - Frame->FX2), RFY2 * Z * (Y - Frame->FY2),      Z, (U + UL) * UMult, V * VMult,        0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, r, g, b, a };
@@ -595,23 +580,6 @@ void UVulkanRenderDevice::SetSceneNode(FSceneNode* Frame)
 	ScenePushConstants pushconstants;
 	pushconstants.objectToProjection = projection * modelview;
 	commands->pushConstants(renderer->ScenePipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ScenePushConstants), &pushconstants);
-
-	/*if (HitData)
-	{
-		FVector N[4] =
-		{
-			(FVector((Viewport->HitX - Frame->FX2) * Frame->RProj.Z, 0, 1) ^ FVector(0, -1, 0)).SafeNormal(),
-			(FVector((Viewport->HitX + Viewport->HitXL - Frame->FX2) * Frame->RProj.Z,0,1) ^ FVector(0,+1,0)).SafeNormal(),
-			(FVector(0,(Viewport->HitY - Frame->FY2) * Frame->RProj.Z,1) ^ FVector(+1,0,0)).SafeNormal(),
-			(FVector(0,(Viewport->HitY + Viewport->HitYL - Frame->FY2) * Frame->RProj.Z,1) ^ FVector(-1,0,0)).SafeNormal()
-		};
-		for (INT i = 0; i < 4; i++)
-		{
-			float clipplane[4] = { N[i].X, N[i].Y, N[i].Z, 0.0f };
-			glClipPlane(GL_CLIP_PLANE0 + i, clipplane);
-			glEnable(GL_CLIP_PLANE0 + i);
-		}
-	}*/
 
 	unguard;
 }

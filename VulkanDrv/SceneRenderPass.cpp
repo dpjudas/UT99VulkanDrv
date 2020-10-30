@@ -101,8 +101,6 @@ void SceneRenderPass::createPipeline()
 		builder.setLayout(renderer->ScenePipelineLayout);
 		builder.setRenderPass(renderPass.get());
 
-		bool alphatest = true;
-
 		switch (i & 3)
 		{
 		case 0: // PF_Translucent
@@ -115,7 +113,6 @@ void SceneRenderPass::createPipeline()
 			builder.setBlendMode(VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA);
 			break;
 		case 3:
-			alphatest = false;
 			builder.setBlendMode(VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ZERO); // Hmm, is it faster to keep the blend mode enabled or to toggle it?
 			break;
 		}
@@ -123,7 +120,6 @@ void SceneRenderPass::createPipeline()
 		if (i & 4) // PF_Invisible
 		{
 			builder.setColorWriteMask(0);
-			alphatest = true;
 		}
 
 		if (i & 8) // PF_Occlude
@@ -136,11 +132,6 @@ void SceneRenderPass::createPipeline()
 		}
 
 		if (i & 16) // PF_Masked
-		{
-			alphatest = true;
-		}
-
-		if (alphatest)
 			builder.addFragmentShader(fragmentShaderAlphaTest.get());
 		else
 			builder.addFragmentShader(fragmentShader.get());
