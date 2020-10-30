@@ -538,7 +538,7 @@ void UVulkanRenderDevice::GetStats(TCHAR* Result)
 void UVulkanRenderDevice::ReadPixels(FColor* Pixels)
 {
 	guard(UVulkanRenderDevice::GetStats);
-	// glReadPixels(0, 0, Viewport->SizeX, Viewport->SizeY, GL_RGBA, GL_UNSIGNED_BYTE, Pixels);
+	renderer->CopyScreenToBuffer(Viewport->SizeX, Viewport->SizeY, Pixels);
 	unguard;
 }
 

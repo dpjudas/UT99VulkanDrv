@@ -329,3 +329,37 @@ void Renderer::ClearTextureCache()
 		delete it.second;
 	TextureCache.clear();
 }
+
+void Renderer::CopyScreenToBuffer(int w, int h, void* data)
+{
+	// Convert from rgba16f to rgba8 using the GPU:
+	ImageBuilder imgbuilder;
+	imgbuilder.setFormat(VK_FORMAT_R8G8B8A8_UNORM);
+	imgbuilder.setUsage(VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+	imgbuilder.setSize(w, h);
+	auto image = imgbuilder.create(Device);
+	VkImageLayout imageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	Postprocess->blitCurrentToImage(image.get(), &imageLayout, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+
+	// Staging buffer for download
+	BufferBuilder bufbuilder;
+	bufbuilder.setSize(w * h * 4);
+	bufbuilder.setUsage(VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_TO_CPU);
+	auto staging = bufbuilder.create(Device);
+
+	// Copy from image to buffer
+	VkBufferImageCopy region = {};
+	region.imageExtent.width = w;
+	region.imageExtent.height = h;
+	region.imageExtent.depth = 1;
+	region.imageSubresource.layerCount = 1;
+	region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	GetDrawCommands()->copyImageToBuffer(image->image, imageLayout, staging->buffer, 1, &region);
+
+	// Submit command buffers and wait for device to finish the work
+	SubmitCommands(false);
+
+	uint8_t* pixels = (uint8_t*)staging->Map(0, w * h * 4);
+	memcpy(data, pixels, w * h * 4);
+	staging->Unmap();
+}
