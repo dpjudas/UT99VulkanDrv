@@ -173,25 +173,34 @@ void UVulkanRenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane Sc
 	FlashScale = InFlashScale;
 	FlashFog = InFlashFog;
 
-	if (!renderer->SceneBuffers || renderer->SceneBuffers->width != Viewport->SizeX || renderer->SceneBuffers->height != Viewport->SizeY)
+	try
 	{
-		delete renderer->SceneRenderPass; renderer->SceneRenderPass = nullptr;
-		delete renderer->SceneBuffers; renderer->SceneBuffers = nullptr;
-		renderer->SceneBuffers = new SceneBuffers(renderer->Device, Viewport->SizeX, Viewport->SizeY);
-		renderer->SceneRenderPass = new SceneRenderPass(renderer);
+		if (!renderer->SceneBuffers || renderer->SceneBuffers->width != Viewport->SizeX || renderer->SceneBuffers->height != Viewport->SizeY)
+		{
+			delete renderer->SceneRenderPass; renderer->SceneRenderPass = nullptr;
+			delete renderer->SceneBuffers; renderer->SceneBuffers = nullptr;
+			renderer->SceneBuffers = new SceneBuffers(renderer->Device, Viewport->SizeX, Viewport->SizeY);
+			renderer->SceneRenderPass = new SceneRenderPass(renderer);
+		}
+
+		auto cmdbuffer = renderer->GetDrawCommands();
+
+		renderer->Postprocess->beginFrame();
+		renderer->Postprocess->imageTransitionScene(true);
+		renderer->SceneRenderPass->begin(cmdbuffer);
+
+		VkBuffer vertexBuffers[] = { renderer->SceneVertexBuffer->buffer };
+		VkDeviceSize offsets[] = { 0 };
+		cmdbuffer->bindVertexBuffers(0, 1, vertexBuffers, offsets);
+
+		IsLocked = true;
 	}
-
-	auto cmdbuffer = renderer->GetDrawCommands();
-
-	renderer->Postprocess->beginFrame();
-	renderer->Postprocess->imageTransitionScene(true);
-	renderer->SceneRenderPass->begin(cmdbuffer);
-
-	VkBuffer vertexBuffers[] = { renderer->SceneVertexBuffer->buffer };
-	VkDeviceSize offsets[] = { 0 };
-	cmdbuffer->bindVertexBuffers(0, 1, vertexBuffers, offsets);
-
-	IsLocked = true;
+	catch (const std::exception& e)
+	{
+		// To do: can we report this back to unreal in a better way?
+		MessageBoxA(0, e.what(), "Vulkan Error", MB_OK);
+		exit(0);
+	}
 
 	unguard;
 }
@@ -227,53 +236,83 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 {
 	guard(UVulkanRenderDevice::DrawComplexSurface);
 
-	// glColor4f( TexInfo[0].ColorRenorm.X*TexInfo[1].ColorRenorm.X, TexInfo[0].ColorRenorm.Y*TexInfo[1].ColorRenorm.Y, TexInfo[0].ColorRenorm.Z*TexInfo[1].ColorRenorm.Z, 1 );
-
 	VulkanCommandBuffer* cmdbuffer = renderer->GetDrawCommands();
 
 	VulkanTexture* tex = renderer->GetTexture(Surface.Texture, Surface.PolyFlags);
 	VulkanTexture* lightmap = renderer->GetTexture(Surface.LightMap, 0);
+	VulkanTexture* macrotex = renderer->GetTexture(Surface.MacroTexture, 0);
+	VulkanTexture* detailtex = renderer->GetTexture(Surface.DetailTexture, 0);
+	VulkanTexture* fogmap = renderer->GetTexture(Surface.FogMap, 0);
 
-	cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->SceneRenderPass->getPipeline(Surface.PolyFlags));
-	cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->ScenePipelineLayout, 0, renderer->GetTextureDescriptorSet(Surface.PolyFlags, tex, lightmap));
+	if ((Surface.DetailTexture && Surface.FogMap) || (!DetailTextures)) detailtex = nullptr;
 
-	FLOAT UDot = Facet.MapCoords.XAxis | Facet.MapCoords.Origin;
-	FLOAT VDot = Facet.MapCoords.YAxis | Facet.MapCoords.Origin;
+	float UDot = Facet.MapCoords.XAxis | Facet.MapCoords.Origin;
+	float VDot = Facet.MapCoords.YAxis | Facet.MapCoords.Origin;
 
-	float r = 1.0f; // TexInfo[0].ColorRenorm.X* TexInfo[1].ColorRenorm.X;
-	float g = 1.0f; // TexInfo[0].ColorRenorm.Y * TexInfo[1].ColorRenorm.Y;
-	float b = 1.0f; // TexInfo[0].ColorRenorm.Z * TexInfo[1].ColorRenorm.Z;
-	float a = 1.0f;
-
-	float UPan = Surface.Texture->Pan.X;
-	float VPan = Surface.Texture->Pan.Y;
+	float UPan = tex ? UDot + Surface.Texture->Pan.X : 0.0f;
+	float VPan = tex ? VDot + Surface.Texture->Pan.Y : 0.0f;
 	float UMult = tex ? tex->UMult : 0.0f;
 	float VMult = tex ? tex->VMult : 0.0f;
-	float LMUPan = lightmap ? Surface.LightMap->Pan.X - 0.5f * Surface.LightMap->UScale : 0.0f;
-	float LMVPan = lightmap ? Surface.LightMap->Pan.Y - 0.5f * Surface.LightMap->VScale : 0.0f;
+	float LMUPan = lightmap ? UDot + Surface.LightMap->Pan.X - 0.5f * Surface.LightMap->UScale : 0.0f;
+	float LMVPan = lightmap ? VDot + Surface.LightMap->Pan.Y - 0.5f * Surface.LightMap->VScale : 0.0f;
 	float LMUMult = lightmap ? lightmap->UMult : 0.0f;
 	float LMVMult = lightmap ? lightmap->VMult : 0.0f;
+	float MacroUPan = macrotex ? UDot + Surface.MacroTexture->Pan.X : 0.0f;
+	float MacroVPan = macrotex ? VDot + Surface.MacroTexture->Pan.Y : 0.0f;
+	float MacroUMult = macrotex ? macrotex->UMult : 0.0f;
+	float MacroVMult = macrotex ? macrotex->VMult : 0.0f;
+	float DetailUPan = detailtex ? UDot + Surface.DetailTexture->Pan.X : 0.0f;
+	float DetailVPan = detailtex ? VDot + Surface.DetailTexture->Pan.Y : 0.0f;
+	float DetailUMult = detailtex ? detailtex->UMult : 0.0f;
+	float DetailVMult = detailtex ? detailtex->VMult : 0.0f;
+
+	uint32_t flags = 0;
+	if (lightmap) flags |= 1;
+	if (macrotex) flags |= 2;
+	if (detailtex && !fogmap) flags |= 4;
+	if (fogmap) flags |= 8;
+
+	if (fogmap) // if Surface.FogMap exists, use instead of detail texture
+	{
+		detailtex = fogmap;
+		DetailUPan = UDot + Surface.FogMap->Pan.X - 0.5f * Surface.FogMap->UScale;
+		DetailVPan = VDot + Surface.FogMap->Pan.Y - 0.5f * Surface.FogMap->VScale;
+		DetailUMult = fogmap->UMult;
+		DetailVMult = fogmap->VMult;
+	}
+
+	cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->SceneRenderPass->getPipeline(Surface.PolyFlags));
+	cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->ScenePipelineLayout, 0, renderer->GetTextureDescriptorSet(Surface.PolyFlags, tex, lightmap, macrotex, detailtex));
+
+	float r = 1.0f, g = 1.0f, b = 1.0f, a = 1.0f;
+	/*for (VulkanTexture* layer : { tex, macrotex, lightmap, fogmap })
+	{
+		if (layer) { r *= layer->MaxColor.X; g *= layer->MaxColor.Y; b *= layer->MaxColor.Z; }
+	}*/
 
 	for (FSavedPoly* Poly = Facet.Polys; Poly; Poly = Poly->Next)
 	{
 		SceneVertex* vertexdata = &renderer->SceneVertices[renderer->SceneVertexPos];
 
-		float uu[] = { 0.0f, 1.0f, 1.0f, 0.0f };
-		float vv[] = { 0.0f, 0.0f, 1.0f, 1.0f };
-
 		for (INT i = 0; i < Poly->NumPts; i++)
 		{
 			SceneVertex& vtx = vertexdata[i];
 
-			FLOAT U = Facet.MapCoords.XAxis | Poly->Pts[i]->Point;
-			FLOAT V = Facet.MapCoords.YAxis | Poly->Pts[i]->Point;
+			FLOAT u = Facet.MapCoords.XAxis | Poly->Pts[i]->Point;
+			FLOAT v = Facet.MapCoords.YAxis | Poly->Pts[i]->Point;
+
+			vtx.flags = flags;
 			vtx.x = Poly->Pts[i]->Point.X;
 			vtx.y = Poly->Pts[i]->Point.Y;
 			vtx.z = Poly->Pts[i]->Point.Z;
-			vtx.u = (U - UDot - UPan) * UMult;
-			vtx.v = (V - VDot - VPan) * VMult;
-			vtx.lu = (U - UDot - LMUPan) * LMUMult;
-			vtx.lv = (V - VDot - LMVPan) * LMVMult;
+			vtx.u = (u - UPan) * UMult;
+			vtx.v = (v - VPan) * VMult;
+			vtx.u2 = (u - LMUPan) * LMUMult;
+			vtx.v2 = (v - LMVPan) * LMVMult;
+			vtx.u3 = (u - MacroUPan) * MacroUMult;
+			vtx.v3 = (v - MacroVPan) * MacroVMult;
+			vtx.u4 = (u - DetailUPan) * DetailUMult;
+			vtx.v4 = (v - DetailVPan) * DetailVMult;
 			vtx.r = r;
 			vtx.g = g;
 			vtx.b = b;
@@ -287,14 +326,6 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 		cmdbuffer->draw(count, 1, start, 0);
 	}
 
-	if (Surface.FogMap)
-	{
-	}
-
-	if ((Surface.PolyFlags & PF_Selected) && GIsEditor)
-	{
-	}
-
 	unguard;
 }
 
@@ -302,57 +333,70 @@ void UVulkanRenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& In
 {
 	guard(UVulkanRenderDevice::DrawGouraudPolygon);
 
-	if (NumPts < 3) return;
-
-	// SetBlend(PF_Highlighted)
+	BITFIELD UseVertexSpecular = 0;
+	UBOOL DoFog = UseVertexSpecular && ((PolyFlags & (PF_RenderFog | PF_Translucent | PF_Modulated)) == PF_RenderFog);
 
 	auto cmdbuffer = renderer->GetDrawCommands();
 
-	VulkanTexture* tex = renderer->GetTexture(&Info, PolyFlags);
-
 	cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->SceneRenderPass->getPipeline(PolyFlags));
+
+	VulkanTexture* tex = renderer->GetTexture(&Info, PolyFlags);
 	cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->ScenePipelineLayout, 0, renderer->GetTextureDescriptorSet(PolyFlags, tex));
 
 	float UMult = tex ? tex->UMult : 0.0f;
 	float VMult = tex ? tex->VMult : 0.0f;
+	FPlane MaxColor = tex ? tex->MaxColor : FPlane(1.0f, 1.0f, 1.0f, 1.0f);
 
 	SceneVertex* vertexdata = &renderer->SceneVertices[renderer->SceneVertexPos];
 
-	if (PolyFlags & PF_Modulated)
+	for (INT i = 0; i < NumPts; i++)
 	{
-		for (INT i = 0; i < NumPts; i++)
+		FTransTexture* P = Pts[i];
+		SceneVertex& v = vertexdata[i];
+		v.flags = 0;
+		v.x = P->Point.X;
+		v.y = P->Point.Y;
+		v.z = P->Point.Z;
+		v.u = P->U * UMult;
+		v.v = P->V * VMult;
+		v.u2 = 0.0f;
+		v.v2 = 0.0f;
+		v.u3 = 0.0f;
+		v.v3 = 0.0f;
+		v.u4 = 0.0f;
+		v.v4 = 0.0f;
+
+		if (PolyFlags & PF_Modulated)
 		{
-			FTransTexture* P = Pts[i];
-			SceneVertex& v = vertexdata[i];
-			v.x = P->Point.X;
-			v.y = P->Point.Y;
-			v.z = P->Point.Z;
-			v.u = P->U * UMult;
-			v.v = P->V * VMult;
-			v.lu = 0.0f;
-			v.lv = 0.0f;
+			// v.specularR = 0.0f;
+			// v.specularG = 0.0f;
+			// v.specularB = 0.0f;
+			// v.specularA = 0.0f;
 			v.r = 1.0f;
 			v.g = 1.0f;
 			v.b = 1.0f;
 			v.a = 1.0f;
 		}
-	}
-	else
-	{
-		for (INT i = 0; i < NumPts; i++)
+		else if (DoFog)
 		{
-			FTransTexture* P = Pts[i];
-			SceneVertex& v = vertexdata[i];
-			v.x = P->Point.X;
-			v.y = P->Point.Y;
-			v.z = P->Point.Z;
-			v.u = P->U * UMult;
-			v.v = P->V * VMult;
-			v.lu = 0.0f;
-			v.lv = 0.0f;
-			v.r = P->Light.X;
-			v.g = P->Light.Y;
-			v.b = P->Light.Z;
+			// v.specularR = P->Fog.X;
+			// v.specularG = P->Fog.Y;
+			// v.specularB = P->Fog.Z;
+			// v.specularA = 1.0f;
+			v.r = P->Light.X * MaxColor.X;
+			v.g = P->Light.Y * MaxColor.Y;
+			v.b = P->Light.Z * MaxColor.Z;
+			v.a = 120.0f / 255.0f;
+		}
+		else
+		{
+			// v.specularR = 0.0f;
+			// v.specularG = 0.0f;
+			// v.specularB = 0.0f;
+			// v.specularA = 0.0f;
+			v.r = P->Light.X * MaxColor.X;
+			v.g = P->Light.Y * MaxColor.Y;
+			v.b = P->Light.Z * MaxColor.Z;
 			v.a = 1.0f;
 		}
 	}
@@ -379,18 +423,19 @@ void UVulkanRenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT 
 
 	float UMult = tex ? tex->UMult : 0.0f;
 	float VMult = tex ? tex->VMult : 0.0f;
+	FPlane MaxColor = tex ? tex->MaxColor : FPlane(1.0f, 1.0f, 1.0f, 1.0f);
 
 	SceneVertex* v = &renderer->SceneVertices[renderer->SceneVertexPos];
 
-	float r = Color.X;// *TexInfo[0].ColorNorm.X;
-	float g = Color.Y;// *TexInfo[0].ColorNorm.Y;
-	float b = Color.Z;// *TexInfo[0].ColorNorm.Z;
+	float r = Color.X * MaxColor.X;
+	float g = Color.Y * MaxColor.Y;
+	float b = Color.Z * MaxColor.Z;
 	float a = 1.0f;
 
-	v[0] = { RFX2 * Z * (X - Frame->FX2),      RFY2 * Z * (Y - Frame->FY2),      Z, U * UMult,        V * VMult,        0.0f, 0.0f, r, g, b, a };
-	v[1] = { RFX2 * Z * (X + XL - Frame->FX2), RFY2 * Z * (Y - Frame->FY2),      Z, (U + UL) * UMult, V * VMult,        0.0f, 0.0f, r, g, b, a };
-	v[2] = { RFX2 * Z * (X + XL - Frame->FX2), RFY2 * Z * (Y + YL - Frame->FY2), Z, (U + UL) * UMult, (V + VL) * VMult, 0.0f, 0.0f, r, g, b, a };
-	v[3] = { RFX2 * Z * (X - Frame->FX2),      RFY2 * Z * (Y + YL - Frame->FY2), Z, U * UMult,        (V + VL) * VMult, 0.0f, 0.0f, r, g, b, a };
+	v[0] = { 0, RFX2 * Z * (X - Frame->FX2),      RFY2 * Z * (Y - Frame->FY2),      Z, U * UMult,        V * VMult,        0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, r, g, b, a };
+	v[1] = { 0, RFX2 * Z * (X + XL - Frame->FX2), RFY2 * Z * (Y - Frame->FY2),      Z, (U + UL) * UMult, V * VMult,        0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, r, g, b, a };
+	v[2] = { 0, RFX2 * Z * (X + XL - Frame->FX2), RFY2 * Z * (Y + YL - Frame->FY2), Z, (U + UL) * UMult, (V + VL) * VMult, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, r, g, b, a };
+	v[3] = { 0, RFX2 * Z * (X - Frame->FX2),      RFY2 * Z * (Y + YL - Frame->FY2), Z, U * UMult,        (V + VL) * VMult, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, r, g, b, a };
 
 	size_t start = renderer->SceneVertexPos;
 	size_t count = 4;

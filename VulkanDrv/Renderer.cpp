@@ -195,6 +195,8 @@ void Renderer::CreateSceneDescriptorSetLayout()
 	//builder.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 	builder.addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
 	builder.addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
+	builder.addBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
+	builder.addBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
 	SceneDescriptorSetLayout = builder.create(Device).release();
 }
 
@@ -275,16 +277,16 @@ VulkanTexture* Renderer::GetTexture(FTextureInfo* texture, DWORD polyFlags)
 	return tex;
 }
 
-VulkanDescriptorSet* Renderer::GetTextureDescriptorSet(DWORD PolyFlags, VulkanTexture* tex, VulkanTexture* lightmap)
+VulkanDescriptorSet* Renderer::GetTextureDescriptorSet(DWORD PolyFlags, VulkanTexture* tex, VulkanTexture* lightmap, VulkanTexture* macrotex, VulkanTexture* detailtex)
 {
 	bool nosmooth = (PolyFlags & PF_NoSmooth) == PF_NoSmooth;
-	auto& descriptorSet = TextureDescriptorSets[{ tex, lightmap, nosmooth }];
+	auto& descriptorSet = TextureDescriptorSets[{ tex, lightmap, detailtex, macrotex, nosmooth }];
 	if (!descriptorSet)
 	{
 		if (SceneDescriptorPoolSetsLeft == 0)
 		{
 			DescriptorPoolBuilder builder;
-			builder.addPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 * 2);
+			builder.addPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 * 4);
 			builder.setMaxSets(1000);
 			SceneDescriptorPool.push_back(builder.create(Device).release());
 			SceneDescriptorPoolSetsLeft = 1000;
@@ -295,7 +297,7 @@ VulkanDescriptorSet* Renderer::GetTextureDescriptorSet(DWORD PolyFlags, VulkanTe
 
 		WriteDescriptors writes;
 		int i = 0;
-		for (VulkanTexture* texture : { tex, lightmap })
+		for (VulkanTexture* texture : { tex, lightmap, macrotex, detailtex })
 		{
 			VulkanSampler* sampler = (i == 0 && nosmooth) ? SceneSamplers->nosmooth.get() : SceneSamplers->repeat.get();
 

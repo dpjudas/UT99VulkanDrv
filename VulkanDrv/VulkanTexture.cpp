@@ -20,6 +20,8 @@ void VulkanTexture::Update(Renderer* renderer, const FTextureInfo& Info, DWORD P
 	UMult = 1.0f / (Info.UScale * Info.USize);
 	VMult = 1.0f / (Info.VScale * Info.VSize);
 
+	// MaxColor = Info.MaxColor->Plane();
+
 	UploadedData data;
 	if ((uint32_t)Info.USize > renderer->Device->physicalDevice.properties.limits.maxImageDimension2D || (uint32_t)Info.VSize > renderer->Device->physicalDevice.properties.limits.maxImageDimension2D)
 	{
@@ -84,7 +86,7 @@ void VulkanTexture::Update(Renderer* renderer, const FTextureInfo& Info, DWORD P
 				});
 			break;
 		case TEXF_RGB16: data = UploadData(renderer, Info, PolyFlags, VK_FORMAT_R5G6B5_UNORM_PACK16, [](auto mip) { return mip->USize * mip->VSize * 2; }); break;
-		case TEXF_DXT1: data = UploadData(renderer, Info, PolyFlags, VK_FORMAT_BC1_RGB_UNORM_BLOCK, [](auto mip) { return mip->USize * mip->VSize / 2; }); break;
+		case TEXF_DXT1: data = UploadData(renderer, Info, PolyFlags, VK_FORMAT_BC1_RGBA_UNORM_BLOCK, [](auto mip) { return mip->USize * mip->VSize / 2; }); break;
 		case TEXF_RGB8: data = UploadData(renderer, Info, PolyFlags, VK_FORMAT_R8G8B8_UNORM, [](auto mip) { return mip->USize * mip->VSize * 3; }); break;
 		case TEXF_RGBA8: data = UploadData(renderer, Info, PolyFlags, VK_FORMAT_B8G8R8A8_UNORM, [](auto mip) { return mip->USize * mip->VSize * 4; }); break;
 		case 0x06/*TEXF_BC2*/: data = UploadData(renderer, Info, PolyFlags, VK_FORMAT_BC2_UNORM_BLOCK, [](auto mip) { return mip->USize * mip->VSize; }); break;

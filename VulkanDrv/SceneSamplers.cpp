@@ -20,4 +20,6 @@ SceneSamplers::SceneSamplers(VulkanDevice *device)
 	builder.setMipmapMode(VK_SAMPLER_MIPMAP_MODE_NEAREST);
 	builder.setAnisotropy(8.0);
 	nosmooth = builder.create(device);
+
+	// To do: detail texture needs a zbias of 15
 }

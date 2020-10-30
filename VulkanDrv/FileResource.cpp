@@ -14,20 +14,29 @@ std::string FileResource::readAllText(const std::string& filename)
 				mat4 objectToProjection;
 			};
 
-			layout(location = 0) in vec3 aPosition;
-			layout(location = 1) in vec2 aTexCoord;
-			layout(location = 2) in vec2 aTexCoord2;
-			layout(location = 3) in vec4 aColor;
+			layout(location = 0) in uint aFlags;
+			layout(location = 1) in vec3 aPosition;
+			layout(location = 2) in vec2 aTexCoord;
+			layout(location = 3) in vec2 aTexCoord2;
+			layout(location = 4) in vec2 aTexCoord3;
+			layout(location = 5) in vec2 aTexCoord4;
+			layout(location = 6) in vec4 aColor;
 
-			layout(location = 0) out vec2 texCoord;
-			layout(location = 1) out vec2 texCoord2;
-			layout(location = 2) out vec4 color;
+			layout(location = 0) flat out uint flags;
+			layout(location = 1) out vec2 texCoord;
+			layout(location = 2) out vec2 texCoord2;
+			layout(location = 3) out vec2 texCoord3;
+			layout(location = 4) out vec2 texCoord4;
+			layout(location = 5) out vec4 color;
 
 			void main()
 			{
 				gl_Position = objectToProjection * vec4(aPosition, 1.0);
+				flags = aFlags;
 				texCoord = aTexCoord;
 				texCoord2 = aTexCoord2;
+				texCoord3 = aTexCoord3;
+				texCoord4 = aTexCoord4;
 				color = aColor;
 			}
 		)";
@@ -37,10 +46,15 @@ std::string FileResource::readAllText(const std::string& filename)
 		return R"(
 			layout(binding = 0) uniform sampler2D tex;
 			layout(binding = 1) uniform sampler2D texLightmap;
+			layout(binding = 2) uniform sampler2D texMacro;
+			layout(binding = 3) uniform sampler2D texDetail;
 
-			layout(location = 0) in vec2 texCoord;
-			layout(location = 1) in vec2 texCoord2;
-			layout(location = 2) in vec4 color;
+			layout(location = 0) flat in uint flags;
+			layout(location = 1) in vec2 texCoord;
+			layout(location = 2) in vec2 texCoord2;
+			layout(location = 3) in vec2 texCoord3;
+			layout(location = 4) in vec2 texCoord4;
+			layout(location = 5) in vec4 color;
 
 			layout(location = 0) out vec4 outColor;
 
@@ -51,10 +65,37 @@ std::string FileResource::readAllText(const std::string& filename)
 
 			void main()
 			{
-				vec4 c = texture(tex, texCoord);
-				vec3 lightmap = texture(texLightmap, texCoord2).xyz;
+				outColor = texture(tex, texCoord);
+				//outColor.rgb = linear(outColor.rgb);
 
-				outColor = vec4((c.rgb * lightmap), c.a) * color;
+				if ((flags & 2) != 0) // Macro texture
+				{
+					outColor *= texture(texMacro, texCoord3);
+				}
+
+				if ((flags & 1) != 0) // Lightmap
+				{
+					outColor *= texture(texLightmap, texCoord2);
+				}
+
+				if ((flags & 4) != 0) // Detail texture
+				{
+					/* To do: apply fade out: Min( appRound(100.f * (NearZ / Poly->Pts[i]->Point.Z - 1.f)), 255) */
+
+					float detailScale = 1.0;
+					for (int i = 0; i < 3; i++)
+					{
+						outColor *= texture(texDetail, texCoord4 * detailScale) + 0.5;
+						detailScale *= 4.223f;
+					}
+				}
+				else if ((flags & 8) != 0) // Fog map
+				{
+					vec4 fogcolor = texture(texDetail, texCoord4);
+					outColor = fogcolor + outColor * (1.0 - fogcolor.a);
+				}
+
+				outColor *= color;
 
 				#if defined(ALPHATEST)
 				if (outColor.a < 0.5) discard;

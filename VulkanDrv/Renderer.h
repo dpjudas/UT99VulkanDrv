@@ -34,7 +34,7 @@ public:
 	void CreateNullTexture();
 
 	VulkanTexture* GetTexture(FTextureInfo* texture, DWORD polyFlags);
-	VulkanDescriptorSet* GetTextureDescriptorSet(DWORD PolyFlags, VulkanTexture* tex, VulkanTexture* lightmap = nullptr);
+	VulkanDescriptorSet* GetTextureDescriptorSet(DWORD PolyFlags, VulkanTexture* tex, VulkanTexture* lightmap = nullptr, VulkanTexture* macrotex = nullptr, VulkanTexture* detailtex = nullptr);
 	void ClearTextureCache();
 
 	HWND WindowHandle = 0;
@@ -79,7 +79,7 @@ public:
 
 	struct TexDescriptorKey
 	{
-		TexDescriptorKey(VulkanTexture* tex, VulkanTexture* lightmap, bool nosmooth) : tex(tex), lightmap(lightmap), nosmooth(nosmooth) { }
+		TexDescriptorKey(VulkanTexture* tex, VulkanTexture* lightmap, VulkanTexture* detailtex, VulkanTexture* macrotex, bool nosmooth) : tex(tex), lightmap(lightmap), detailtex(detailtex), macrotex(macrotex), nosmooth(nosmooth) { }
 
 		bool operator<(const TexDescriptorKey& other) const
 		{
@@ -87,12 +87,18 @@ public:
 				return tex < other.tex;
 			else if (lightmap != other.lightmap)
 				return lightmap < other.lightmap;
+			else if (detailtex != other.detailtex)
+				return detailtex < other.detailtex;
+			else if (macrotex != other.macrotex)
+				return macrotex < other.macrotex;
 			else
 				return nosmooth < other.nosmooth;
 		}
 
 		VulkanTexture* tex;
 		VulkanTexture* lightmap;
+		VulkanTexture* detailtex;
+		VulkanTexture* macrotex;
 		bool nosmooth;
 	};
 

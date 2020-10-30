@@ -12,8 +12,12 @@ struct SceneUniforms
 
 struct SceneVertex
 {
+	uint32_t flags;
 	float x, y, z;
-	float u, v, lu, lv;
+	float u, v;
+	float u2, v2;
+	float u3, v3;
+	float u4, v4;
 	float r, g, b, a;
 };
 

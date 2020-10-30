@@ -90,10 +90,13 @@ void SceneRenderPass::createPipeline()
 		builder.setTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN);
 		builder.setCull(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
 		builder.addVertexBufferBinding(0, sizeof(SceneVertex));
-		builder.addVertexAttribute(0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(SceneVertex, x));
-		builder.addVertexAttribute(1, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, u));
-		builder.addVertexAttribute(2, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, lu));
-		builder.addVertexAttribute(3, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(SceneVertex, r));
+		builder.addVertexAttribute(0, 0, VK_FORMAT_R32_UINT, offsetof(SceneVertex, flags));
+		builder.addVertexAttribute(1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(SceneVertex, x));
+		builder.addVertexAttribute(2, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, u));
+		builder.addVertexAttribute(3, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, u2));
+		builder.addVertexAttribute(4, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, u3));
+		builder.addVertexAttribute(5, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, u4));
+		builder.addVertexAttribute(6, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(SceneVertex, r));
 		builder.addDynamicState(VK_DYNAMIC_STATE_VIEWPORT);
 		builder.setLayout(renderer->ScenePipelineLayout);
 		builder.setRenderPass(renderPass.get());

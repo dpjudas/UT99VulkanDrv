@@ -25,6 +25,7 @@ public:
 
 	float UMult = 1.0f;
 	float VMult = 1.0f;
+	FPlane MaxColor = { 1.0f, 1.0f, 1.0f, 1.0f };
 
 	std::unique_ptr<VulkanImage> image;
 	std::unique_ptr<VulkanImageView> imageView;
