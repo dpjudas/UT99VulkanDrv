@@ -24,6 +24,12 @@ Add the following section to the file:
 	Coronas=True
 	ShinySurfaces=True
 	VolumetricLighting=True
+	VkDebug=False
+	VkDeviceIndex=0
+
+The VkDeviceIndex selects which vulkan device in the system the render device should use. Type 'GetVkDevices' in the system console to get the list of available devices.
+
+For debugging, VkDebug can be set to true. This enables the vulkan debug layer and will cause the render device to output extra information into the UnrealTournament.log file. 'VkMemStats' can also be typed into the console.
 
 ## License
 

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <functional>
+
 class VulkanSwapChain;
 class VulkanSemaphore;
 class VulkanFence;
@@ -28,7 +30,7 @@ public:
 class VulkanDevice
 {
 public:
-	VulkanDevice(HWND window);
+	VulkanDevice(HWND window, int vk_device = 0, bool vk_debug = false, std::function<void(const char* typestr, const std::string& msg)> printLogCallback = {});
 	~VulkanDevice();
 
 	void setDebugObjectName(const char *name, uint64_t handle, VkObjectType type)
@@ -77,7 +79,15 @@ public:
 	int graphicsFamily = -1;
 	int presentFamily = -1;
 
+	// Physical device info
+	std::vector<VulkanPhysicalDevice> availableDevices;
+	std::vector<VulkanCompatibleDevice> supportedDevices;
+
 private:
+	int vk_device;
+	bool vk_debug;
+	std::function<void(const char* typestr, const std::string& msg)> printLogCallback;
+
 	void createInstance();
 	void createSurface();
 	void selectPhysicalDevice();

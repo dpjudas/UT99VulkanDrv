@@ -6,14 +6,7 @@
 #include <set>
 #include <string>
 
-// Physical device info
-static std::vector<VulkanPhysicalDevice> availableDevices;
-static std::vector<VulkanCompatibleDevice> supportedDevices;
-
-bool vk_debug = false;
-int vk_device = 0;
-
-VulkanDevice::VulkanDevice(HWND window) : window(window)
+VulkanDevice::VulkanDevice(HWND window, int vk_device, bool vk_debug, std::function<void(const char* typestr, const std::string& msg)> printLogCallback) : window(window), vk_device(vk_device), vk_debug(vk_debug), printLogCallback(printLogCallback)
 {
 	try
 	{
@@ -212,7 +205,7 @@ void VulkanDevice::createDevice()
 
 void VulkanDevice::createSurface()
 {
-	VkWin32SurfaceCreateInfoKHR windowCreateInfo;
+	VkWin32SurfaceCreateInfoKHR windowCreateInfo = {};
 	windowCreateInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
 	windowCreateInfo.hwnd = window;
 	windowCreateInfo.hinstance = GetModuleHandle(nullptr);
@@ -340,9 +333,8 @@ VkBool32 VulkanDevice::debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT mess
 				typestr = "vulkan";
 			}
 
-			//printLog(notifyColor, "\n");
-			//printLog(errorColor, "[%1] ", typestr);
-			//printLog(notifyColor, "%1\n", msg);
+			if (device->printLogCallback)
+				device->printLogCallback(typestr, msg);
 		}
 	}
 

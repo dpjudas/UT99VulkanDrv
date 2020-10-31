@@ -33,10 +33,14 @@ void UVulkanRenderDevice::StaticConstructor()
 	DetailTextures = 1;
 	UseVSync = 1;
 	FPSLimit = 200;
+	VkDeviceIndex = 0;
+	VkDebug = 0;
 
 	new(GetClass(), TEXT("UseVSync"), RF_Public) UBoolProperty(CPP_PROPERTY(UseVSync), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("UsePrecache"), RF_Public) UBoolProperty(CPP_PROPERTY(UsePrecache), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("FPSLimit"), RF_Public) UIntProperty(CPP_PROPERTY(FPSLimit), TEXT("Display"), CPF_Config);
+	new(GetClass(), TEXT("VkDeviceIndex"), RF_Public) UIntProperty(CPP_PROPERTY(VkDeviceIndex), TEXT("Display"), CPF_Config);
+	new(GetClass(), TEXT("VkDebug"), RF_Public) UBoolProperty(CPP_PROPERTY(VkDebug), TEXT("Display"), CPF_Config);
 
 	unguard;
 }
@@ -45,8 +49,57 @@ UBOOL UVulkanRenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT N
 {
 	guard(UVulkanRenderDevice::Init);
 
+	auto printLog = [](const char* typestr, const std::string& msg)
+	{
+		debugf(TEXT("[%s] %s"), to_utf16(typestr).c_str(), to_utf16(msg).c_str());
+	};
+
 	Viewport = InViewport;
-	renderer = new Renderer((HWND)Viewport->GetWindow(), UseVSync);
+
+	try
+	{
+		renderer = new Renderer((HWND)Viewport->GetWindow(), UseVSync, VkDeviceIndex, VkDebug, printLog);
+		if (VkDebug)
+		{
+			const auto& props = renderer->Device->physicalDevice.properties;
+
+			FString deviceType;
+			switch (props.deviceType)
+			{
+			case VK_PHYSICAL_DEVICE_TYPE_OTHER: deviceType = TEXT("other"); break;
+			case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU: deviceType = TEXT("integrated gpu"); break;
+			case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU: deviceType = TEXT("discrete gpu"); break;
+			case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU: deviceType = TEXT("virtual gpu"); break;
+			case VK_PHYSICAL_DEVICE_TYPE_CPU: deviceType = TEXT("cpu"); break;
+			default: deviceType = FString::Printf(TEXT("%d"), (int)props.deviceType); break;
+			}
+
+			FString apiVersion, driverVersion;
+			apiVersion = FString::Printf(TEXT("%d.%d.%d"), VK_VERSION_MAJOR(props.apiVersion), VK_VERSION_MINOR(props.apiVersion), VK_VERSION_PATCH(props.apiVersion));
+			driverVersion = FString::Printf(TEXT("%d.%d.%d"), VK_VERSION_MAJOR(props.driverVersion), VK_VERSION_MINOR(props.driverVersion), VK_VERSION_PATCH(props.driverVersion));
+
+			debugf(TEXT("Vulkan device: %s"), to_utf16(props.deviceName).c_str());
+			debugf(TEXT("Vulkan device type: %s"), *deviceType);
+			debugf(TEXT("Vulkan version: %s (api) %s (driver)"), *apiVersion, *driverVersion);
+
+			debugf(TEXT("Vulkan extensions:"));
+			for (const VkExtensionProperties& p : renderer->Device->physicalDevice.extensions)
+			{
+				debugf(TEXT(" %s"), to_utf16(p.extensionName).c_str());
+			}
+
+			const auto& limits = props.limits;
+			debugf(TEXT("Max. texture size: %d"), limits.maxImageDimension2D);
+			debugf(TEXT("Max. uniform buffer range: %d"), limits.maxUniformBufferRange);
+			debugf(TEXT("Min. uniform buffer offset alignment: %llu"), limits.minUniformBufferOffsetAlignment);
+		}
+	}
+	catch (const std::exception& e)
+	{
+		debugf(TEXT("Could not create vulkan renderer: %s"), to_utf16(e.what()).c_str());
+		Exit();
+		return 0;
+	}
 
 	if (!SetRes(NewX, NewY, NewColorBytes, Fullscreen))
 	{
@@ -158,6 +211,22 @@ UBOOL UVulkanRenderDevice::Exec(const TCHAR* Cmd, FOutputDevice& Ar)
 			Str += FString::Printf(TEXT("%ix%i "), (INT)resolution.X, (INT)resolution.Y);
 		}
 		Ar.Log(*Str.LeftChop(1));
+		return 1;
+	}
+	else if (ParseCommand(&Cmd, TEXT("GetVkDevices")))
+	{
+		for (size_t i = 0; i < renderer->Device->supportedDevices.size(); i++)
+		{
+			Ar.Log(FString::Printf(TEXT("#%d - %s\r\n"), (int)i, to_utf16(renderer->Device->supportedDevices[i].device->properties.deviceName)));
+		}
+		return 1;
+	}
+	else if (ParseCommand(&Cmd, TEXT("VkMemStats")))
+	{
+		VmaStats stats = {};
+		vmaCalculateStats(renderer->Device->allocator, &stats);
+		Ar.Log(FString::Printf(TEXT("Allocated objects: %d, used bytes: %d MB\r\n"), (int)stats.total.allocationCount, (int)stats.total.usedBytes / (1024 * 1024)));
+		Ar.Log(FString::Printf(TEXT("Unused range count: %d, unused bytes: %d MB\r\n"), (int)stats.total.unusedRangeCount, (int)stats.total.unusedBytes / (1024 * 1024)));
 		return 1;
 	}
 	else
@@ -657,4 +726,32 @@ void UVulkanRenderDevice::PrecacheTexture(FTextureInfo& Info, DWORD PolyFlags)
 	guard(UVulkanRenderDevice::PrecacheTexture);
 	renderer->GetTexture(&Info, PolyFlags);
 	unguard;
+}
+
+std::wstring to_utf16(const std::string& str)
+{
+	if (str.empty()) return {};
+	int needed = MultiByteToWideChar(CP_UTF8, 0, str.data(), (int)str.size(), nullptr, 0);
+	if (needed == 0)
+		throw std::runtime_error("MultiByteToWideChar failed");
+	std::wstring result;
+	result.resize(needed);
+	needed = MultiByteToWideChar(CP_UTF8, 0, str.data(), (int)str.size(), &result[0], (int)result.size());
+	if (needed == 0)
+		throw std::runtime_error("MultiByteToWideChar failed");
+	return result;
+}
+
+std::string from_utf16(const std::wstring& str)
+{
+	if (str.empty()) return {};
+	int needed = WideCharToMultiByte(CP_UTF8, 0, str.data(), (int)str.size(), nullptr, 0, nullptr, nullptr);
+	if (needed == 0)
+		throw std::runtime_error("WideCharToMultiByte failed");
+	std::string result;
+	result.resize(needed);
+	needed = WideCharToMultiByte(CP_UTF8, 0, str.data(), (int)str.size(), &result[0], (int)result.size(), nullptr, nullptr);
+	if (needed == 0)
+		throw std::runtime_error("WideCharToMultiByte failed");
+	return result;
 }

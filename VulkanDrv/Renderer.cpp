@@ -14,7 +14,7 @@
 
 static bool shaderbuilderinited = false;
 
-Renderer::Renderer(HWND windowHandle, bool vsync) : WindowHandle(windowHandle)
+Renderer::Renderer(HWND windowHandle, bool vsync, int vk_device, bool vk_debug, std::function<void(const char* typestr, const std::string& msg)> printLogCallback) : WindowHandle(windowHandle)
 {
 	if (!shaderbuilderinited)
 	{
@@ -22,7 +22,7 @@ Renderer::Renderer(HWND windowHandle, bool vsync) : WindowHandle(windowHandle)
 		shaderbuilderinited = true;
 	}
 
-	Device = new VulkanDevice(WindowHandle);
+	Device = new VulkanDevice(WindowHandle, vk_device, vk_debug, printLogCallback);
 	SwapChain = new VulkanSwapChain(Device, vsync);
 	ImageAvailableSemaphore = new VulkanSemaphore(Device);
 	RenderFinishedSemaphore = new VulkanSemaphore(Device);

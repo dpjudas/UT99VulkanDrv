@@ -15,7 +15,7 @@ struct SceneVertex;
 class Renderer
 {
 public:
-	Renderer(HWND windowHandle, bool vsync);
+	Renderer(HWND windowHandle, bool vsync, int vk_device, bool vk_debug, std::function<void(const char* typestr, const std::string& msg)> printLogCallback);
 	~Renderer();
 
 	void SubmitCommands(bool present);

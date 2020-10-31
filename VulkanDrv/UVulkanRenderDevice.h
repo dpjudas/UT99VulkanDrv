@@ -51,6 +51,11 @@ private:
 	BITFIELD UseVSync;
 	INT FPSLimit;
 	uint64_t fpsLimitTime = 0;
+	INT VkDeviceIndex = 0;
+	BITFIELD VkDebug;
 
 	bool IsLocked = false;
 };
+
+std::wstring to_utf16(const std::string& str);
+std::string from_utf16(const std::wstring& str);
