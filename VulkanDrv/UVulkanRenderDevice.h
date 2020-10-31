@@ -36,6 +36,8 @@ public:
 	Renderer* renderer = nullptr;
 
 private:
+	void CheckFPSLimit();
+
 	UBOOL UsePrecache = 0;
 	FPlane FlashScale;
 	FPlane FlashFog;
@@ -46,7 +48,9 @@ private:
 	float RFY2;
 
 	// Configuration.
-	BITFIELD VSync;
+	BITFIELD UseVSync;
+	INT FPSLimit;
+	uint64_t fpsLimitTime = 0;
 
 	bool IsLocked = false;
 };

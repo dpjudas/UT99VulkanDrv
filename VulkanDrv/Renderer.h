@@ -15,7 +15,7 @@ struct SceneVertex;
 class Renderer
 {
 public:
-	Renderer(HWND windowHandle);
+	Renderer(HWND windowHandle, bool vsync);
 	~Renderer();
 
 	void SubmitCommands(bool present);

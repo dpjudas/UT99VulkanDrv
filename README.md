@@ -15,7 +15,8 @@ Add the following section to the file:
 
 	[VulkanDrv.VulkanRenderDevice]
 	UsePrecache=False
-	VSync=True
+	UseVSync=True
+	FPSLimit=200
 	DetailTextures=True
 	DescFlags=0
 	Description=

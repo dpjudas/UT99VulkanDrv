@@ -31,10 +31,12 @@ void UVulkanRenderDevice::StaticConstructor()
 	SupportsLazyTextures = 0;
 	PrefersDeferredLoad = 0;
 	DetailTextures = 1;
-	VSync = 1;
+	UseVSync = 1;
+	FPSLimit = 200;
 
-	new(GetClass(), TEXT("VSync"), RF_Public) UBoolProperty(CPP_PROPERTY(VSync), TEXT("Display"), CPF_Config);
+	new(GetClass(), TEXT("UseVSync"), RF_Public) UBoolProperty(CPP_PROPERTY(UseVSync), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("UsePrecache"), RF_Public) UBoolProperty(CPP_PROPERTY(UsePrecache), TEXT("Display"), CPF_Config);
+	new(GetClass(), TEXT("FPSLimit"), RF_Public) UIntProperty(CPP_PROPERTY(FPSLimit), TEXT("Display"), CPF_Config);
 
 	unguard;
 }
@@ -44,7 +46,7 @@ UBOOL UVulkanRenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT N
 	guard(UVulkanRenderDevice::Init);
 
 	Viewport = InViewport;
-	renderer = new Renderer((HWND)Viewport->GetWindow());
+	renderer = new Renderer((HWND)Viewport->GetWindow(), UseVSync);
 
 	if (!SetRes(NewX, NewY, NewColorBytes, Fullscreen))
 	{
@@ -224,12 +226,49 @@ void UVulkanRenderDevice::Unlock(UBOOL Blit)
 	pp->tonemap.render(&renderstate, sceneWidth, sceneHeight);
 	//pp->bloom.renderBlur(&renderstate, sceneWidth, sceneHeight);
 
+	if (Blit)
+		CheckFPSLimit();
+
 	renderer->SubmitCommands(Blit ? true : false);
 	renderer->SceneVertexPos = 0;
 
 	IsLocked = false;
 
 	unguard;
+}
+
+void UVulkanRenderDevice::CheckFPSLimit()
+{
+	using namespace std::chrono;
+	using namespace std::this_thread;
+
+	if (UseVSync || FPSLimit <= 0)
+		return;
+
+	uint64_t targetWakeTime = fpsLimitTime + 1'000'000 / FPSLimit;
+
+	while (true)
+	{
+		fpsLimitTime = duration_cast<microseconds>(steady_clock::now().time_since_epoch()).count();
+		int64_t timeToWait = targetWakeTime - fpsLimitTime;
+
+		if (timeToWait > 1'000'000 || timeToWait <= 0)
+		{
+			break;
+		}
+
+		if (timeToWait <= 2'000)
+		{
+			// We are too close to the deadline. OS sleep is not precise enough to wake us before it elapses.
+			// Yield execution and check time again.
+			sleep_for(nanoseconds(0));
+		}
+		else
+		{
+			// Sleep, but try to wake before deadline.
+			sleep_for(microseconds(timeToWait - 2'000));
+		}
+	}
 }
 
 void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Surface, FSurfaceFacet& Facet)

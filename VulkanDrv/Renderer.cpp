@@ -14,7 +14,7 @@
 
 static bool shaderbuilderinited = false;
 
-Renderer::Renderer(HWND windowHandle) : WindowHandle(windowHandle)
+Renderer::Renderer(HWND windowHandle, bool vsync) : WindowHandle(windowHandle)
 {
 	if (!shaderbuilderinited)
 	{
@@ -23,7 +23,7 @@ Renderer::Renderer(HWND windowHandle) : WindowHandle(windowHandle)
 	}
 
 	Device = new VulkanDevice(WindowHandle);
-	SwapChain = new VulkanSwapChain(Device, true);
+	SwapChain = new VulkanSwapChain(Device, vsync);
 	ImageAvailableSemaphore = new VulkanSemaphore(Device);
 	RenderFinishedSemaphore = new VulkanSemaphore(Device);
 	RenderFinishedFence = new VulkanFence(Device);
