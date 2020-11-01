@@ -39,9 +39,9 @@ void VulkanTexture::Update(Renderer* renderer, const FTextureInfo& Info, DWORD P
 				for (INT i = 0; i < 256; i++)
 				{
 					FColor& Src = Info.Palette[i];
-					NewPal[i].R = Src.R; // ScaleR[Src.R];
-					NewPal[i].G = Src.G; // ScaleG[Src.G];
-					NewPal[i].B = Src.B; // ScaleB[Src.B];
+					NewPal[i].R = Src.R;
+					NewPal[i].G = Src.G;
+					NewPal[i].B = Src.B;
 					NewPal[i].A = Src.A;
 				}
 				if (PolyFlags & PF_Masked)
@@ -77,9 +77,9 @@ void VulkanTexture::Update(Renderer* renderer, const FTextureInfo& Info, DWORD P
 						for (uint32_t x = 0; x < mipwidth; x++)
 						{
 							const FColor& Src = line[x];
-							Ptr->R = Src.B; // ScaleR[Src.B];
-							Ptr->G = Src.G; // ScaleG[Src.G];
-							Ptr->B = Src.R; // ScaleB[Src.R];
+							Ptr->R = Src.B;
+							Ptr->G = Src.G;
+							Ptr->B = Src.R;
 							Ptr->A = Src.A * 2;
 							Ptr++;
 						}
