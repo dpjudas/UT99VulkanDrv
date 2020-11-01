@@ -16,6 +16,12 @@ SceneBuffers::SceneBuffers(VulkanDevice *device, int width, int height) : width(
 
 	createImage(colorBuffer, colorBufferView, device, width, height, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
 	createImage(depthBuffer, depthBufferView, device, width, height, VK_FORMAT_D32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_IMAGE_ASPECT_DEPTH_BIT);
+
+	colorBuffer->SetDebugName("SceneBuffers.colorBuffer");
+	colorBufferView->SetDebugName("SceneBuffers.colorBufferView");
+
+	depthBuffer->SetDebugName("SceneBuffers.depthBuffer");
+	depthBufferView->SetDebugName("SceneBuffers.depthBufferView");
 }
 
 SceneBuffers::~SceneBuffers()

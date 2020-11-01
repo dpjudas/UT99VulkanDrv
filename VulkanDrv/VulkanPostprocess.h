@@ -51,7 +51,6 @@ public:
 	void renderBuffersReset();
 
 	void imageTransitionScene(bool undefinedSrcLayout);
-	//void setCanvasRenderTarget();
 
 	void blitSceneToPostprocess();
 	void blitCurrentToImage(VulkanImage *image, VkImageLayout *layout, VkImageLayout finallayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);

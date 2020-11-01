@@ -28,17 +28,6 @@ VulkanPostprocess::~VulkanPostprocess()
 {
 }
 
-/*
-void VulkanPostprocess::setCanvasRenderTarget()
-{
-	VulkanPPImageTransition imageTransition;
-	imageTransition.addImage(pipelineImage[mCurrentPipelineImage].get(), &pipelineLayout[mCurrentPipelineImage], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, false);
-	imageTransition.execute(renderer->GetDrawCommands());
-
-	renderer->canvasRenderState->setRenderTarget(pipelineView[mCurrentPipelineImage].get(), pipelineImage[mCurrentPipelineImage]->width, pipelineImage[mCurrentPipelineImage]->height, VK_SAMPLE_COUNT_1_BIT);
-}
-*/
-
 void VulkanPostprocess::blitSceneToPostprocess()
 {
 	auto buffers = renderer->SceneBuffers;
@@ -99,7 +88,7 @@ void VulkanPostprocess::imageTransitionScene(bool undefinedSrcLayout)
 	auto buffers = renderer->SceneBuffers;
 
 	VulkanPPImageTransition imageTransition;
-	imageTransition.addImage(buffers->colorBuffer.get(), &buffers->colorBufferLayout, VK_IMAGE_LAYOUT_GENERAL, undefinedSrcLayout);
+	imageTransition.addImage(buffers->colorBuffer.get(), &buffers->colorBufferLayout, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, undefinedSrcLayout);
 	imageTransition.execute(renderer->GetDrawCommands());
 }
 
