@@ -17,6 +17,7 @@ Add the following section to the file:
 	UsePrecache=False
 	UseVSync=True
 	FPSLimit=200
+	Multisample=16
 	DetailTextures=True
 	DescFlags=0
 	Description=
