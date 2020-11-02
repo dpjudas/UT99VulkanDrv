@@ -29,7 +29,7 @@ struct ScenePushConstants
 class SceneBuffers
 {
 public:
-	SceneBuffers(VulkanDevice *device, int width, int height);
+	SceneBuffers(VulkanDevice *device, int width, int height, int multisample);
 	~SceneBuffers();
 
 	VkSampleCountFlagBits sceneSamples = VK_SAMPLE_COUNT_1_BIT;
@@ -52,5 +52,6 @@ private:
 	SceneBuffers(const SceneBuffers &) = delete;
 	SceneBuffers &operator=(const SceneBuffers &) = delete;
 
-	void createImage(std::unique_ptr<VulkanImage> &image, std::unique_ptr<VulkanImageView> &view, VulkanDevice *device, int width, int height, VkFormat format, VkImageUsageFlags usage, VkImageAspectFlags aspect);
+	static void createImage(std::unique_ptr<VulkanImage> &image, std::unique_ptr<VulkanImageView> &view, VulkanDevice *device, int width, int height, VkSampleCountFlagBits samples, VkFormat format, VkImageUsageFlags usage, VkImageAspectFlags aspect);
+	static VkSampleCountFlagBits getBestSampleCount(VulkanDevice* device, int multisample);
 };

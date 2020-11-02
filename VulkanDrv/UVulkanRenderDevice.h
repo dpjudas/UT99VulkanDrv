@@ -53,6 +53,7 @@ private:
 	uint64_t fpsLimitTime = 0;
 	INT VkDeviceIndex = 0;
 	BITFIELD VkDebug;
+	INT Multisample = 16;
 
 	bool IsLocked = false;
 };

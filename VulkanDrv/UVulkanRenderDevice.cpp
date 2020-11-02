@@ -35,10 +35,12 @@ void UVulkanRenderDevice::StaticConstructor()
 	FPSLimit = 200;
 	VkDeviceIndex = 0;
 	VkDebug = 0;
+	Multisample = 16;
 
 	new(GetClass(), TEXT("UseVSync"), RF_Public) UBoolProperty(CPP_PROPERTY(UseVSync), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("UsePrecache"), RF_Public) UBoolProperty(CPP_PROPERTY(UsePrecache), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("FPSLimit"), RF_Public) UIntProperty(CPP_PROPERTY(FPSLimit), TEXT("Display"), CPF_Config);
+	new(GetClass(), TEXT("Multisample"), RF_Public) UIntProperty(CPP_PROPERTY(Multisample), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("VkDeviceIndex"), RF_Public) UIntProperty(CPP_PROPERTY(VkDeviceIndex), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("VkDebug"), RF_Public) UBoolProperty(CPP_PROPERTY(VkDebug), TEXT("Display"), CPF_Config);
 
@@ -250,7 +252,7 @@ void UVulkanRenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane Sc
 		{
 			delete renderer->SceneRenderPass; renderer->SceneRenderPass = nullptr;
 			delete renderer->SceneBuffers; renderer->SceneBuffers = nullptr;
-			renderer->SceneBuffers = new SceneBuffers(renderer->Device, Viewport->SizeX, Viewport->SizeY);
+			renderer->SceneBuffers = new SceneBuffers(renderer->Device, Viewport->SizeX, Viewport->SizeY, Multisample);
 			renderer->SceneRenderPass = new SceneRenderPass(renderer);
 		}
 

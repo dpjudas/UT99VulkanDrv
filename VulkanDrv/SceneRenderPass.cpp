@@ -142,6 +142,7 @@ void SceneRenderPass::createPipeline()
 			builder.addFragmentShader(fragmentShader.get());
 
 		builder.setSubpassColorAttachmentCount(1);
+		builder.setRasterizationSamples(renderer->SceneBuffers->sceneSamples);
 
 		pipeline[i] = builder.create(renderer->Device);
 	}
@@ -154,8 +155,8 @@ void SceneRenderPass::createRenderPass()
 	RenderPassBuilder builder;
 
 	for (int i = 0; i < numColorAttachments; i++)
-		builder.addAttachment(VK_FORMAT_R16G16B16A16_SFLOAT, VK_SAMPLE_COUNT_1_BIT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-	builder.addDepthStencilAttachment(VK_FORMAT_D32_SFLOAT, VK_SAMPLE_COUNT_1_BIT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+		builder.addAttachment(VK_FORMAT_R16G16B16A16_SFLOAT, renderer->SceneBuffers->sceneSamples, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+	builder.addDepthStencilAttachment(VK_FORMAT_D32_SFLOAT, renderer->SceneBuffers->sceneSamples, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
 	builder.addExternalSubpassDependency(
 		VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
