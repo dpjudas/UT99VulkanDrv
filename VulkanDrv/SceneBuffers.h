@@ -4,6 +4,8 @@
 #include "mat.h"
 #include "vec.h"
 
+class Renderer;
+
 struct SceneUniforms
 {
 	mat4 worldToView;
@@ -29,7 +31,7 @@ struct ScenePushConstants
 class SceneBuffers
 {
 public:
-	SceneBuffers(VulkanDevice *device, int width, int height, int multisample);
+	SceneBuffers(Renderer* renderer, int width, int height, int multisample);
 	~SceneBuffers();
 
 	VkSampleCountFlagBits sceneSamples = VK_SAMPLE_COUNT_1_BIT;
@@ -39,7 +41,7 @@ public:
 
 	std::unique_ptr<VulkanImage> colorBuffer;
 	std::unique_ptr<VulkanImageView> colorBufferView;
-	VkImageLayout colorBufferLayout = VK_IMAGE_LAYOUT_GENERAL;
+	VkImageLayout colorBufferLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
 	std::unique_ptr<VulkanImage> depthBuffer;
 	std::unique_ptr<VulkanImageView> depthBufferView;

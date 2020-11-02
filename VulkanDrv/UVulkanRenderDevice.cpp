@@ -252,7 +252,7 @@ void UVulkanRenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane Sc
 		{
 			delete renderer->SceneRenderPass; renderer->SceneRenderPass = nullptr;
 			delete renderer->SceneBuffers; renderer->SceneBuffers = nullptr;
-			renderer->SceneBuffers = new SceneBuffers(renderer->Device, Viewport->SizeX, Viewport->SizeY, Multisample);
+			renderer->SceneBuffers = new SceneBuffers(renderer, Viewport->SizeX, Viewport->SizeY, Multisample);
 			renderer->SceneRenderPass = new SceneRenderPass(renderer);
 		}
 
