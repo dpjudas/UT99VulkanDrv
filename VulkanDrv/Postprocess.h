@@ -294,143 +294,6 @@ public:
 
 /////////////////////////////////////////////////////////////////////////////
 
-struct ExtractUniforms
-{
-	vec2 scale;
-	vec2 offset;
-
-	static std::vector<UniformFieldDesc> desc()
-	{
-		return
-		{
-			{ "Scale", UniformType::Vec2, offsetof(ExtractUniforms, scale) },
-			{ "Offset", UniformType::Vec2, offsetof(ExtractUniforms, offset) }
-		};
-	}
-};
-
-struct BlurUniforms
-{
-	float sampleWeights[8];
-
-	static std::vector<UniformFieldDesc> desc()
-	{
-		return
-		{
-			{ "SampleWeights0", UniformType::Float, offsetof(BlurUniforms, sampleWeights[0]) },
-			{ "SampleWeights1", UniformType::Float, offsetof(BlurUniforms, sampleWeights[1]) },
-			{ "SampleWeights2", UniformType::Float, offsetof(BlurUniforms, sampleWeights[2]) },
-			{ "SampleWeights3", UniformType::Float, offsetof(BlurUniforms, sampleWeights[3]) },
-			{ "SampleWeights4", UniformType::Float, offsetof(BlurUniforms, sampleWeights[4]) },
-			{ "SampleWeights5", UniformType::Float, offsetof(BlurUniforms, sampleWeights[5]) },
-			{ "SampleWeights6", UniformType::Float, offsetof(BlurUniforms, sampleWeights[6]) },
-			{ "SampleWeights7", UniformType::Float, offsetof(BlurUniforms, sampleWeights[7]) },
-		};
-	}
-};
-
-enum { NumBloomLevels = 4 };
-
-class PPBlurLevel
-{
-public:
-	PPViewport viewport;
-	PPTexture vTexture;
-	PPTexture hTexture;
-};
-
-class PPBloom
-{
-public:
-	void renderBloom(PPRenderState *renderstate, int sceneWidth, int sceneHeight);
-	void renderBlur(PPRenderState *renderstate, int sceneWidth, int sceneHeight);
-
-private:
-	void blurStep(PPRenderState *renderstate, const BlurUniforms &blurUniforms, PPTexture &input, PPTexture &output, PPViewport viewport, bool vertical);
-	void updateTextures(int width, int height);
-
-	static float computeBlurGaussian(float n, float theta);
-	static void computeBlurSamples(int sampleCount, float blurAmount, float *sampleWeights);
-
-	PPBlurLevel levels[NumBloomLevels];
-	int lastWidth = 0;
-	int lastHeight = 0;
-
-	PPShader bloomCombine = { "shaders/BloomCombine.frag", "", {} };
-	PPShader bloomExtract = { "shaders/BloomExtract.frag", "", ExtractUniforms::desc() };
-	PPShader blurVertical = { "shaders/Blur.frag", "#define BLUR_VERTICAL\n", BlurUniforms::desc() };
-	PPShader blurHorizontal = { "shaders/Blur.frag", "#define BLUR_HORIZONTAL\n", BlurUniforms::desc() };
-};
-
-/////////////////////////////////////////////////////////////////////////////
-
-struct ExposureExtractUniforms
-{
-	vec2 scale;
-	vec2 offset;
-
-	static std::vector<UniformFieldDesc> desc()
-	{
-		return
-		{
-			{ "Scale", UniformType::Vec2, offsetof(ExposureExtractUniforms, scale) },
-			{ "Offset", UniformType::Vec2, offsetof(ExposureExtractUniforms, offset) }
-		};
-	}
-};
-
-struct ExposureCombineUniforms
-{
-	float exposureBase;
-	float exposureMin;
-	float exposureScale;
-	float exposureSpeed;
-
-	static std::vector<UniformFieldDesc> desc()
-	{
-		return
-		{
-			{ "ExposureBase", UniformType::Float, offsetof(ExposureCombineUniforms, exposureBase) },
-			{ "ExposureMin", UniformType::Float, offsetof(ExposureCombineUniforms, exposureMin) },
-			{ "ExposureScale", UniformType::Float, offsetof(ExposureCombineUniforms, exposureScale) },
-			{ "ExposureSpeed", UniformType::Float, offsetof(ExposureCombineUniforms, exposureSpeed) }
-		};
-	}
-};
-
-class PPExposureLevel
-{
-public:
-	PPViewport viewport;
-	PPTexture texture;
-};
-
-class PPCameraExposure
-{
-public:
-	void render(PPRenderState *renderstate, int sceneWidth, int sceneHeight);
-
-	PPTexture cameraTexture = { 1, 1, PixelFormat::r32f };
-
-private:
-	void updateTextures(int width, int height);
-
-	std::vector<PPExposureLevel> exposureLevels;
-	bool firstExposureFrame = true;
-
-	PPShader exposureExtract = { "shaders/ExposureExtract.frag", "", ExposureExtractUniforms::desc() };
-	PPShader exposureAverage = { "shaders/ExposureAverage.frag", "", {}, 400 };
-	PPShader exposureCombine = { "shaders/ExposureCombine.frag", "", ExposureCombineUniforms::desc() };
-};
-
-class PPTonemap
-{
-public:
-	void render(PPRenderState *renderstate, int sceneWidth, int sceneHeight);
-
-	PPShader tonemap = { "shaders/Tonemap.frag", "", {} };
-};
-
 struct PresentUniforms
 {
 	float invGamma;
@@ -453,6 +316,7 @@ public:
 	PPPresent();
 
 	PPTexture dither;
+	float gamma = 1.0f;
 
 	PPShader present = { "shaders/Present.frag", "", PresentUniforms::desc() };
 };
@@ -462,8 +326,5 @@ public:
 class Postprocess
 {
 public:
-	PPBloom bloom;
-	PPCameraExposure exposure;
-	PPTonemap tonemap;
 	PPPresent present;
 };

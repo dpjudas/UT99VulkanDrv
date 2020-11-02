@@ -289,16 +289,10 @@ void UVulkanRenderDevice::Unlock(UBOOL Blit)
 	int sceneWidth = renderer->SceneBuffers->colorBuffer->width;
 	int sceneHeight = renderer->SceneBuffers->colorBuffer->height;
 
-	auto pp = renderer->PostprocessModel;
-
-	VulkanPPRenderState renderstate(renderer);
-	//pp->exposure.render(&renderstate, sceneWidth, sceneHeight);
-	//pp->bloom.renderBloom(&renderstate, sceneWidth, sceneHeight);
-	pp->tonemap.render(&renderstate, sceneWidth, sceneHeight);
-	//pp->bloom.renderBlur(&renderstate, sceneWidth, sceneHeight);
-
 	if (Blit)
 		CheckFPSLimit();
+
+	renderer->PostprocessModel->present.gamma = 2.5f * Viewport->GetOuterUClient()->Brightness;
 
 	renderer->SubmitCommands(Blit ? true : false);
 	renderer->SceneVertexPos = 0;

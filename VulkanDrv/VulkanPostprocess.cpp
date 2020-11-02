@@ -133,12 +133,7 @@ void VulkanPostprocess::drawPresentTexture(const PPViewport &box)
 	VulkanPPRenderState renderstate(renderer);
 
 	PresentUniforms uniforms;
-	uniforms.invGamma = 1.0f / static_cast<float>(r_gamma);
-
-	if (renderer->SwapChain->swapChainFormat.colorSpace == VK_COLOR_SPACE_HDR10_ST2084_EXT)
-	{
-		uniforms.invGamma *= 2.2f;
-	}
+	uniforms.invGamma = 1.0f / renderer->PostprocessModel->present.gamma;
 
 	renderstate.clear();
 	renderstate.shader = &renderer->PostprocessModel->present.present;
