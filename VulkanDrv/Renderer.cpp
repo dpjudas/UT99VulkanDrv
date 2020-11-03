@@ -330,11 +330,11 @@ void Renderer::ClearTextureCache()
 	TextureCache.clear();
 }
 
-void Renderer::CopyScreenToBuffer(int w, int h, void* data)
+void Renderer::CopyScreenToBuffer(int w, int h, void* data, float gamma)
 {
-	// Convert from rgba16f to rgba8 using the GPU:
+	// Convert from rgba16f to bgra8 using the GPU:
 	ImageBuilder imgbuilder;
-	imgbuilder.setFormat(VK_FORMAT_R8G8B8A8_UNORM);
+	imgbuilder.setFormat(VK_FORMAT_B8G8R8A8_UNORM);
 	imgbuilder.setUsage(VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
 	imgbuilder.setSize(w, h);
 	auto image = imgbuilder.create(Device);
@@ -360,6 +360,26 @@ void Renderer::CopyScreenToBuffer(int w, int h, void* data)
 	SubmitCommands(false);
 
 	uint8_t* pixels = (uint8_t*)staging->Map(0, w * h * 4);
-	memcpy(data, pixels, w * h * 4);
+	if (gamma != 1.0f)
+	{
+		float invGamma = 1.0f / gamma;
+
+		uint8_t gammatable[256];
+		for (int i = 0; i < 256; i++)
+			gammatable[i] = (int)clamp(std::round(std::pow(i / 255.0f, invGamma) * 255.0f), 0.0f, 255.0f);
+
+		uint8_t* dest = (uint8_t*)data;
+		for (int i = 0; i < w * h * 4; i += 4)
+		{
+			dest[i] = gammatable[pixels[i]];
+			dest[i + 1] = gammatable[pixels[i + 1]];
+			dest[i + 2] = gammatable[pixels[i + 2]];
+			dest[i + 3] = pixels[i + 3];
+		}
+	}
+	else
+	{
+		memcpy(data, pixels, w * h * 4);
+	}
 	staging->Unmap();
 }

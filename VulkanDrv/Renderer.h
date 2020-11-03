@@ -23,7 +23,7 @@ public:
 	VulkanCommandBuffer* GetDrawCommands();
 	void DeleteFrameObjects();
 
-	void CopyScreenToBuffer(int w, int h, void* data);
+	void CopyScreenToBuffer(int w, int h, void* data, float gamma);
 
 	static std::unique_ptr<VulkanShader> CreateVertexShader(VulkanDevice* device, const std::string& name, const std::string& defines = {});
 	static std::unique_ptr<VulkanShader> CreateFragmentShader(VulkanDevice* device, const std::string& name, const std::string& defines = {});

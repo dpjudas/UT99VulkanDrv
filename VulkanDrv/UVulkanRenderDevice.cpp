@@ -642,7 +642,7 @@ void UVulkanRenderDevice::GetStats(TCHAR* Result)
 void UVulkanRenderDevice::ReadPixels(FColor* Pixels)
 {
 	guard(UVulkanRenderDevice::GetStats);
-	renderer->CopyScreenToBuffer(Viewport->SizeX, Viewport->SizeY, Pixels);
+	renderer->CopyScreenToBuffer(Viewport->SizeX, Viewport->SizeY, Pixels, 2.5f * Viewport->GetOuterUClient()->Brightness);
 	unguard;
 }
 
