@@ -64,21 +64,23 @@ Renderer::~Renderer()
 	delete Device; Device = nullptr;
 }
 
-void Renderer::SubmitCommands(bool present)
+void Renderer::SubmitCommands(bool present, int presentWidth, int presentHeight)
 {
 	if (present)
 	{
-		RECT clientbox = {};
-		GetClientRect(WindowHandle, &clientbox);
+		//RECT clientbox = {};
+		//GetClientRect(WindowHandle, &clientbox);
+		//int presentWidth = clientbox.right;
+		//int presentHeight = clientbox.bottom;
 
-		PresentImageIndex = SwapChain->acquireImage(clientbox.right, clientbox.bottom, ImageAvailableSemaphore);
+		PresentImageIndex = SwapChain->acquireImage(presentWidth, presentHeight, ImageAvailableSemaphore);
 		if (PresentImageIndex != 0xffffffff)
 		{
 			PPViewport box;
 			box.x = 0;
 			box.y = 0;
-			box.width = clientbox.right;
-			box.height = clientbox.bottom;
+			box.width = presentWidth;
+			box.height = presentHeight;
 			Postprocess->drawPresentTexture(box);
 		}
 	}
@@ -357,7 +359,7 @@ void Renderer::CopyScreenToBuffer(int w, int h, void* data, float gamma)
 	GetDrawCommands()->copyImageToBuffer(image->image, imageLayout, staging->buffer, 1, &region);
 
 	// Submit command buffers and wait for device to finish the work
-	SubmitCommands(false);
+	SubmitCommands(false, 0, 0);
 
 	uint8_t* pixels = (uint8_t*)staging->Map(0, w * h * 4);
 	if (gamma != 1.0f)

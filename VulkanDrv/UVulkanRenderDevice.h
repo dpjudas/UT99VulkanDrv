@@ -38,7 +38,7 @@ public:
 private:
 	void CheckFPSLimit();
 
-	UBOOL UsePrecache = 0;
+	UBOOL UsePrecache;
 	FPlane FlashScale;
 	FPlane FlashFog;
 	FSceneNode* CurrentFrame = nullptr;
@@ -51,9 +51,9 @@ private:
 	BITFIELD UseVSync;
 	INT FPSLimit;
 	uint64_t fpsLimitTime = 0;
-	INT VkDeviceIndex = 0;
+	INT VkDeviceIndex;
 	BITFIELD VkDebug;
-	INT Multisample = 16;
+	INT Multisample;
 
 	bool IsLocked = false;
 };

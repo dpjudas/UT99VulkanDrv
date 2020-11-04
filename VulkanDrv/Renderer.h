@@ -18,7 +18,7 @@ public:
 	Renderer(HWND windowHandle, bool vsync, int vk_device, bool vk_debug, std::function<void(const char* typestr, const std::string& msg)> printLogCallback);
 	~Renderer();
 
-	void SubmitCommands(bool present);
+	void SubmitCommands(bool present, int presentWidth, int presentHeight);
 	VulkanCommandBuffer* GetTransferCommands();
 	VulkanCommandBuffer* GetDrawCommands();
 	void DeleteFrameObjects();

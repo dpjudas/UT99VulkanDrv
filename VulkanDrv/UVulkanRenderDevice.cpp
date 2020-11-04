@@ -23,19 +23,21 @@ void UVulkanRenderDevice::StaticConstructor()
 	FullscreenOnly = 0;
 	SupportsFogMaps = 1;
 	SupportsDistanceFog = 0;
-	VolumetricLighting = 1;
-	ShinySurfaces = 1;
-	Coronas = 1;
-	HighDetailActors = 1;
 	SupportsTC = 1;
 	SupportsLazyTextures = 0;
 	PrefersDeferredLoad = 0;
-	DetailTextures = 1;
 	UseVSync = 1;
-	FPSLimit = 200;
+	FPSLimit = 400;
 	VkDeviceIndex = 0;
 	VkDebug = 0;
-	Multisample = 16;
+	Multisample = 0;
+	UsePrecache = 0;
+
+	// VolumetricLighting = 1;
+	// ShinySurfaces = 1;
+	// Coronas = 1;
+	// HighDetailActors = 1;
+	// DetailTextures = 1;
 
 	new(GetClass(), TEXT("UseVSync"), RF_Public) UBoolProperty(CPP_PROPERTY(UseVSync), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("UsePrecache"), RF_Public) UBoolProperty(CPP_PROPERTY(UsePrecache), TEXT("Display"), CPF_Config);
@@ -144,7 +146,7 @@ void UVulkanRenderDevice::Flush(UBOOL AllowPrecache)
 
 	if (IsLocked)
 	{
-		renderer->SubmitCommands(false);
+		renderer->SubmitCommands(false, 0, 0);
 		renderer->ClearTextureCache();
 
 		auto cmdbuffer = renderer->GetDrawCommands();
@@ -294,7 +296,7 @@ void UVulkanRenderDevice::Unlock(UBOOL Blit)
 
 	renderer->PostprocessModel->present.gamma = 2.5f * Viewport->GetOuterUClient()->Brightness;
 
-	renderer->SubmitCommands(Blit ? true : false);
+	renderer->SubmitCommands(Blit ? true : false, Viewport->SizeX, Viewport->SizeY);
 	renderer->SceneVertexPos = 0;
 
 	IsLocked = false;
