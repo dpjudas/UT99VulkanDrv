@@ -77,9 +77,9 @@ void VulkanTexture::Update(Renderer* renderer, const FTextureInfo& Info, DWORD P
 						for (uint32_t x = 0; x < mipwidth; x++)
 						{
 							const FColor& Src = line[x];
-							Ptr->R = Src.B;
-							Ptr->G = Src.G;
-							Ptr->B = Src.R;
+							Ptr->R = Src.B * 2;
+							Ptr->G = Src.G * 2;
+							Ptr->B = Src.R * 2;
 							Ptr->A = Src.A * 2;
 							Ptr++;
 						}
