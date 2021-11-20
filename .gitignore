@@ -1,3 +1,4 @@
 /.vs
 /Build
 /VulkanDrv/*.user
+/HRTFAudio/*.user
