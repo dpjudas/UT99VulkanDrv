@@ -7,6 +7,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "VulkanDrv", "VulkanDrv\Vulk
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ShaderCompiler", "ShaderCompiler\ShaderCompiler.vcxproj", "{4DEAE017-3206-4351-BB75-4947D0314829}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "HRTFAudio", "HRTFAudio\HRTFAudio.vcxproj", "{CCFAA700-BBB0-40A3-901B-7C69FAAC9A79}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x86 = Debug|x86
@@ -20,6 +22,10 @@ Global
 		{4DEAE017-3206-4351-BB75-4947D0314829}.Debug|x86.ActiveCfg = Debug|Win32
 		{4DEAE017-3206-4351-BB75-4947D0314829}.Release|x86.ActiveCfg = Release|Win32
 		{4DEAE017-3206-4351-BB75-4947D0314829}.Release|x86.Build.0 = Release|Win32
+		{CCFAA700-BBB0-40A3-901B-7C69FAAC9A79}.Debug|x86.ActiveCfg = Debug|Win32
+		{CCFAA700-BBB0-40A3-901B-7C69FAAC9A79}.Debug|x86.Build.0 = Debug|Win32
+		{CCFAA700-BBB0-40A3-901B-7C69FAAC9A79}.Release|x86.ActiveCfg = Release|Win32
+		{CCFAA700-BBB0-40A3-901B-7C69FAAC9A79}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

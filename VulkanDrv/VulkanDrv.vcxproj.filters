@@ -30,8 +30,6 @@
     <ClCompile Include="VulkanBuilders.cpp" />
     <ClCompile Include="VulkanDevice.cpp" />
     <ClCompile Include="VulkanSwapChain.cpp" />
-    <ClCompile Include="..\Thirdparty\volk\volk.c" />
-    <ClCompile Include="..\Thirdparty\vk_mem_alloc\vk_mem_alloc.cpp" />
     <ClCompile Include="Precomp.cpp" />
     <ClCompile Include="VulkanPostprocess.cpp" />
     <ClCompile Include="SceneBuffers.cpp" />
@@ -44,8 +42,19 @@
     <ClCompile Include="SceneSamplers.cpp" />
     <ClCompile Include="VulkanTexture.cpp" />
     <ClCompile Include="Renderer.cpp" />
+    <ClCompile Include="..\Thirdparty\volk\volk.c">
+      <Filter>Thirdparty</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Thirdparty\vk_mem_alloc\vk_mem_alloc.cpp">
+      <Filter>Thirdparty</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="..\VulkanDrv.int" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Thirdparty">
+      <UniqueIdentifier>{25b23aa5-e71b-4fc2-869e-d9ca815c5f8a}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
 </Project>

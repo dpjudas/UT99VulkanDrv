@@ -1,0 +1,6 @@
+[Public]
+Object=(Name=HRTFAudio.HRTFAudioSubsystem,Class=Class,MetaClass=Engine.AudioSubsystem)
+Preferences=(Caption="Audio",Parent="Advanced Options",Class=HRTFAudio.HRTFAudioSubsystem,Immediate=True)
+
+[HRTFAudioSubsystem]
+ClassCaption="HRTF Audio"
