@@ -22,6 +22,7 @@ public:
 	{
 		mat4 v;
 		memset(v.m, 0, sizeof(float) * 16);
+		return v;
 	}
 
 	static mat4 identity()
@@ -45,6 +46,7 @@ public:
 
 	virtual ~AudioMixer() = default;
 	virtual AudioSound* AddSound(std::unique_ptr<AudioSource> source) = 0;
+	virtual void RemoveSound(AudioSound* sound) = 0;
 	virtual float GetSoundDuration(AudioSound* sound) = 0;
 	virtual void PlaySound(void* owner, int slot, AudioSound* sound, const vec3& location, float volume, float radius, float pitch) = 0;
 	virtual void PlayMusic(std::unique_ptr<AudioSource> source) = 0;

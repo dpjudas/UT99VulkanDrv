@@ -103,6 +103,10 @@ public:
 		return sounds.back().get();
 	}
 
+	void RemoveSound(AudioSound* sound) override
+	{
+	}
+
 	float GetSoundDuration(AudioSound* sound) override
 	{
 		return sound->duration;
