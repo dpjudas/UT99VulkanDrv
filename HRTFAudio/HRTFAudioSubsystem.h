@@ -4,13 +4,19 @@
 
 struct PlayingSound
 {
+	PlayingSound() = default;
+	PlayingSound(AActor* Actor, INT Id, USound* Sound, FVector Location, float Volume, float Radius, float Pitch, float Priority) : Actor(Actor), Id(Id), Sound(Sound), Location(Location), Volume(Volume), Radius(Radius), Pitch(Pitch), Priority(Priority) { }
+
 	INT Id = 0;
 	INT Channel = 0;
+	float Priority = 0.0f;
 	AActor* Actor = nullptr;
 	USound* Sound = nullptr;
+	FVector Location = { 0.0f, 0.0f, 0.0f };
 	float Volume = 1.0f;
 	float Radius = 1.0f;
 	float Pitch = 1.0f;
+	float CurrentVolume = 0.0f;
 };
 
 class DLL_EXPORT_CLASS UHRTFAudioSubsystem : public UAudioSubsystem
@@ -58,6 +64,10 @@ public:
 	}
 
 private:
+	void StartAmbience();
+	void UpdateAmbience();
+	void UpdateSounds(FCoords& Listener);
+	void UpdateMusic();
 	void StopSound(size_t index);
 
 	UViewport* Viewport = nullptr;
@@ -80,4 +90,6 @@ private:
 	std::vector<PlayingSound> PlayingSounds;
 	UMusic* CurrentSong = nullptr;
 	int CurrentSection = 255;
+	int FreeSlot = 0x07ffffff;
+	bool AudioStats = false;
 };

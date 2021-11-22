@@ -72,7 +72,16 @@ void UHRTFAudioSubsystem::PostEditChange()
 UBOOL UHRTFAudioSubsystem::Exec(const TCHAR* Cmd, FOutputDevice& Ar)
 {
 	guard(UHRTFAudioSubsystem::Exec);
-	return false;
+	const TCHAR* Str = Cmd;
+	if (ParseCommand(&Str, TEXT("ASTAT")))
+	{
+		if (ParseCommand(&Str, TEXT("Audio")))
+		{
+			AudioStats = !AudioStats;
+			return 1;
+		}
+	}
+	return 0;
 	unguard;
 }
 
@@ -117,13 +126,28 @@ void UHRTFAudioSubsystem::Update(FPointRegion Region, FCoords& Listener)
 {
 	guard(UHRTFAudioSubsystem::Update);
 
-	AActor* ViewActor = Viewport->Actor->ViewTarget ? Viewport->Actor->ViewTarget : Viewport->Actor;
+	StartAmbience();
+	UpdateAmbience();
+	UpdateSounds(Listener);
+	UpdateMusic();
 
-	// See if any new ambient sounds need to be started
+	Mixer->SetMusicVolume(MusicVolume / 255.0f);
+	Mixer->SetSoundVolume(SoundVolume / 255.0f);
+
+	guard(UpdateMixer);
+	Mixer->Update();
+	unguard;
+
+	unguard;
+}
+
+void UHRTFAudioSubsystem::StartAmbience()
+{
+	guard(StartAmbience);
 	UBOOL Realtime = Viewport->IsRealtime() && Viewport->Actor->Level->Pauser == TEXT("");
 	if (Realtime)
 	{
-		guard(StartAmbience);
+		AActor* ViewActor = Viewport->Actor->ViewTarget ? Viewport->Actor->ViewTarget : Viewport->Actor;
 		for (INT i = 0; i < Viewport->Actor->GetLevel()->Actors.Num(); i++)
 		{
 			AActor* Actor = Viewport->Actor->GetLevel()->Actors(i);
@@ -140,10 +164,15 @@ void UHRTFAudioSubsystem::Update(FPointRegion Region, FCoords& Listener)
 				}
 			}
 		}
-		unguard;
 	}
+	unguard;
+}
 
+void UHRTFAudioSubsystem::UpdateAmbience()
+{
 	guard(UpdateAmbience);
+	AActor* ViewActor = Viewport->Actor->ViewTarget ? Viewport->Actor->ViewTarget : Viewport->Actor;
+	UBOOL Realtime = Viewport->IsRealtime() && Viewport->Actor->Level->Pauser == TEXT("");
 	for (size_t i = 0; i < PlayingSounds.size(); i++)
 	{
 		PlayingSound& Playing = PlayingSounds[i];
@@ -166,16 +195,19 @@ void UHRTFAudioSubsystem::Update(FPointRegion Region, FCoords& Listener)
 		}
 	}
 	unguard;
+}
 
-	// Update all active sounds
+void UHRTFAudioSubsystem::UpdateSounds(FCoords& Listener)
+{
 	guard(UpdateSounds);
+	AActor* ViewActor = Viewport->Actor->ViewTarget ? Viewport->Actor->ViewTarget : Viewport->Actor;
 	for (size_t i = 0; i < PlayingSounds.size(); i++)
 	{
 		PlayingSound& Playing = PlayingSounds[i];
 		if (Playing.Actor)
 			check(Playing.Actor->IsValid());
-#if 0
-		if (PlayingSounds[i].Id == 0)
+
+		if (Playing.Id == 0)
 		{
 			// Sound is not playing.
 			continue;
@@ -195,8 +227,8 @@ void UHRTFAudioSubsystem::Update(FPointRegion Region, FCoords& Listener)
 			Playing.Priority = SoundPriority(Viewport, Playing.Location, Playing.Volume, Playing.Radius);
 
 			// Compute the spatialization.
-			FVector Location = Playing.Location.TransformPointBy(Coords);
-			FLOAT PanAngle = appAtan2(Location.X, Abs(Location.Z));
+			FVector Location = Playing.Location.TransformPointBy(Listener);
+			float PanAngle = appAtan2(Location.X, Abs(Location.Z));
 
 			// Despatialize sounds when you get real close to them.
 			FLOAT CenterDist = 0.1 * Playing.Radius;
@@ -205,49 +237,39 @@ void UHRTFAudioSubsystem::Update(FPointRegion Region, FCoords& Listener)
 				PanAngle *= Size / CenterDist;
 
 			// Compute panning and volume.
-			INT SoundPan = Clamp((INT)(AUDIO_MAXPAN / 2 + PanAngle * AUDIO_MAXPAN * 7 / 8 / PI), 0, AUDIO_MAXPAN);
-			FLOAT Attenuation = Clamp(1.0 - Size / Playing.Radius, 0.0, 1.0);
-			INT SoundVolume = Clamp((INT)(AUDIO_MAXVOLUME * Playing.Volume * Attenuation * EFFECT_FACTOR), 0, AUDIO_MAXVOLUME);
+			float SoundPan = Clamp(PanAngle * 7 / 8 / PI, -1.0f, 1.0f);
+			float Attenuation = Clamp(1.0f - Size / Playing.Radius, 0.0f, 1.0f);
+			float SoundVolume = Clamp(Playing.Volume * Attenuation, 0.0f, 1.0f);
 			if (ReverseStereo)
-				SoundPan = AUDIO_MAXPAN - SoundPan;
-			if (Location.Z < 0.0 && UseSurround)
-				SoundPan = AUDIO_MIDPAN | AUDIO_SURPAN;
+				SoundPan = -SoundPan;
 
 			// Compute doppler shifting (doesn't account for player's velocity).
-			FLOAT Doppler = 1.0;
+			FLOAT Doppler = 1.0f;
 			if (Playing.Actor)
 			{
-				FLOAT V = (Playing.Actor->Velocity/*-ViewActor->Velocity*/) | (Playing.Actor->Location - ViewActor->Location).SafeNormal();
-				Doppler = Clamp(1.0 - V / DopplerSpeed, 0.5, 2.0);
+				FLOAT V = (Playing.Actor->Velocity) | (Playing.Actor->Location - ViewActor->Location).SafeNormal();
+				Doppler = Clamp(1.0f - V / DopplerSpeed, 0.5f, 2.0f);
 			}
 
 			// Update the sound.
-			Sample* Sample = GetSound(Playing.Sound);
-			FVector Z(0, 0, 0);
-			FVector L(Location.X / 400.0, Location.Y / 400.0, Location.Z / 400.0);
+			AudioSound* Sound = GetSound(Playing.Sound);
 
+			Playing.CurrentVolume = SoundVolume;
 			if (Playing.Channel)
 			{
-				// Update an existing sound.
-				guard(UpdateSample);
-				Mixer->UpdateSound(Playing.Channel, (INT)(Sample->SamplesPerSec * Playing.Pitch * Doppler), SoundVolume, SoundPan );
-				Playing.Channel->BasePanning = SoundPan;
-				unguard;
+				Mixer->UpdateSound(Playing.Channel, Sound, SoundVolume * 0.25f, SoundPan, Playing.Pitch * Doppler);
 			}
 			else
 			{
-				// Start this new sound.
-				guard(StartSample);
-				if (!Playing.Channel)
-					Playing.Channel = Mixer->PlaySound(i + 1, Sample, (INT)(Sample->SamplesPerSec * Playing.Pitch * Doppler), SoundVolume, SoundPan);
-				check(Playing.Channel);
-				unguard;
+				Playing.Channel = Mixer->PlaySound(i + 1, Sound, SoundVolume * 0.25f, SoundPan, Playing.Pitch * Doppler);
 			}
 		}
-#endif
 	}
 	unguard;
+}
 
+void UHRTFAudioSubsystem::UpdateMusic()
+{
 	guard(UpdateMusic);
 	if (Viewport->Actor && Viewport->Actor->Transition != MTRAN_None)
 	{
@@ -289,12 +311,6 @@ void UHRTFAudioSubsystem::Update(FPointRegion Region, FCoords& Listener)
 		Viewport->Actor->Transition = MTRAN_None;
 	}
 	unguard;
-
-	guard(UpdateMixer);
-	Mixer->Update();
-	unguard;
-
-	unguard;
 }
 
 UBOOL UHRTFAudioSubsystem::GetLowQualitySetting()
@@ -315,9 +331,34 @@ void UHRTFAudioSubsystem::PostRender(FSceneNode* Frame)
 	guard(UHRTFAudioSubsystem::PostRender);
 	Frame->Viewport->Canvas->Color = FColor(255, 255, 255);
 
-	//Frame->Viewport->Canvas->CurX = 0;
-	//Frame->Viewport->Canvas->CurY = 64;
-	//Frame->Viewport->Canvas->WrappedPrintf(Frame->Viewport->Canvas->SmallFont, 0, TEXT("HRTFAudioSubsystem Statistics"));
+	if (AudioStats)
+	{
+		Frame->Viewport->Canvas->CurX = 0;
+		Frame->Viewport->Canvas->CurY = 16;
+		Frame->Viewport->Canvas->WrappedPrintf(Frame->Viewport->Canvas->SmallFont, 0, TEXT("HRTFAudioSubsystem Statistics"));
+		for (INT i = 0; i < Channels; i++)
+		{
+			if (PlayingSounds[i].Channel)
+			{
+				INT Factor = 8;
+
+				Frame->Viewport->Canvas->CurX = 10;
+				Frame->Viewport->Canvas->CurY = 24 + Factor * i;
+				Frame->Viewport->Canvas->WrappedPrintf(Frame->Viewport->Canvas->SmallFont, 0, TEXT("Channel %2i: Vol: %05.2f %s"), i, PlayingSounds[i].CurrentVolume, PlayingSounds[i].Sound->GetFullName());
+			}
+			else
+			{
+				INT Factor = 8;
+
+				Frame->Viewport->Canvas->CurX = 10;
+				Frame->Viewport->Canvas->CurY = 24 + Factor * i;
+				if (i >= 10)
+					Frame->Viewport->Canvas->WrappedPrintf(Frame->Viewport->Canvas->SmallFont, 0, TEXT("Channel %i:  None"), i);
+				else
+					Frame->Viewport->Canvas->WrappedPrintf(Frame->Viewport->Canvas->SmallFont, 0, TEXT("Channel %i: None"), i);
+			}
+		}
+	}
 
 	unguard;
 }
@@ -334,16 +375,54 @@ void UHRTFAudioSubsystem::RegisterSound(USound* Sound)
 
 	if (!Sound->Handle)
 	{
-		// Set the handle to avoid reentrance.
-		Sound->Handle = (void*)-1;
-
 		Sound->Data.Load();
 		debugf(NAME_DevSound, TEXT("Register sound: %s (%i)"), Sound->GetPathName(), Sound->Data.Num());
 
 		try
 		{
 			uint8_t* ptr = (uint8_t*)Sound->Data.GetData();
-			Sound->Handle = Mixer->AddSound(AudioSource::CreateWav(std::vector<uint8_t>(ptr, ptr + Sound->Data.Num())));
+			std::vector<uint8_t> data(ptr, ptr + Sound->Data.Num());
+
+			// Search for smpl chunk in wav file to find its loop flags, if any:
+			// (yes, this code is very ugly but obviously I don't care anymore)
+			AudioLoopInfo loopinfo;
+			if (data.size() > 44 && memcmp(data.data(), "RIFF", 4) == 0 && memcmp(data.data() + 8, "WAVE", 4) == 0)
+			{
+				size_t pos = 12;
+				while (pos + 8 < data.size())
+				{
+					if (memcmp(data.data() + pos, "smpl", 4) == 0 && pos + 0x2c <= data.size())
+					{
+						uint32_t chunksize = *(uint32_t*)(data.data() + pos + 4);
+						uint32_t endpos = pos + 8 + chunksize;
+
+						uint32_t sampleLoops = *(uint32_t*)(data.data() + pos + 0x24);
+						pos += 0x2c;
+
+						if (sampleLoops != 0 && pos + 0x18 <= data.size())
+						{
+							uint32_t type = *(uint32_t*)(data.data() + pos + 0x04);
+							uint32_t start = *(uint32_t*)(data.data() + pos + 0x08);
+							uint32_t end = *(uint32_t*)(data.data() + pos + 0x0c);
+
+							loopinfo.Looped = true;
+							// if (type & 1)
+							//	loopinfo.BidiLoop = true;
+							loopinfo.LoopStart = start;
+							loopinfo.LoopEnd = end;
+						}
+
+						pos = endpos;
+					}
+					else
+					{
+						uint32_t chunksize = *(uint32_t*)(data.data() + pos + 4);
+						pos += 8 + chunksize;
+					}
+				}
+			}
+
+			Sound->Handle = Mixer->AddSound(AudioSource::CreateWav(std::move(data)), loopinfo);
 		}
 		catch (const std::exception& e)
 		{
@@ -388,6 +467,47 @@ void UHRTFAudioSubsystem::UnregisterMusic(UMusic* Music)
 UBOOL UHRTFAudioSubsystem::PlaySound(AActor* Actor, INT Id, USound* Sound, FVector Location, FLOAT Volume, FLOAT Radius, FLOAT Pitch)
 {
 	guard(UHRTFAudioSubsystem::PlaySound);
+
+	if (!Viewport || !Sound)
+		return false;
+
+	// Allocate a new slot if requested.
+	if ((Id & 14) == 2 * SLOT_None)
+		Id = 16 * --FreeSlot;
+
+	FLOAT Priority = SoundPriority(Viewport, Location, Volume, Radius);
+
+	// If already playing, stop it.
+	size_t Index = PlayingSounds.size();
+	FLOAT BestPriority = Priority;
+	for (size_t i = 0; i < PlayingSounds.size(); i++)
+	{
+		PlayingSound& Playing = PlayingSounds[i];
+		if ((Playing.Id & ~1) == (Id & ~1))
+		{
+			// Skip if not interruptable.
+			if (Id & 1)
+				return 0;
+
+			// Stop the sound.
+			Index = i;
+			break;
+		}
+		else if (Playing.Priority <= BestPriority)
+		{
+			Index = i;
+			BestPriority = Playing.Priority;
+		}
+	}
+
+	// If no sound, or its priority is overruled, stop it.
+	if (Index == PlayingSounds.size())
+		return 0;
+
+	// Put the sound on the play-list.
+	StopSound(Index);
+	PlayingSounds[Index] = PlayingSound(Actor, Id, Sound, Location, Volume, Radius, Pitch, Priority);
+
 	return true;
 	unguard;
 }
@@ -396,12 +516,12 @@ void UHRTFAudioSubsystem::StopSound(size_t index)
 {
 	guard(UHRTFAudioSubsystem::StopSound);
 
-	PlayingSound& sound = PlayingSounds[index];
+	PlayingSound& Playing = PlayingSounds[index];
 
-	if (sound.Channel)
+	if (Playing.Channel)
 	{
 		guard(StopSample);
-		//Mixer->StopSound(Playing.Channel);
+		Mixer->StopSound(Playing.Channel);
 		unguard;
 	}
 	PlayingSounds[index] = {};
