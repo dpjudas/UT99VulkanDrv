@@ -41,7 +41,7 @@ public:
 			if (oldSampleCount > 0)
 			{
 				uint64_t newSampleCount = samples.size();
-				loopinfo.LoopStart = std::max(std::min(loopinfo.LoopStart * newSampleCount / oldSampleCount, newSampleCount), (uint64_t)0);
+				loopinfo.LoopStart = std::max(std::min(loopinfo.LoopStart * newSampleCount / oldSampleCount, newSampleCount - 1), (uint64_t)0);
 				loopinfo.LoopEnd = std::max(std::min(loopinfo.LoopEnd * newSampleCount / oldSampleCount, newSampleCount), (uint64_t)0);
 			}
 			else
@@ -363,7 +363,7 @@ void AudioMixerSource::MixSounds(float* output, size_t samples)
 
 				int pos = (int)p0;
 				int pos2 = (int)p1;
-				float t = (float)(srcpos - pos);
+				float t = (float)(p0 - pos);
 
 				pos = std::min(pos, srcmax);
 				pos2 = std::min(pos2, srcmax);
@@ -374,9 +374,10 @@ void AudioMixerSource::MixSounds(float* output, size_t samples)
 
 				srcpos += srcpitch;
 				while (srcpos >= loopEnd)
-					sound.pos -= loopLen;
+					srcpos -= loopLen;
 			}
 
+			sound.pos = srcpos;
 			++it;
 		}
 		else

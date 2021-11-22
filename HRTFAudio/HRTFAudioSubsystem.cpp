@@ -154,14 +154,17 @@ void UHRTFAudioSubsystem::StartAmbience()
 			if (Actor && Actor->AmbientSound && FDistSquared(ViewActor->Location, Actor->Location) <= Square(Actor->WorldSoundRadius()))
 			{
 				INT Id = Actor->GetIndex() * 16 + SLOT_Ambient * 2;
+				bool foundSound = false;
 				for (size_t j = 0; j < PlayingSounds.size(); j++)
 				{
 					if (PlayingSounds[j].Id == Id)
+					{
+						foundSound = true;
 						break;
-
-					if (j == Channels)
-						PlaySound(Actor, Id, Actor->AmbientSound, Actor->Location, AmbientFactor * Actor->SoundVolume / 255.0f, Actor->WorldSoundRadius(), Actor->SoundPitch / 64.0f);
+					}
 				}
+				if (!foundSound)
+					PlaySound(Actor, Id, Actor->AmbientSound, Actor->Location, AmbientFactor * Actor->SoundVolume / 255.0f, Actor->WorldSoundRadius(), Actor->SoundPitch / 64.0f);
 			}
 		}
 	}
@@ -382,6 +385,12 @@ void UHRTFAudioSubsystem::RegisterSound(USound* Sound)
 		{
 			uint8_t* ptr = (uint8_t*)Sound->Data.GetData();
 			std::vector<uint8_t> data(ptr, ptr + Sound->Data.Num());
+
+#if 0
+			FILE* file = _wfopen((std::wstring(L"c:\\development\\") + Sound->GetFullName() + L".wav").c_str(), L"wb");
+			fwrite(data.data() + pos, data.size() - pos, 1, file);
+			fclose(file);
+#endif
 
 			// Search for smpl chunk in wav file to find its loop flags, if any:
 			// (yes, this code is very ugly but obviously I don't care anymore)
