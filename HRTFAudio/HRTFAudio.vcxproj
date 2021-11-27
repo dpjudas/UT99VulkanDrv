@@ -101,8 +101,10 @@
   <ItemGroup>
     <ClInclude Include="..\Thirdparty\dr_flac.h" />
     <ClInclude Include="..\Thirdparty\dr_wav.h" />
+    <ClInclude Include="..\Thirdparty\kissfft\kiss_fft.h" />
     <ClInclude Include="..\Thirdparty\minimp3.h" />
     <ClInclude Include="..\Thirdparty\minimp3_ex.h" />
+    <ClInclude Include="..\Thirdparty\miniz\miniz.h" />
     <ClInclude Include="..\Thirdparty\resample\CDSPBlockConvolver.h" />
     <ClInclude Include="..\Thirdparty\resample\CDSPFIRFilter.h" />
     <ClInclude Include="..\Thirdparty\resample\CDSPFracInterpolator.h" />
@@ -635,6 +637,14 @@
       <WarningLevel Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">TurnOffAllWarnings</WarningLevel>
       <WarningLevel Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">TurnOffAllWarnings</WarningLevel>
     </ClCompile>
+    <ClCompile Include="..\Thirdparty\kissfft\kiss_fft.c">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\Thirdparty\miniz\miniz.c">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="..\Thirdparty\resample\pffft.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
@@ -662,6 +672,7 @@
     <None Include="..\Thirdparty\dumb\src\helpers\resamp2.inc" />
     <None Include="..\Thirdparty\dumb\src\helpers\resamp3.inc" />
     <None Include="..\Thirdparty\dumb\src\helpers\resample.inc" />
+    <None Include="..\Thirdparty\miniz\LICENSE" />
     <None Include="..\Thirdparty\resample\LICENSE" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

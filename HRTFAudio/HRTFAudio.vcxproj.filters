@@ -264,6 +264,16 @@
     <ClCompile Include="..\Thirdparty\resample\r8bbase.cpp">
       <Filter>Thirdparty\resample</Filter>
     </ClCompile>
+    <ClCompile Include="AudioMixer.cpp" />
+    <ClCompile Include="AudioPlayer.cpp" />
+    <ClCompile Include="AudioSource.cpp" />
+    <ClCompile Include="HRTFAudioSubsystem.cpp" />
+    <ClCompile Include="..\Thirdparty\kissfft\kiss_fft.c">
+      <Filter>Thirdparty\kissfft</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Thirdparty\miniz\miniz.c">
+      <Filter>Thirdparty\miniz</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Precomp.h" />
@@ -324,6 +334,16 @@
     <ClInclude Include="..\Thirdparty\stb_vorbis.h">
       <Filter>Thirdparty</Filter>
     </ClInclude>
+    <ClInclude Include="AudioMixer.h" />
+    <ClInclude Include="AudioPlayer.h" />
+    <ClInclude Include="AudioSource.h" />
+    <ClInclude Include="HRTFAudioSubsystem.h" />
+    <ClInclude Include="..\Thirdparty\kissfft\kiss_fft.h">
+      <Filter>Thirdparty\kissfft</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Thirdparty\miniz\miniz.h">
+      <Filter>Thirdparty\miniz</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="..\HRTFAudio.int" />
@@ -338,6 +358,9 @@
     </None>
     <None Include="..\Thirdparty\resample\LICENSE">
       <Filter>Thirdparty\resample</Filter>
+    </None>
+    <None Include="..\Thirdparty\miniz\LICENSE">
+      <Filter>Thirdparty\miniz</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>
@@ -358,6 +381,12 @@
     </Filter>
     <Filter Include="Thirdparty\resample">
       <UniqueIdentifier>{2c5fe591-2101-438a-9e60-ab3808c7f997}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Thirdparty\kissfft">
+      <UniqueIdentifier>{53764569-2d75-4a52-a807-14eef8631145}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Thirdparty\miniz">
+      <UniqueIdentifier>{32af7611-909a-490b-a2a8-6fae29c2eaf8}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>
