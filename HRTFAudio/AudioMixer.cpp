@@ -3,9 +3,13 @@
 #include "AudioMixer.h"
 #include "AudioSource.h"
 #include "AudioPlayer.h"
+#include "kissfft/kiss_fft.h"
+#include "miniz/miniz.h"
 #include <mutex>
 #include <stdexcept>
 #include <map>
+#include <string>
+#include <cmath>
 
 class AudioMixerImpl;
 
@@ -60,6 +64,286 @@ public:
 	AudioLoopInfo loopinfo;
 };
 
+class ZipFileStream
+{
+public:
+	ZipFileStream(std::vector<uint8_t> data) : data(std::move(data)) { }
+
+	void read(void* ptr, size_t size)
+	{
+		if (data.size() - pos <= size)
+		{
+			memcpy(ptr, data.data() + pos, size);
+			pos += size;
+		}
+		else
+		{
+			throw std::runtime_error("Unexpected end of file");
+		}
+	}
+
+	uint32_t read_double() { double d; read(&d, sizeof(double)); return d; }
+	uint32_t read_float() { float d; read(&d, sizeof(float)); return d; }
+	int32_t read_int32() { int32_t d; read(&d, sizeof(int32_t)); return d; }
+	int16_t read_int16() { int16_t d; read(&d, sizeof(int16_t)); return d; }
+	int8_t read_int8() { int8_t d; read(&d, sizeof(int8_t)); return d; }
+	uint32_t read_uint32() { uint32_t d; read(&d, sizeof(uint32_t)); return d; }
+	uint16_t read_uint16() { uint16_t d; read(&d, sizeof(uint16_t)); return d; }
+	uint8_t read_uint8() { uint8_t d; read(&d, sizeof(uint8_t)); return d; }
+
+private:
+	size_t pos = 0;
+	std::vector<uint8_t> data;
+};
+
+class ZipReader
+{
+public:
+	ZipReader(const void* data, size_t size)
+	{
+		mz_bool result = mz_zip_reader_init_mem(&zip, data, size, 0);
+		if (result == MZ_FALSE)
+			throw std::runtime_error("Could not open zip file");
+	}
+
+	~ZipReader()
+	{
+		mz_zip_reader_end(&zip);
+	}
+
+	std::unique_ptr<ZipFileStream> read_file(const std::string& filename)
+	{
+		mz_uint32 file_index = 0;
+		mz_bool result = mz_zip_reader_locate_file_v2(&zip, filename.c_str(), nullptr, 0, &file_index);
+		if (result == MZ_FALSE)
+			throw std::runtime_error("Could not find " + filename);
+
+		mz_zip_archive_file_stat info = {};
+		result = mz_zip_reader_file_stat(&zip, file_index, &info);
+		if (result == MZ_FALSE)
+			throw std::runtime_error("Could not get file stat for " + filename);
+
+		std::vector<uint8_t> buffer(info.m_uncomp_size);
+		result = mz_zip_reader_extract_to_mem(&zip, file_index, buffer.data(), buffer.size(), 0);
+		if (result == MZ_FALSE)
+			throw std::runtime_error("Could not extract " + filename);
+		return std::make_unique<ZipFileStream>(std::move(buffer));
+	}
+
+private:
+	mz_zip_archive zip = {};
+};
+
+class HRTF_Direction
+{
+public:
+	void load(std::unique_ptr<ZipFileStream> file)
+	{
+		uint32_t ChunkID = file->read_uint32(); // "RIFF"
+		uint32_t ChunkSize = file->read_uint32();
+		uint32_t Format = file->read_uint32(); // "WAVE"
+		uint32_t FormatChunkID = file->read_uint32(); // "fmt "
+		uint32_t FormatChunkSize = file->read_uint32();
+		uint16_t AudioFormat = file->read_uint16();
+		uint16_t NumChannels = file->read_uint16();
+		uint32_t SampleRate = file->read_uint32();
+		uint32_t ByteRate = file->read_uint32();
+		uint16_t BlockAlign = file->read_uint16();
+		uint16_t BitsPerSample = file->read_uint16();
+		uint32_t DataChunkID = file->read_uint32(); // "data"
+		uint32_t DataChunkSize = file->read_uint32();
+
+		if (ChunkID != 0x46464952 || Format != 0x45564157 || FormatChunkID != 0x20746d66)
+			throw std::runtime_error("Not a wav file");
+
+		if (FormatChunkSize != 16 || DataChunkID != 0x61746164)
+			throw std::runtime_error("Wav file subformat not supported");
+
+		if (NumChannels != 2 || BitsPerSample != 16 || BlockAlign != 4)
+			throw std::runtime_error("Wav file must be 16 bit stereo");
+
+		std::vector<int16_t> samples(DataChunkSize / sizeof(int16_t));
+		file->read(samples.data(), samples.size() * sizeof(int16_t));
+		file.reset();
+
+		size_t size = samples.size() / 2;
+		if (size > 128)
+			throw std::runtime_error("Invalid HRTF file");
+
+		size_t points = 1024;
+
+		std::vector<kiss_fft_cpx> left(points);
+		std::vector<kiss_fft_cpx> right(points);
+		memset(left.data(), 0, left.size() * sizeof(kiss_fft_cpx));
+		memset(right.data(), 0, right.size() * sizeof(kiss_fft_cpx));
+
+		for (size_t i = 0; i < size; i++)
+		{
+			left[i].r = samples[i << 1] * (1.0f / 32768.0f);
+			right[i].r = samples[(i << 1) + 1] * (1.0f / 32768.0f);
+		}
+
+		left_freq = transform_channel(left);
+		right_freq = transform_channel(right);
+	}
+
+	std::vector<kiss_fft_cpx> transform_channel(const std::vector<kiss_fft_cpx>& samples)
+	{
+		std::vector<kiss_fft_cpx> freq(samples.size());
+		memset(freq.data(), 0, freq.size() * sizeof(kiss_fft_cpx));
+
+		kiss_fft_cfg cfg = kiss_fft_alloc((int)samples.size(), 0, nullptr, nullptr);
+		kiss_fft(cfg, samples.data(), freq.data());
+		kiss_fft_free(cfg);
+
+		return freq;
+	}
+
+	std::vector<kiss_fft_cpx> left_freq;
+	std::vector<kiss_fft_cpx> right_freq;
+};
+
+class HRTF_Data
+{
+public:
+	HRTF_Data(ZipReader* zip)
+	{
+		data.resize(N_ELEV);
+		for (int el_index = 0; el_index < N_ELEV; el_index++)
+		{
+			int nfaz = get_nfaz(el_index);
+			data[el_index].resize(nfaz);
+			for (int az_index = 0; az_index < nfaz; az_index++)
+			{
+				data[el_index][az_index].load(zip->read_file(hrtf_name(el_index, az_index)));
+			}
+		}
+
+		cfg_forward = kiss_fft_alloc(get_nfft(), 0, nullptr, nullptr);
+		cfg_inverse = kiss_fft_alloc(get_nfft(), 1, nullptr, nullptr);
+	}
+
+	~HRTF_Data()
+	{
+		kiss_fft_free(cfg_forward);
+		kiss_fft_free(cfg_inverse);
+	}
+
+	int get_nfft() const
+	{
+		return (int)data.front().front().left_freq.size();
+	}
+
+	// Get the closest HRTF to the specified elevation and azimuth in degrees
+	void get_hrtf(float elev, float azim, kiss_fft_cpx** p_left, kiss_fft_cpx** p_right)
+	{
+		// Clip angles and convert to indices
+		int el_index = 0, az_index = 0;
+		bool flip_flag = false;
+		get_indices(elev, azim, &el_index, &az_index, &flip_flag);
+
+		// Get data and flip channels if necessary
+		auto hd = &data[el_index][az_index];
+		if (flip_flag)
+		{
+			*p_left = hd->right_freq.data();
+			*p_right = hd->left_freq.data();
+		}
+		else
+		{
+			*p_left = hd->left_freq.data();
+			*p_right = hd->right_freq.data();
+		}
+	}
+
+	kiss_fft_cfg cfg_forward;
+	kiss_fft_cfg cfg_inverse;
+
+private:
+	// Return the number of azimuths actually stored in file system
+	int get_nfaz(int el_index)
+	{
+		return (elev_data[el_index] / 2) + 1;
+	}
+
+	// Get (closest) elevation index for given elevation
+	int get_el_index(float elev)
+	{
+		int el_index = (int)std::round((elev - MIN_ELEV) / ELEV_INC);
+		if (el_index < 0)
+			el_index = 0;
+		else if (el_index >= N_ELEV)
+			el_index = N_ELEV - 1;
+		return el_index;
+	}
+
+	// For a given elevation and azimuth in degrees, return the indices for the proper HRTF
+	// *p_flip will be set true if left and right channels need to be flipped
+	void get_indices(float elev, float azim, int* p_el, int* p_az, bool* p_flip)
+	{
+		int el_index = get_el_index(elev);
+		int naz = elev_data[el_index];
+		int nfaz = get_nfaz(el_index);
+
+		// Coerce azimuth into legal range and calculate flip if any
+		azim = std::fmod(azim, 360.0f);
+		if (azim < 0) azim += 360.0f;
+		if (azim > 180.0f)
+		{
+			azim = 360.0f - azim;
+			*p_flip = true;
+		}
+
+		// Now 0 <= azim <= 180. Calculate index and clip to legal range just to be sure
+		int az_index = (int)std::round(azim / (360.0 / naz));
+		if (az_index < 0)
+			az_index = 0;
+		else if (az_index >= nfaz)
+			az_index = nfaz - 1;
+
+		*p_el = el_index;
+		*p_az = az_index;
+	}
+
+	// Convert index to elevation
+	int index_to_elev(int el_index)
+	{
+		return MIN_ELEV + el_index * ELEV_INC;
+	}
+
+	// Convert index to azimuth
+	int index_to_azim(int el_index, int az_index)
+	{
+		return (int)std::round(az_index * 360.0f / elev_data[el_index]);
+	}
+
+	// Return pathname of HRTF specified by indices
+	std::string hrtf_name(int el_index, int az_index)
+	{
+		int elev = index_to_elev(el_index);
+		int azim = index_to_azim(el_index, az_index);
+
+		// zero prefix azim number
+		std::string azimstr = std::to_string(azim);
+		azimstr = std::string(3 - azimstr.size(), '0') + azimstr;
+
+		return "elev" + std::to_string(elev) + "/H" + std::to_string(elev) + "e" + azimstr + "a.wav";
+	}
+
+	static const int MIN_ELEV = -40;
+	static const int MAX_ELEV = 90;
+	static const int ELEV_INC = 10;
+	static const int N_ELEV = (((MAX_ELEV - MIN_ELEV) / ELEV_INC) + 1);
+
+	// This array gives the total number of azimuths measured per elevation, and hence the AZIMUTH INCREMENT.
+	// Note that only azimuths up to and including 180 degrees actually exist in file system (because the data is symmetrical).
+	static int elev_data[N_ELEV];
+
+	std::vector<std::vector<HRTF_Direction>> data;
+};
+
+int HRTF_Data::elev_data[N_ELEV] = { 56, 60, 72, 72, 72, 72, 72, 60, 56, 45, 36, 24, 12, 1 };
+
 class ActiveSound
 {
 public:
@@ -72,6 +356,165 @@ public:
 	float pitch = 0.0f;
 
 	double pos = 0;
+};
+
+class HRTFAudioSound
+{
+public:
+	HRTFAudioSound(HRTF_Data* hrtf, const ActiveSound& sound) : hrtf(hrtf), sound(sound)
+	{
+		int nfft = hrtf->get_nfft();
+		playPos = nfft;
+		left.resize(nfft);
+		right.resize(nfft);
+		time_buf.resize(nfft);
+		freq_buf.resize(nfft);
+		workspace_buf.resize(nfft);
+	}
+
+	bool MixSounds(float* output, size_t samples, float attenuation, float x, float y, float z)
+	{
+		while (samples > 0)
+		{
+			size_t available = std::min(left.size() - playPos, samples);
+			if (available > 0)
+			{
+				const float* l = left.data() + playPos;
+				const float* r = right.data() + playPos;
+				for (size_t i = 0; i < available; i++)
+				{
+					*(output++) += *(l++) * attenuation;
+					*(output++) += *(r++) * attenuation;
+				}
+				playPos += available;
+				samples -= available;
+			}
+			else if (lastFrame)
+			{
+				break;
+			}
+			else
+			{
+				FillFrame();
+				PositionFrame(x, y, z);
+				playPos = 0;
+			}
+		}
+
+		if (samples > 0)
+		{
+			for (size_t i = 0; i < samples * 2; i++)
+			{
+				output[i] = 0.0f;
+			}
+			return false;
+		}
+
+		return true;
+	}
+
+	ActiveSound sound;
+
+private:
+	HRTFAudioSound(const HRTFAudioSound&) = delete;
+	HRTFAudioSound& operator=(const HRTFAudioSound&) = delete;
+
+	std::vector<kiss_fft_cpx> time_buf, freq_buf, workspace_buf;
+	std::vector<float> left, right;
+
+	kiss_fft_cpx CMul(const kiss_fft_cpx& a, const kiss_fft_cpx& b)
+	{
+		kiss_fft_cpx c;
+		c.r = a.r * b.r - a.i * b.i;
+		c.i = a.i * b.r + a.r * b.i;
+		return c;
+	}
+
+	// Optimized multiply of two conjugate symmetric arrays (c = a * b)
+	void COptMul(const kiss_fft_cpx* a, const kiss_fft_cpx* b, kiss_fft_cpx* c, size_t count)
+	{
+		size_t half = count >> 1;
+		for (size_t i = 0; i < half; i++)
+		{
+			c[i] = CMul(a[i], b[i]);
+		}
+		for (size_t i = 1; i < half; i++)
+		{
+			c[half + i].r = c[half - i].r;
+			c[half + i].i = -c[half - i].i;
+		}
+	}
+
+	void ApplyHRTF(float* samples, kiss_fft_cpx* hrtf)
+	{
+		size_t nfft = time_buf.size();
+
+		COptMul(freq_buf.data(), hrtf, workspace_buf.data(), freq_buf.size());
+		kiss_fft(this->hrtf->cfg_inverse, workspace_buf.data(), time_buf.data());
+
+		for (size_t i = 0; i < nfft; i++)
+			samples[i] = time_buf[i].r * (1.0f / nfft);
+	}
+
+	static float clamp(float v, float minval, float maxval)
+	{
+		return std::max(std::min(v, maxval), minval);
+	}
+
+	void PositionFrame(float x, float y, float z)
+	{
+		size_t nfft = time_buf.size();
+
+		float elev = clamp(std::atan2(y, std::abs(z)) * 180.0f / 3.14159265359f, -90.0f, 90.0f);
+		float azim = clamp(std::atan2(x, z) * 180.0f / 3.14159265359f, -180.0f, 180.0f);
+
+		kiss_fft_cpx* leftHRTF = nullptr;
+		kiss_fft_cpx* rightHRTF = nullptr;
+		hrtf->get_hrtf(elev, azim, &leftHRTF, &rightHRTF);
+
+		kiss_fft(hrtf->cfg_forward, time_buf.data(), freq_buf.data());
+
+		ApplyHRTF(left.data(), leftHRTF);
+		ApplyHRTF(right.data(), rightHRTF);
+	}
+
+	void FillFrame()
+	{
+		const float* src = sound.sound->samples.data();
+		double srcpos = sound.pos;
+		double srcpitch = sound.pitch;
+		int srcsize = (int)sound.sound->samples.size();
+		int srcmax = srcsize - 1;
+		if (srcmax >= 0)
+		{
+			size_t samples = time_buf.size();
+			for (size_t i = 0; i < samples; i++)
+			{
+				int pos = (int)srcpos;
+				int pos2 = pos + 1;
+				float t = (float)(srcpos - pos);
+
+				pos = std::min(pos, srcmax);
+				pos2 = std::min(pos2, srcmax);
+
+				time_buf[i].r = (src[pos] * t + src[pos2] * (1.0f - t));
+				time_buf[i].i = 0.0f;
+
+				srcpos += srcpitch;
+			}
+
+			sound.pos = srcpos;
+			lastFrame = srcpos >= sound.sound->samples.size();
+		}
+		else
+		{
+			memset(time_buf.data(), 0, time_buf.size() * sizeof(kiss_fft_cpx));
+		}
+	}
+
+	HRTF_Data* hrtf = nullptr;
+	size_t playPos = 0;
+	bool lastFrame = false;
 };
 
 class AudioMixerSource : public AudioSource
