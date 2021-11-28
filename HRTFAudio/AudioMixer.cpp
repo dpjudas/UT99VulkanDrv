@@ -18,7 +18,7 @@ class AudioSound
 public:
 	AudioSound(int mixing_frequency, std::unique_ptr<AudioSource> source, const AudioLoopInfo& inloopinfo) : loopinfo(inloopinfo)
 	{
-		duration = samples.size() / 48000.0f;
+		duration = samples.size() / 44100.0f;
 
 		if (source->GetChannels() == 1)
 		{
@@ -355,70 +355,232 @@ public:
 	float volume = 0.0f;
 	float pan = 0.0f;
 	float pitch = 0.0f;
+	float x = 0.0f;
+	float y = 0.0f;
+	float z = 0.0f;
 
 	double pos = 0;
-};
 
-class HRTFAudioSound
-{
-public:
-	HRTFAudioSound(HRTF_Data* hrtf, const ActiveSound& sound) : hrtf(hrtf), sound(sound)
+	bool SoundEnded() const
 	{
-		int nfft = hrtf->get_nfft();
-		playPos = nfft;
-		left.resize(nfft);
-		right.resize(nfft);
-		time_buf.resize(nfft);
-		freq_buf.resize(nfft);
-		workspace_buf.resize(nfft);
+		return pos >= (double)sound->samples.size();
 	}
 
-	bool MixSounds(float* output, size_t samples, float attenuation, float x, float y, float z)
+	bool MixInto(kiss_fft_cpx* output, size_t samples)
 	{
+		if (SoundEnded())
+			return false;
+
+		const float* src = sound->samples.data();
+		double srcpos = pos;
+		double srcpitch = pitch;
+		int srcsize = (int)sound->samples.size();
+		int srcmax = srcsize - 1;
+		if (srcmax < 0)
+			return false;
+
+		float vol = volume;
+
+		if (sound->loopinfo.Looped)
+		{
+			double loopStart = (double)sound->loopinfo.LoopStart;
+			double loopEnd = (double)sound->loopinfo.LoopEnd;
+			double loopLen = loopEnd - loopStart;
+
+			for (size_t i = 0; i < samples; i++)
+			{
+				double p0 = srcpos;
+				double p1 = srcpos + 1;
+				if (p0 >= loopEnd) p0 -= loopLen;
+				if (p1 >= loopEnd) p1 -= loopLen;
+
+				int pos = (int)p0;
+				int pos2 = (int)p1;
+				float t = (float)(p0 - pos);
+
+				pos = std::min(pos, srcmax);
+				pos2 = std::min(pos2, srcmax);
+
+				float value = (src[pos] * t + src[pos2] * (1.0f - t));
+				output[i].r += value * vol;
+
+				srcpos += srcpitch;
+				while (srcpos >= loopEnd)
+					srcpos -= loopLen;
+			}
+
+			pos = srcpos;
+			return true;
+		}
+		else
+		{
+			for (size_t i = 0; i < samples; i++)
+			{
+				int pos = (int)srcpos;
+				int pos2 = pos + 1;
+				float t = (float)(srcpos - pos);
+
+				pos = std::min(pos, srcmax);
+				pos2 = std::min(pos2, srcmax);
+
+				float value = (src[pos] * t + src[pos2] * (1.0f - t));
+				output[i].r += value * vol;
+
+				srcpos += srcpitch;
+			}
+
+			pos = srcpos;
+			return pos < (double)sound->samples.size();
+		}
+	}
+
+	bool MixInto(float* output, size_t samples, float globalvolume)
+	{
+		const float* src = sound->samples.data();
+		double srcpos = pos;
+		double srcpitch = pitch;
+		int srcsize = (int)sound->samples.size();
+		int srcmax = srcsize - 1;
+		if (srcmax < 0)
+			return false;
+
+		float leftVolume, rightVolume;
+		GetVolume(leftVolume, rightVolume, globalvolume);
+
+		if (sound->loopinfo.Looped)
+		{
+			double loopStart = (double)sound->loopinfo.LoopStart;
+			double loopEnd = (double)sound->loopinfo.LoopEnd;
+			double loopLen = loopEnd - loopStart;
+
+			for (size_t i = 0; i < samples; i++)
+			{
+				double p0 = srcpos;
+				double p1 = srcpos + 1;
+				if (p0 >= loopEnd) p0 -= loopLen;
+				if (p1 >= loopEnd) p1 -= loopLen;
+
+				int pos = (int)p0;
+				int pos2 = (int)p1;
+				float t = (float)(p0 - pos);
+
+				pos = std::min(pos, srcmax);
+				pos2 = std::min(pos2, srcmax);
+
+				float value = (src[pos] * t + src[pos2] * (1.0f - t));
+				output[i << 1] += value * leftVolume;
+				output[(i << 1) + 1] += value * rightVolume;
+
+				srcpos += srcpitch;
+				while (srcpos >= loopEnd)
+					srcpos -= loopLen;
+			}
+
+			pos = srcpos;
+			return true;
+		}
+		else
+		{
+			if (leftVolume > 0.0f || rightVolume > 0.0f)
+			{
+				for (size_t i = 0; i < samples; i++)
+				{
+					int pos = (int)srcpos;
+					int pos2 = pos + 1;
+					float t = (float)(srcpos - pos);
+
+					pos = std::min(pos, srcmax);
+					pos2 = std::min(pos2, srcmax);
+
+					float value = (src[pos] * t + src[pos2] * (1.0f - t));
+					output[i << 1] += value * leftVolume;
+					output[(i << 1) + 1] += value * rightVolume;
+
+					srcpos += srcpitch;
+				}
+			}
+			else
+			{
+				srcpos += srcpitch * samples;
+			}
+
+			if (srcpos < sound->samples.size())
+			{
+				pos = srcpos;
+				return true;
+			}
+			else
+			{
+				return false;
+			}
+		}
+	}
+
+	void GetVolume( float& leftVolume, float& rightVolume, float globalvolume)
+	{
+		auto clamp = [](float x, float minval, float maxval) { return std::max(std::min(x, maxval), minval); };
+		leftVolume = clamp(volume * std::min(1.0f - pan, 1.0f) * globalvolume, 0.0f, 1.0f);
+		rightVolume = clamp(volume * std::min(1.0f + pan, 1.0f) * globalvolume, 0.0f, 1.0f);
+	}
+};
+
+class HRTFAudioChannel
+{
+public:
+	HRTFAudioChannel(kiss_fft_cpx* leftHRTF, kiss_fft_cpx* rightHRTF, HRTF_Data* hrtf) : leftHRTF(leftHRTF), rightHRTF(rightHRTF), hrtf(hrtf)
+	{
+		int nfft = hrtf->get_nfft();
+		kiss_fft_cpx zero;
+		zero.i = 0.0f;
+		zero.r = 0.0f;
+		playPos = nfft;
+		left.resize(nfft, 0.0f);
+		right.resize(nfft, 0.0f);
+		time_buf.resize(nfft, zero);
+		freq_buf.resize(nfft, zero);
+		workspace_buf.resize(nfft, zero);
+	}
+
+	bool MixInto(float* output, size_t samples, float globalvolume)
+	{
+		size_t nfft = left.size();
 		while (samples > 0)
 		{
-			size_t available = std::min(left.size() - playPos, samples);
+			size_t available = std::min(nfft - playPos, samples);
 			if (available > 0)
 			{
 				const float* l = left.data() + playPos;
 				const float* r = right.data() + playPos;
 				for (size_t i = 0; i < available; i++)
 				{
-					*(output++) += *(l++) * attenuation;
-					*(output++) += *(r++) * attenuation;
+					*(output++) += *(l++) * globalvolume;
+					*(output++) += *(r++) * globalvolume;
 				}
 				playPos += available;
 				samples -= available;
 			}
-			else if (lastFrame)
+			else if (sounds.empty())
 			{
-				break;
+				return false;
 			}
 			else
 			{
 				FillFrame();
-				PositionFrame(x, y, z);
+				PositionFrame();
 				playPos = 0;
 			}
-		}
-
-		if (samples > 0)
-		{
-			for (size_t i = 0; i < samples * 2; i++)
-			{
-				output[i] = 0.0f;
-			}
-			return false;
 		}
 
 		return true;
 	}
 
-	ActiveSound sound;
+	kiss_fft_cpx* leftHRTF = nullptr;
+	kiss_fft_cpx* rightHRTF = nullptr;
+	std::vector<ActiveSound*> sounds;
 
 private:
-	HRTFAudioSound(const HRTFAudioSound&) = delete;
-	HRTFAudioSound& operator=(const HRTFAudioSound&) = delete;
+	HRTFAudioChannel(const HRTFAudioChannel&) = delete;
+	HRTFAudioChannel& operator=(const HRTFAudioChannel&) = delete;
 
 	std::vector<kiss_fft_cpx> time_buf, freq_buf, workspace_buf;
 	std::vector<float> left, right;
@@ -462,17 +624,8 @@ private:
 		return std::max(std::min(v, maxval), minval);
 	}
 
-	void PositionFrame(float x, float y, float z)
+	void PositionFrame()
 	{
-		size_t nfft = time_buf.size();
-
-		float elev = clamp(std::atan2(y, std::abs(z)) * 180.0f / 3.14159265359f, -90.0f, 90.0f);
-		float azim = clamp(std::atan2(x, z) * 180.0f / 3.14159265359f, -180.0f, 180.0f);
-
-		kiss_fft_cpx* leftHRTF = nullptr;
-		kiss_fft_cpx* rightHRTF = nullptr;
-		hrtf->get_hrtf(elev, azim, &leftHRTF, &rightHRTF);
-
 		kiss_fft(hrtf->cfg_forward, time_buf.data(), freq_buf.data());
 
 		ApplyHRTF(left.data(), leftHRTF);
@@ -481,41 +634,15 @@ private:
 
 	void FillFrame()
 	{
-		const float* src = sound.sound->samples.data();
-		double srcpos = sound.pos;
-		double srcpitch = sound.pitch;
-		int srcsize = (int)sound.sound->samples.size();
-		int srcmax = srcsize - 1;
-		if (srcmax >= 0)
+		memset(time_buf.data(), 0, time_buf.size() * sizeof(kiss_fft_cpx));
+		for (ActiveSound* sound : sounds)
 		{
-			size_t samples = time_buf.size();
-			for (size_t i = 0; i < samples; i++)
-			{
-				int pos = (int)srcpos;
-				int pos2 = pos + 1;
-				float t = (float)(srcpos - pos);
-
-				pos = std::min(pos, srcmax);
-				pos2 = std::min(pos2, srcmax);
-
-				time_buf[i].r = (src[pos] * t + src[pos2] * (1.0f - t));
-				time_buf[i].i = 0.0f;
-
-				srcpos += srcpitch;
-			}
-
-			sound.pos = srcpos;
-			lastFrame = srcpos >= sound.sound->samples.size();
-		}
-		else
-		{
-			memset(time_buf.data(), 0, time_buf.size() * sizeof(kiss_fft_cpx));
+			sound->MixInto(time_buf.data(), time_buf.size());
 		}
 	}
 
 	HRTF_Data* hrtf = nullptr;
 	size_t playPos = 0;
-	bool lastFrame = false;
 };
 
 class AudioMixerSource : public AudioSource
@@ -535,8 +662,6 @@ public:
 	void CopyMusic(float* output, size_t samples);
 	void MixSounds(float* output, size_t samples);
 
-	void GetVolume(const ActiveSound& sound, float& leftVolume, float& rightVolume);
-
 	AudioMixerImpl* mixer = nullptr;
 	std::map<int, ActiveSound> sounds;
 	std::vector<int> stoppedsounds;
@@ -545,6 +670,7 @@ public:
 	float musicvolume = 1.0f;
 
 	HRTF_Data hrtf;
+	std::vector<std::unique_ptr<HRTFAudioChannel>> hrtfchannels;
 };
 
 class AudioMixerImpl : public AudioMixer
@@ -576,7 +702,7 @@ public:
 		return sound->duration;
 	}
 
-	int PlaySound(int channel, AudioSound* sound, float volume, float pan, float pitch) override
+	int PlaySound(int channel, AudioSound* sound, float volume, float pan, float pitch, float x, float y, float z) override
 	{
 		ActiveSound s;
 		s.channel = channel;
@@ -586,12 +712,15 @@ public:
 		s.volume = volume;
 		s.pan = pan;
 		s.pitch = pitch;
+		s.x = x;
+		s.y = y;
+		s.z = z;
 		client.sounds.push_back(std::move(s));
 		channelplaying[channel]++;
 		return channel;
 	}
 
-	void UpdateSound(int channel, AudioSound* sound, float volume, float pan, float pitch) override
+	void UpdateSound(int channel, AudioSound* sound, float volume, float pan, float pitch, float x, float y, float z) override
 	{
 		ActiveSound s;
 		s.channel = channel;
@@ -601,6 +730,9 @@ public:
 		s.volume = volume;
 		s.pan = pan;
 		s.pitch = pitch;
+		s.x = x;
+		s.y = y;
+		s.z = z;
 		client.sounds.push_back(std::move(s));
 	}
 
@@ -669,7 +801,7 @@ public:
 		channelstopped.clear();
 	}
 
-	int mixing_frequency = 48000;
+	int mixing_frequency = 44100;
 
 	std::vector<std::unique_ptr<AudioSound>> sounds;
 	std::unique_ptr<AudioPlayer> player;
@@ -738,6 +870,9 @@ void AudioMixerSource::TransferFromClient()
 				it->second.volume = s.volume;
 				it->second.pan = s.pan;
 				it->second.pitch = s.pitch;
+				it->second.x = s.x;
+				it->second.y = s.y;
+				it->second.z = s.z;
 			}
 		}
 	}
@@ -778,99 +913,65 @@ void AudioMixerSource::MixSounds(float* output, size_t samples)
 {
 	samples /= 2;
 
+	// Place sounds into directional channels
+	for (auto& it : sounds)
+	{
+		ActiveSound& sound = it.second;
+
+		float elev = Clamp(std::atan2(sound.y, std::abs(sound.z)) * 180.0f / 3.14159265359f, -90.0f, 90.0f);
+		float azim = Clamp(std::atan2(sound.x, sound.z) * 180.0f / 3.14159265359f, -180.0f, 180.0f);
+
+		kiss_fft_cpx* leftHRTF = nullptr;
+		kiss_fft_cpx* rightHRTF = nullptr;
+		hrtf.get_hrtf(elev, azim, &leftHRTF, &rightHRTF);
+
+		HRTFAudioChannel* hrtfchannel = nullptr;
+		for (auto& c : hrtfchannels)
+		{
+			if (c->leftHRTF == leftHRTF && c->rightHRTF == rightHRTF)
+			{
+				hrtfchannel = c.get();
+				break;
+			}
+		}
+		if (!hrtfchannel)
+		{
+			hrtfchannels.push_back(std::make_unique<HRTFAudioChannel>(leftHRTF, rightHRTF, &hrtf));
+			hrtfchannel = hrtfchannels.back().get();
+		}
+
+		hrtfchannel->sounds.push_back(&sound);
+	}
+
+	// Mix the directional channels into the output stream
+	auto itHrtf = hrtfchannels.begin();
+	while (itHrtf != hrtfchannels.end())
+	{
+		HRTFAudioChannel* hrtf = (*itHrtf).get();
+		if (hrtf->MixInto(output, samples, soundvolume))
+		{
+			hrtf->sounds.clear();
+			++itHrtf;
+		}
+		else
+		{
+			itHrtf = hrtfchannels.erase(itHrtf);
+		}
+	}
+
+	// Remove sounds that finished playing
 	auto it = sounds.begin();
 	while (it != sounds.end())
 	{
 		ActiveSound& sound = it->second;
-		const float* src = sound.sound->samples.data();
-		double srcpos = sound.pos;
-		double srcpitch = sound.pitch;
-		int srcsize = (int)sound.sound->samples.size();
-		int srcmax = srcsize - 1;
-		if (srcmax < 0)
+		if (sound.SoundEnded())
 		{
 			stoppedsounds.push_back(sound.channel);
 			it = sounds.erase(it);
-			continue;
-		}
-
-		float leftVolume, rightVolume;
-		GetVolume(sound, leftVolume, rightVolume);
-
-		if (sound.sound->loopinfo.Looped)
-		{
-			double loopStart = (double)sound.sound->loopinfo.LoopStart;
-			double loopEnd = (double)sound.sound->loopinfo.LoopEnd;
-			double loopLen = loopEnd - loopStart;
-
-			for (size_t i = 0; i < samples; i++)
-			{
-				double p0 = srcpos;
-				double p1 = srcpos + 1;
-				if (p0 >= loopEnd) p0 -= loopLen;
-				if (p1 >= loopEnd) p1 -= loopLen;
-
-				int pos = (int)p0;
-				int pos2 = (int)p1;
-				float t = (float)(p0 - pos);
-
-				pos = std::min(pos, srcmax);
-				pos2 = std::min(pos2, srcmax);
-
-				float value = (src[pos] * t + src[pos2] * (1.0f - t));
-				output[i << 1] += value * leftVolume;
-				output[(i << 1) + 1] += value * rightVolume;
-
-				srcpos += srcpitch;
-				while (srcpos >= loopEnd)
-					srcpos -= loopLen;
-			}
-
-			sound.pos = srcpos;
-			++it;
 		}
 		else
 		{
-			if (leftVolume > 0.0f || rightVolume > 0.0f)
-			{
-				for (size_t i = 0; i < samples; i++)
-				{
-					int pos = (int)srcpos;
-					int pos2 = pos + 1;
-					float t = (float)(srcpos - pos);
-
-					pos = std::min(pos, srcmax);
-					pos2 = std::min(pos2, srcmax);
-
-					float value = (src[pos] * t + src[pos2] * (1.0f - t));
-					output[i << 1] += value * leftVolume;
-					output[(i << 1) + 1] += value * rightVolume;
-
-					srcpos += srcpitch;
-				}
-			}
-			else
-			{
-				srcpos += srcpitch * samples;
-			}
-
-			if (srcpos < sound.sound->samples.size())
-			{
-				sound.pos = srcpos;
-				++it;
-			}
-			else
-			{
-				stoppedsounds.push_back(sound.channel);
-				it = sounds.erase(it);
-			}
+			++it;
 		}
 	}
-}
-
-void AudioMixerSource::GetVolume(const ActiveSound& sound, float& leftVolume, float& rightVolume)
-{
-	auto clamp = [](float x, float minval, float maxval) { return std::max(std::min(x, maxval), minval); };
-	leftVolume = clamp(sound.volume * std::min(1.0f - sound.pan, 1.0f) * soundvolume, 0.0f, 1.0f);
-	rightVolume = clamp(sound.volume * std::min(1.0f + sound.pan, 1.0f) * soundvolume, 0.0f, 1.0f);
 }

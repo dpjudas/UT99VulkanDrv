@@ -266,20 +266,28 @@ void UHRTFAudioSubsystem::UpdateSounds(FCoords& Listener)
 
 			// Compute the spatialization.
 			FVector Location = Playing.Location.TransformPointBy(Listener);
+			if (ReverseStereo)
+				Location.X = -Location.X;
 			float PanAngle = appAtan2(Location.X, Abs(Location.Z));
 
 			// Despatialize sounds when you get real close to them.
 			FLOAT CenterDist = 0.1 * Playing.Radius;
 			FLOAT Size = Location.Size();
 			if (Location.SizeSquared() < Square(CenterDist))
-				PanAngle *= Size / CenterDist;
+			{
+				float t = (Size / CenterDist);
+				PanAngle *= t;
+				Location = (Location.SafeNormal() * t + FVector(0.0f, 0.0f, 10.0f) * (1.0f - t)).SafeNormal();
+			}
+			else
+			{
+				Location = Location.SafeNormal();
+			}
 
 			// Compute panning and volume.
 			float SoundPan = Clamp(PanAngle * 7 / 8 / PI, -1.0f, 1.0f);
 			float Attenuation = Clamp(1.0f - Size / Playing.Radius, 0.0f, 1.0f);
 			float SoundVolume = Clamp(Playing.Volume * Attenuation, 0.0f, 1.0f);
-			if (ReverseStereo)
-				SoundPan = -SoundPan;
 
 			// Compute doppler shifting (doesn't account for player's velocity).
 			FLOAT Doppler = 1.0f;
@@ -295,11 +303,11 @@ void UHRTFAudioSubsystem::UpdateSounds(FCoords& Listener)
 			Playing.CurrentVolume = SoundVolume;
 			if (Playing.Channel)
 			{
-				Mixer->UpdateSound(Playing.Channel, Sound, SoundVolume, SoundPan, Playing.Pitch * Doppler);
+				Mixer->UpdateSound(Playing.Channel, Sound, SoundVolume, SoundPan, Playing.Pitch * Doppler, Location.X, Location.Y, Location.Z);
 			}
 			else
 			{
-				Playing.Channel = Mixer->PlaySound(i + 1, Sound, SoundVolume, SoundPan, Playing.Pitch * Doppler);
+				Playing.Channel = Mixer->PlaySound(i + 1, Sound, SoundVolume, SoundPan, Playing.Pitch * Doppler, Location.X, Location.Y, Location.Z);
 			}
 		}
 	}

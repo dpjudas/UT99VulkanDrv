@@ -23,8 +23,8 @@ public:
 	virtual AudioSound* AddSound(std::unique_ptr<AudioSource> source, const AudioLoopInfo& loopinfo = {}) = 0;
 	virtual void RemoveSound(AudioSound* sound) = 0;
 	virtual float GetSoundDuration(AudioSound* sound) = 0;
-	virtual int PlaySound(int channel, AudioSound* sound, float volume, float pan, float pitch) = 0;
-	virtual void UpdateSound(int channel, AudioSound* sound, float volume, float pan, float pitch) = 0;
+	virtual int PlaySound(int channel, AudioSound* sound, float volume, float pan, float pitch, float x, float y, float z) = 0;
+	virtual void UpdateSound(int channel, AudioSound* sound, float volume, float pan, float pitch, float x, float y, float z) = 0;
 	virtual void StopSound(int channel) = 0;
 	virtual bool SoundFinished(int channel) = 0;
 	virtual void PlayMusic(std::unique_ptr<AudioSource> source) = 0;
