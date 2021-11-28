@@ -344,6 +344,7 @@
     <ClInclude Include="..\Thirdparty\miniz\miniz.h">
       <Filter>Thirdparty\miniz</Filter>
     </ClInclude>
+    <ClInclude Include="resource.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\HRTFAudio.int" />
@@ -362,6 +363,7 @@
     <None Include="..\Thirdparty\miniz\LICENSE">
       <Filter>Thirdparty\miniz</Filter>
     </None>
+    <None Include="diffuse.zip" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Thirdparty">
@@ -388,5 +390,8 @@
     <Filter Include="Thirdparty\miniz">
       <UniqueIdentifier>{32af7611-909a-490b-a2a8-6fae29c2eaf8}</UniqueIdentifier>
     </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="HRTFAudio.rc" />
   </ItemGroup>
 </Project>

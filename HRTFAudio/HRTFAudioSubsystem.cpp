@@ -2,6 +2,7 @@
 #include "Precomp.h"
 #include "HRTFAudioSubsystem.h"
 #include "AudioSource.h"
+#include "resource.h"
 
 IMPLEMENT_CLASS(UHRTFAudioSubsystem);
 
@@ -44,7 +45,41 @@ UBOOL UHRTFAudioSubsystem::Init()
 {
 	guard(UHRTFAudioSubsystem::Init);
 	if (!Mixer)
-		Mixer = AudioMixer::Create();
+	{
+		try
+		{
+			HRSRC resourceInfo = FindResource(hInstance, MAKEINTRESOURCE(IDR_HRTF), TEXT("Zip"));
+			if (!resourceInfo)
+				throw std::runtime_error("FindResource(IDR_HRTF, Zip) failed");
+
+			HGLOBAL resource = LoadResource(hInstance, resourceInfo);
+			if (!resource)
+				throw std::runtime_error("LoadResource(IDR_HRTF, Zip) failed");
+
+			size_t zipSize = SizeofResource(hInstance, resourceInfo);
+
+			void* zipData = LockResource(resource);
+			if (!zipData)
+			{
+				FreeResource(resource);
+				throw std::runtime_error("LockResource(IDR_HRTF, Zip) failed");
+			}
+
+			Mixer = AudioMixer::Create(zipData, zipSize);
+
+			UnlockResource(resource);
+			FreeResource(resource);
+		}
+		catch (const std::exception& e)
+		{
+			std::vector<TCHAR> tmp;
+			for (const char* c = e.what(); *c != 0; c++)
+				tmp.push_back((TCHAR)(*c));
+			tmp.push_back(0);
+			appErrorf(TEXT("%s"), tmp.data());
+			return false;
+		}
+	}
 	return true;
 	unguard;
 }
@@ -131,8 +166,8 @@ void UHRTFAudioSubsystem::Update(FPointRegion Region, FCoords& Listener)
 	UpdateSounds(Listener);
 	UpdateMusic();
 
-	Mixer->SetMusicVolume(MusicVolume / 255.0f);
-	Mixer->SetSoundVolume(SoundVolume / 255.0f);
+	Mixer->SetMusicVolume(MusicVolume / 255.0f * 0.50f);
+	Mixer->SetSoundVolume(SoundVolume / 255.0f * 0.25f);
 
 	guard(UpdateMixer);
 	Mixer->Update();
@@ -260,11 +295,11 @@ void UHRTFAudioSubsystem::UpdateSounds(FCoords& Listener)
 			Playing.CurrentVolume = SoundVolume;
 			if (Playing.Channel)
 			{
-				Mixer->UpdateSound(Playing.Channel, Sound, SoundVolume * 0.25f, SoundPan, Playing.Pitch * Doppler);
+				Mixer->UpdateSound(Playing.Channel, Sound, SoundVolume, SoundPan, Playing.Pitch * Doppler);
 			}
 			else
 			{
-				Playing.Channel = Mixer->PlaySound(i + 1, Sound, SoundVolume * 0.25f, SoundPan, Playing.Pitch * Doppler);
+				Playing.Channel = Mixer->PlaySound(i + 1, Sound, SoundVolume, SoundPan, Playing.Pitch * Doppler);
 			}
 		}
 	}

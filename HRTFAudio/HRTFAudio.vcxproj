@@ -125,6 +125,7 @@
     <ClInclude Include="AudioSource.h" />
     <ClInclude Include="HRTFAudioSubsystem.h" />
     <ClInclude Include="Precomp.h" />
+    <ClInclude Include="resource.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\Thirdparty\dumb\src\core\atexit.c">
@@ -674,6 +675,10 @@
     <None Include="..\Thirdparty\dumb\src\helpers\resample.inc" />
     <None Include="..\Thirdparty\miniz\LICENSE" />
     <None Include="..\Thirdparty\resample\LICENSE" />
+    <None Include="diffuse.zip" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="HRTFAudio.rc" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

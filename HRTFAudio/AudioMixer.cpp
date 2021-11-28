@@ -71,7 +71,8 @@ public:
 
 	void read(void* ptr, size_t size)
 	{
-		if (data.size() - pos <= size)
+		size_t available = data.size() - pos;
+		if (size <= available)
 		{
 			memcpy(ptr, data.data() + pos, size);
 			pos += size;
@@ -520,7 +521,9 @@ private:
 class AudioMixerSource : public AudioSource
 {
 public:
-	AudioMixerSource(AudioMixerImpl* mixer) : mixer(mixer) { }
+	AudioMixerSource(AudioMixerImpl* mixer, ZipReader *zip) : mixer(mixer), hrtf(zip)
+	{
+	}
 
 	int GetFrequency() override;
 	int GetChannels() override { return 2; }
@@ -540,14 +543,17 @@ public:
 	std::unique_ptr<AudioSource> music;
 	float soundvolume = 1.0f;
 	float musicvolume = 1.0f;
+
+	HRTF_Data hrtf;
 };
 
 class AudioMixerImpl : public AudioMixer
 {
 public:
-	AudioMixerImpl()
+	AudioMixerImpl(const void *zipData, size_t zipSize)
 	{
-		player = AudioPlayer::Create(std::make_unique<AudioMixerSource>(this));
+		ZipReader zip(zipData, zipSize);
+		player = AudioPlayer::Create(std::make_unique<AudioMixerSource>(this, &zip));
 	}
 
 	~AudioMixerImpl()
@@ -685,9 +691,9 @@ public:
 
 /////////////////////////////////////////////////////////////////////////////
 
-std::unique_ptr<AudioMixer> AudioMixer::Create()
+std::unique_ptr<AudioMixer> AudioMixer::Create(const void* zipData, size_t zipSize)
 {
-	return std::make_unique<AudioMixerImpl>();
+	return std::make_unique<AudioMixerImpl>(zipData, zipSize);
 }
 
 /////////////////////////////////////////////////////////////////////////////

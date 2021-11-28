@@ -17,7 +17,7 @@ public:
 class AudioMixer
 {
 public:
-	static std::unique_ptr<AudioMixer> Create();
+	static std::unique_ptr<AudioMixer> Create(const void* zipData, size_t zipSize);
 
 	virtual ~AudioMixer() = default;
 	virtual AudioSound* AddSound(std::unique_ptr<AudioSource> source, const AudioLoopInfo& loopinfo = {}) = 0;
