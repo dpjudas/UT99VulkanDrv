@@ -171,10 +171,8 @@ public:
 		if (size > 128)
 			throw std::runtime_error("Invalid HRTF file");
 
-		size_t points = 1024;
-
-		std::vector<kiss_fft_cpx> left(points);
-		std::vector<kiss_fft_cpx> right(points);
+		std::vector<kiss_fft_cpx> left(nfft);
+		std::vector<kiss_fft_cpx> right(nfft);
 		memset(left.data(), 0, left.size() * sizeof(kiss_fft_cpx));
 		memset(right.data(), 0, right.size() * sizeof(kiss_fft_cpx));
 
@@ -200,6 +198,8 @@ public:
 		return freq;
 	}
 
+	static const int nfft = 1024;
+
 	std::vector<kiss_fft_cpx> left_freq;
 	std::vector<kiss_fft_cpx> right_freq;
 };
@@ -220,19 +220,14 @@ public:
 			}
 		}
 
-		cfg_forward = kiss_fft_alloc(get_nfft(), 0, nullptr, nullptr);
-		cfg_inverse = kiss_fft_alloc(get_nfft(), 1, nullptr, nullptr);
+		cfg_forward = kiss_fft_alloc(HRTF_Direction::nfft, 0, nullptr, nullptr);
+		cfg_inverse = kiss_fft_alloc(HRTF_Direction::nfft, 1, nullptr, nullptr);
 	}
 
 	~HRTF_Data()
 	{
 		kiss_fft_free(cfg_forward);
 		kiss_fft_free(cfg_inverse);
-	}
-
-	int get_nfft() const
-	{
-		return (int)data.front().front().left_freq.size();
 	}
 
 	// Get the closest HRTF to the specified elevation and azimuth in degrees
@@ -529,49 +524,39 @@ class HRTFAudioChannel
 public:
 	HRTFAudioChannel(kiss_fft_cpx* leftHRTF, kiss_fft_cpx* rightHRTF, HRTF_Data* hrtf) : leftHRTF(leftHRTF), rightHRTF(rightHRTF), hrtf(hrtf)
 	{
-		int nfft = hrtf->get_nfft();
 		kiss_fft_cpx zero;
 		zero.i = 0.0f;
 		zero.r = 0.0f;
-		playPos = nfft;
-		left.resize(nfft, 0.0f);
-		right.resize(nfft, 0.0f);
-		time_buf.resize(nfft, zero);
-		freq_buf.resize(nfft, zero);
-		workspace_buf.resize(nfft, zero);
+		left.resize(HRTF_Direction::nfft, 0.0f);
+		right.resize(HRTF_Direction::nfft, 0.0f);
+		time_buf.resize(HRTF_Direction::nfft, zero);
+		freq_buf.resize(HRTF_Direction::nfft, zero);
+		workspace_buf.resize(HRTF_Direction::nfft, zero);
 	}
 
-	bool MixInto(float* output, size_t samples, float globalvolume)
+	void MixInto(float* output, size_t playPos, size_t samples, float globalvolume)
 	{
-		size_t nfft = left.size();
-		while (samples > 0)
+		const float* l = left.data() + playPos;
+		const float* r = right.data() + playPos;
+		for (size_t i = 0; i < samples; i++)
 		{
-			size_t available = std::min(nfft - playPos, samples);
-			if (available > 0)
-			{
-				const float* l = left.data() + playPos;
-				const float* r = right.data() + playPos;
-				for (size_t i = 0; i < available; i++)
-				{
-					*(output++) += *(l++) * globalvolume;
-					*(output++) += *(r++) * globalvolume;
-				}
-				playPos += available;
-				samples -= available;
-			}
-			else if (sounds.empty())
-			{
-				return false;
-			}
-			else
-			{
-				FillFrame();
-				PositionFrame();
-				playPos = 0;
-			}
+			*(output++) += *(l++) * globalvolume;
+			*(output++) += *(r++) * globalvolume;
+		}
+	}
+
+	void FillFrame()
+	{
+		memset(time_buf.data(), 0, time_buf.size() * sizeof(kiss_fft_cpx));
+		for (ActiveSound* sound : sounds)
+		{
+			sound->MixInto(time_buf.data(), time_buf.size());
 		}
 
-		return true;
+		kiss_fft(hrtf->cfg_forward, time_buf.data(), freq_buf.data());
+
+		ApplyHRTF(left.data(), leftHRTF);
+		ApplyHRTF(right.data(), rightHRTF);
 	}
 
 	kiss_fft_cpx* leftHRTF = nullptr;
@@ -585,7 +570,7 @@ private:
 	std::vector<kiss_fft_cpx> time_buf, freq_buf, workspace_buf;
 	std::vector<float> left, right;
 
-	kiss_fft_cpx CMul(const kiss_fft_cpx& a, const kiss_fft_cpx& b)
+	static kiss_fft_cpx CMul(const kiss_fft_cpx& a, const kiss_fft_cpx& b)
 	{
 		kiss_fft_cpx c;
 		c.r = a.r * b.r - a.i * b.i;
@@ -594,10 +579,10 @@ private:
 	}
 
 	// Optimized multiply of two conjugate symmetric arrays (c = a * b)
-	void COptMul(const kiss_fft_cpx* a, const kiss_fft_cpx* b, kiss_fft_cpx* c, size_t count)
+	static void COptMul(const kiss_fft_cpx* a, const kiss_fft_cpx* b, kiss_fft_cpx* c, size_t count)
 	{
 		size_t half = count >> 1;
-		for (size_t i = 0; i < half; i++)
+		for (size_t i = 0; i <= half; i++)
 		{
 			c[i] = CMul(a[i], b[i]);
 		}
@@ -610,13 +595,13 @@ private:
 
 	void ApplyHRTF(float* samples, kiss_fft_cpx* hrtf)
 	{
-		size_t nfft = time_buf.size();
-
 		COptMul(freq_buf.data(), hrtf, workspace_buf.data(), freq_buf.size());
 		kiss_fft(this->hrtf->cfg_inverse, workspace_buf.data(), time_buf.data());
 
+		size_t nfft = HRTF_Direction::nfft;
+		float rcp_nfft = 1.0f / nfft;
 		for (size_t i = 0; i < nfft; i++)
-			samples[i] = time_buf[i].r * (1.0f / nfft);
+			samples[i] = time_buf[i].r * rcp_nfft;
 	}
 
 	static float clamp(float v, float minval, float maxval)
@@ -624,25 +609,7 @@ private:
 		return std::max(std::min(v, maxval), minval);
 	}
 
-	void PositionFrame()
-	{
-		kiss_fft(hrtf->cfg_forward, time_buf.data(), freq_buf.data());
-
-		ApplyHRTF(left.data(), leftHRTF);
-		ApplyHRTF(right.data(), rightHRTF);
-	}
-
-	void FillFrame()
-	{
-		memset(time_buf.data(), 0, time_buf.size() * sizeof(kiss_fft_cpx));
-		for (ActiveSound* sound : sounds)
-		{
-			sound->MixInto(time_buf.data(), time_buf.size());
-		}
-	}
-
 	HRTF_Data* hrtf = nullptr;
-	size_t playPos = 0;
 };
 
 class AudioMixerSource : public AudioSource
@@ -671,6 +638,7 @@ public:
 
 	HRTF_Data hrtf;
 	std::vector<std::unique_ptr<HRTFAudioChannel>> hrtfchannels;
+	size_t playPos = HRTF_Direction::nfft;
 };
 
 class AudioMixerImpl : public AudioMixer
@@ -913,49 +881,69 @@ void AudioMixerSource::MixSounds(float* output, size_t samples)
 {
 	samples /= 2;
 
-	// Place sounds into directional channels
-	for (auto& it : sounds)
-	{
-		ActiveSound& sound = it.second;
-
-		float elev = Clamp(std::atan2(sound.y, std::abs(sound.z)) * 180.0f / 3.14159265359f, -90.0f, 90.0f);
-		float azim = Clamp(std::atan2(sound.x, sound.z) * 180.0f / 3.14159265359f, -180.0f, 180.0f);
-
-		kiss_fft_cpx* leftHRTF = nullptr;
-		kiss_fft_cpx* rightHRTF = nullptr;
-		hrtf.get_hrtf(elev, azim, &leftHRTF, &rightHRTF);
-
-		HRTFAudioChannel* hrtfchannel = nullptr;
-		for (auto& c : hrtfchannels)
-		{
-			if (c->leftHRTF == leftHRTF && c->rightHRTF == rightHRTF)
-			{
-				hrtfchannel = c.get();
-				break;
-			}
-		}
-		if (!hrtfchannel)
-		{
-			hrtfchannels.push_back(std::make_unique<HRTFAudioChannel>(leftHRTF, rightHRTF, &hrtf));
-			hrtfchannel = hrtfchannels.back().get();
-		}
-
-		hrtfchannel->sounds.push_back(&sound);
-	}
-
 	// Mix the directional channels into the output stream
-	auto itHrtf = hrtfchannels.begin();
-	while (itHrtf != hrtfchannels.end())
+	size_t nfft = HRTF_Direction::nfft;
+	while (samples > 0)
 	{
-		HRTFAudioChannel* hrtf = (*itHrtf).get();
-		if (hrtf->MixInto(output, samples, soundvolume))
+		size_t available = std::min(nfft - playPos, samples);
+		if (available > 0)
 		{
-			hrtf->sounds.clear();
-			++itHrtf;
+			for (auto& hrtfchannel : hrtfchannels)
+				hrtfchannel->MixInto(output, playPos, available, soundvolume);
+			output += available * 2;
+			playPos += available;
+			samples -= available;
 		}
 		else
 		{
-			itHrtf = hrtfchannels.erase(itHrtf);
+			// Place sounds into directional channels
+			for (auto& it : sounds)
+			{
+				ActiveSound& sound = it.second;
+
+				float elev = Clamp(std::atan2(sound.y, std::abs(sound.z)) * 180.0f / 3.14159265359f, -90.0f, 90.0f);
+				float azim = Clamp(std::atan2(sound.x, sound.z) * 180.0f / 3.14159265359f, -180.0f, 180.0f);
+
+				kiss_fft_cpx* leftHRTF = nullptr;
+				kiss_fft_cpx* rightHRTF = nullptr;
+				hrtf.get_hrtf(elev, azim, &leftHRTF, &rightHRTF);
+
+				HRTFAudioChannel* hrtfchannel = nullptr;
+				for (auto& c : hrtfchannels)
+				{
+					if (c->leftHRTF == leftHRTF && c->rightHRTF == rightHRTF)
+					{
+						hrtfchannel = c.get();
+						break;
+					}
+				}
+				if (!hrtfchannel)
+				{
+					hrtfchannels.push_back(std::make_unique<HRTFAudioChannel>(leftHRTF, rightHRTF, &hrtf));
+					hrtfchannel = hrtfchannels.back().get();
+				}
+
+				hrtfchannel->sounds.push_back(&sound);
+			}
+
+			// Remove unused channels
+			auto itHrtf = hrtfchannels.begin();
+			while (itHrtf != hrtfchannels.end())
+			{
+				if ((*itHrtf)->sounds.empty())
+					itHrtf = hrtfchannels.erase(itHrtf);
+				else
+					++itHrtf;
+			}
+
+			// Mix a frame of audio
+			for (auto& hrtfchannel : hrtfchannels)
+			{
+				hrtfchannel->FillFrame();
+				hrtfchannel->sounds.clear();
+			}
+
+			playPos = 0;
 		}
 	}
 
