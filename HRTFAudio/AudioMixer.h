@@ -30,5 +30,6 @@ public:
 	virtual void PlayMusic(std::unique_ptr<AudioSource> source) = 0;
 	virtual void SetMusicVolume(float volume) = 0;
 	virtual void SetSoundVolume(float volume) = 0;
+	virtual void SetReverb(float volume, float hfcutoff, std::vector<float> time, std::vector<float> gain) = 0;
 	virtual void Update() = 0;
 };

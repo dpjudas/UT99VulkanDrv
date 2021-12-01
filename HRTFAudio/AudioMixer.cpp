@@ -722,6 +722,13 @@ public:
 	std::unique_ptr<AudioSource> music;
 	float soundvolume = 1.0f;
 	float musicvolume = 1.0f;
+	struct
+	{
+		float volume = 0.0f;
+		int hfcutoff = 44100;
+		std::vector<float> time;
+		std::vector<float> gain;
+	} reverb;
 
 	HRTF_Data hrtf;
 	std::vector<std::unique_ptr<HRTFAudioChannel>> hrtfchannels;
@@ -829,6 +836,14 @@ public:
 		client.soundvolume = volume;
 	}
 
+	void SetReverb(float volume, float hfcutoff, std::vector<float> time, std::vector<float> gain)
+	{
+		client.reverb.volume = volume;
+		client.reverb.hfcutoff = hfcutoff;
+		client.reverb.time = std::move(time);
+		client.reverb.gain = std::move(gain);
+	}
+
 	void Update() override
 	{
 		std::unique_lock<std::mutex> lock(mutex);
@@ -845,6 +860,7 @@ public:
 
 		transfer.musicvolume = client.musicvolume;
 		transfer.soundvolume = client.soundvolume;
+		transfer.reverb = client.reverb;
 
 		for (int c : channelstopped)
 		{
@@ -869,6 +885,13 @@ public:
 		bool musicupdate = false;
 		float soundvolume = 1.0f;
 		float musicvolume = 1.0f;
+		struct
+		{
+			float volume = 0.0f;
+			int hfcutoff = 44100;
+			std::vector<float> time;
+			std::vector<float> gain;
+		} reverb;
 	} client, transfer;
 	std::vector<int> channelstopped;
 
@@ -942,6 +965,11 @@ void AudioMixerSource::TransferFromClient()
 
 	soundvolume = mixer->transfer.soundvolume;
 	musicvolume = mixer->transfer.musicvolume;
+
+	reverb.volume = mixer->transfer.reverb.volume;
+	reverb.hfcutoff = mixer->transfer.reverb.hfcutoff;
+	reverb.time = mixer->transfer.reverb.time;
+	reverb.gain = mixer->transfer.reverb.gain;
 }
 
 void AudioMixerSource::CopyMusic(float* output, size_t samples)

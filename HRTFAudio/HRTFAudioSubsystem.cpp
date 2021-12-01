@@ -165,6 +165,7 @@ void UHRTFAudioSubsystem::Update(FPointRegion Region, FCoords& Listener)
 	UpdateAmbience();
 	UpdateSounds(Listener);
 	UpdateMusic();
+	UpdateReverb();
 
 	Mixer->SetMusicVolume(MusicVolume / 255.0f * 0.50f);
 	Mixer->SetSoundVolume(SoundVolume / 255.0f * 0.25f);
@@ -297,6 +298,15 @@ void UHRTFAudioSubsystem::UpdateSounds(FCoords& Listener)
 				Doppler = Clamp(1.0f - V / DopplerSpeed, 0.5f, 2.0f);
 			}
 
+			// Lower volume for anything not directly visible
+			if (Playing.Actor)
+			{
+				if (Viewport->Actor->XLevel->Model->FastLineCheck(ViewActor->Location, Playing.Actor->Location) == 0)
+				{
+					SoundVolume *= 0.75f;
+				}
+			}
+
 			// Update the sound.
 			AudioSound* Sound = GetSound(Playing.Sound);
 
@@ -355,6 +365,27 @@ void UHRTFAudioSubsystem::UpdateMusic()
 		}
 
 		Viewport->Actor->Transition = MTRAN_None;
+	}
+	unguard;
+}
+
+void UHRTFAudioSubsystem::UpdateReverb()
+{
+	guard(UHRTFAudioSubsystem::UpdateReverb);
+	AActor* ViewActor = Viewport->Actor->ViewTarget ? Viewport->Actor->ViewTarget : Viewport->Actor;
+	if (ViewActor->Region.Zone && ViewActor->Region.Zone->bReverbZone)
+	{
+		AZoneInfo* zone = ViewActor->Region.Zone;
+		float volume = zone->MasterGain / 255.0f;
+		float hfcutoff = Clamp(zone->CutoffHz, 0, 44100);
+		std::vector<float> time;
+		std::vector<float> gain;
+		for (int i = 0; i < ARRAY_COUNT(zone->Delay); i++)
+		{
+			time.push_back(Clamp(zone->Delay[i] / 500.0f, 0.001f, 0.340f));
+			gain.push_back(Clamp(zone->Gain[i] / 255.0f, 0.001f, 0.999f));
+		}
+		Mixer->SetReverb(volume, hfcutoff, std::move(time), std::move(gain));
 	}
 	unguard;
 }

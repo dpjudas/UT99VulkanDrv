@@ -68,6 +68,7 @@ private:
 	void UpdateAmbience();
 	void UpdateSounds(FCoords& Listener);
 	void UpdateMusic();
+	void UpdateReverb();
 	void StopSound(size_t index);
 
 	UViewport* Viewport = nullptr;
