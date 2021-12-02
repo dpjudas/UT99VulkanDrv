@@ -387,6 +387,10 @@ void UHRTFAudioSubsystem::UpdateReverb()
 		}
 		Mixer->SetReverb(volume, hfcutoff, std::move(time), std::move(gain));
 	}
+	else
+	{
+		Mixer->SetReverb(0.0f, 0.0f, {}, {});
+	}
 	unguard;
 }
 
@@ -433,6 +437,34 @@ void UHRTFAudioSubsystem::PostRender(FSceneNode* Frame)
 					Frame->Viewport->Canvas->WrappedPrintf(Frame->Viewport->Canvas->SmallFont, 0, TEXT("Channel %i:  None"), i);
 				else
 					Frame->Viewport->Canvas->WrappedPrintf(Frame->Viewport->Canvas->SmallFont, 0, TEXT("Channel %i: None"), i);
+			}
+		}
+
+		if (Viewport && Viewport->Actor)
+		{
+			INT Factor = 8;
+
+			AActor* ViewActor = Viewport->Actor->ViewTarget ? Viewport->Actor->ViewTarget : Viewport->Actor;
+			if (ViewActor->Region.Zone && ViewActor->Region.Zone->bReverbZone)
+			{
+				AZoneInfo* zone = ViewActor->Region.Zone;
+				float volume = zone->MasterGain / 255.0f;
+				float hfcutoff = Clamp(zone->CutoffHz, 0, 44100);
+				for (int i = 0; i < ARRAY_COUNT(zone->Delay); i++)
+				{
+					float delay = Clamp(zone->Delay[i] / 500.0f, 0.001f, 0.340f);
+					float gain = Clamp(zone->Gain[i] / 255.0f, 0.001f, 0.999f);
+
+					Frame->Viewport->Canvas->CurX = 10;
+					Frame->Viewport->Canvas->CurY = 24 + Factor * (Channels + 1 + i);
+					Frame->Viewport->Canvas->WrappedPrintf(Frame->Viewport->Canvas->SmallFont, 0, TEXT("Reverb %i: Delay %05.3f Gain %05.2f"), i, delay, gain);
+				}
+			}
+			else
+			{
+				Frame->Viewport->Canvas->CurX = 10;
+				Frame->Viewport->Canvas->CurY = 24 + Factor * (Channels + 1);
+				Frame->Viewport->Canvas->WrappedPrintf(Frame->Viewport->Canvas->SmallFont, 0, TEXT("Not in a reverb zone"));
 			}
 		}
 	}
