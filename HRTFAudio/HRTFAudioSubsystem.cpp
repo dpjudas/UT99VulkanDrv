@@ -263,7 +263,7 @@ void UHRTFAudioSubsystem::UpdateSounds(FCoords& Listener)
 				Playing.Location = Playing.Actor->Location;
 
 			// Update the priority.
-			Playing.Priority = SoundPriority(Viewport, Playing.Location, Playing.Volume, Playing.Radius);
+			Playing.Priority = SoundPriority(Viewport, Playing.Id, Playing.Location, Playing.Volume, Playing.Radius);
 
 			// Compute the spatialization.
 			FVector Location = Playing.Location.TransformPointBy(Listener);
@@ -278,7 +278,7 @@ void UHRTFAudioSubsystem::UpdateSounds(FCoords& Listener)
 			{
 				float t = (Size / CenterDist);
 				PanAngle *= t;
-				Location = (Location.SafeNormal() * t + FVector(0.0f, 0.0f, 10.0f) * (1.0f - t)).SafeNormal();
+				Location = (Location.SafeNormal() * t + FVector(0.0f, 0.0f, 5.0f) * (1.0f - t)).SafeNormal();
 			}
 			else
 			{
@@ -287,7 +287,7 @@ void UHRTFAudioSubsystem::UpdateSounds(FCoords& Listener)
 
 			// Compute panning and volume.
 			float SoundPan = Clamp(PanAngle * 7 / 8 / PI, -1.0f, 1.0f);
-			float Attenuation = Clamp(1.0f - Size / Playing.Radius, 0.0f, 1.0f);
+			float Attenuation = Clamp(1.0f - (Size * Size) / (Playing.Radius * Playing.Radius), 0.0f, 1.0f);
 			float SoundVolume = Clamp(Playing.Volume * Attenuation, 0.0f, 1.0f);
 
 			// Compute doppler shifting (doesn't account for player's velocity).
@@ -305,6 +305,15 @@ void UHRTFAudioSubsystem::UpdateSounds(FCoords& Listener)
 				{
 					SoundVolume *= 0.75f;
 				}
+			}
+
+			// 469 changed SLOT_Interface to behave differently. Simulate what the old ClientPlaySound function did:
+			if ((Playing.Id & 14) == 2 * SLOT_Interface)
+			{
+				SoundVolume = 4.0f;
+				SoundPan = 0.0f;
+				Doppler = 1.0f;
+				Location = FVector(0.0f, 0.0f, 1.0f);
 			}
 
 			// Update the sound.
@@ -590,7 +599,7 @@ UBOOL UHRTFAudioSubsystem::PlaySound(AActor* Actor, INT Id, USound* Sound, FVect
 	if ((Id & 14) == 2 * SLOT_None)
 		Id = 16 * --FreeSlot;
 
-	FLOAT Priority = SoundPriority(Viewport, Location, Volume, Radius);
+	FLOAT Priority = SoundPriority(Viewport, Id, Location, Volume, Radius);
 
 	// If already playing, stop it.
 	size_t Index = PlayingSounds.size();

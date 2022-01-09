@@ -57,8 +57,10 @@ public:
 		return (AudioSound*)Sound->Handle;
 	}
 
-	static float SoundPriority(UViewport* Viewport, FVector Location, FLOAT Volume, FLOAT Radius)
+	static float SoundPriority(UViewport* Viewport, INT Id, FVector Location, FLOAT Volume, FLOAT Radius)
 	{
+		if ((Id & 14) == 2 * SLOT_Interface) // 469 modified how interface priority works
+			return 4.0f;
 		AActor* target = Viewport->Actor->ViewTarget ? Viewport->Actor->ViewTarget : Viewport->Actor;
 		return std::max(Volume * (1.0f - (Location - target->Location).Size() / Radius), 0.0f);
 	}
