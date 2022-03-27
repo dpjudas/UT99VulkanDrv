@@ -278,7 +278,7 @@ void UHRTFAudioSubsystem::UpdateSounds(FCoords& Listener)
 			{
 				float t = (Size / CenterDist);
 				PanAngle *= t;
-				Location = (Location.SafeNormal() * t + FVector(0.0f, 0.0f, 5.0f) * (1.0f - t)).SafeNormal();
+				Location = (Location.SafeNormal() * t + FVector(0.0f, 0.0f, 2.0f) * (1.0f - t)).SafeNormal();
 			}
 			else
 			{
