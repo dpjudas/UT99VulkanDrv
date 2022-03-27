@@ -33,7 +33,6 @@
 //
 
 #define SH_EXPORTING
-#define WINDOWS_IGNORE_PACKING_MISMATCH
 
 #include <cassert>
 

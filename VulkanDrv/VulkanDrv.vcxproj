@@ -99,6 +99,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="..\Thirdparty\volk\volk.h" />
     <ClInclude Include="FileResource.h" />
     <ClInclude Include="halffloat.h" />
     <ClInclude Include="mat.h" />

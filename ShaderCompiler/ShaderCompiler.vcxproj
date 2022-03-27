@@ -38,6 +38,7 @@
     <ClCompile Include="glslang\MachineIndependent\RemoveTree.cpp" />
     <ClCompile Include="glslang\MachineIndependent\Scan.cpp" />
     <ClCompile Include="glslang\MachineIndependent\ShaderLang.cpp" />
+    <ClCompile Include="glslang\MachineIndependent\SpirvIntrinsics.cpp" />
     <ClCompile Include="glslang\MachineIndependent\SymbolTable.cpp" />
     <ClCompile Include="glslang\MachineIndependent\Versions.cpp" />
     <ClCompile Include="glslang\OSDependent\Unix\ossource.cpp">
@@ -60,6 +61,7 @@
   <ItemGroup>
     <ClInclude Include="glslang\Include\arrays.h" />
     <ClInclude Include="glslang\Include\BaseTypes.h" />
+    <ClInclude Include="glslang\Include\build_info.h" />
     <ClInclude Include="glslang\Include\Common.h" />
     <ClInclude Include="glslang\Include\ConstantUnion.h" />
     <ClInclude Include="glslang\Include\InfoSink.h" />
@@ -67,8 +69,8 @@
     <ClInclude Include="glslang\Include\intermediate.h" />
     <ClInclude Include="glslang\Include\PoolAlloc.h" />
     <ClInclude Include="glslang\Include\ResourceLimits.h" />
-    <ClInclude Include="glslang\Include\revision.h" />
     <ClInclude Include="glslang\Include\ShHandle.h" />
+    <ClInclude Include="glslang\Include\SpirvIntrinsics.h" />
     <ClInclude Include="glslang\Include\Types.h" />
     <ClInclude Include="glslang\MachineIndependent\attribute.h" />
     <ClInclude Include="glslang\MachineIndependent\glslang_tab.cpp.h" />
@@ -79,6 +81,7 @@
     <ClInclude Include="glslang\MachineIndependent\localintermediate.h" />
     <ClInclude Include="glslang\MachineIndependent\ParseHelper.h" />
     <ClInclude Include="glslang\MachineIndependent\parseVersions.h" />
+    <ClInclude Include="glslang\MachineIndependent\pch.h" />
     <ClInclude Include="glslang\MachineIndependent\preprocessor\PpContext.h" />
     <ClInclude Include="glslang\MachineIndependent\preprocessor\PpTokens.h" />
     <ClInclude Include="glslang\MachineIndependent\propagateNoContraction.h" />
@@ -102,6 +105,7 @@
     <ClInclude Include="spirv\GlslangToSpv.h" />
     <ClInclude Include="spirv\hex_float.h" />
     <ClInclude Include="spirv\Logger.h" />
+    <ClInclude Include="spirv\NonSemanticDebugPrintf.h" />
     <ClInclude Include="spirv\spirv.hpp" />
     <ClInclude Include="spirv\SpvBuilder.h" />
     <ClInclude Include="spirv\spvIR.h" />
@@ -109,7 +113,7 @@
     <ClInclude Include="spirv\SpvTools.h" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="glslang\Include\revision.template" />
+    <None Include="glslang\MachineIndependent\glslang.m4" />
     <None Include="glslang\MachineIndependent\glslang.y" />
   </ItemGroup>
   <PropertyGroup Label="Globals">

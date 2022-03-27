@@ -32,7 +32,7 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //
 
-#include "ShaderCompiler/OGLCompilersDLL/InitializeDll.h"
+#include "../../../OGLCompilersDLL/InitializeDll.h"
 
 #define STRICT
 #define VC_EXTRALEAN 1

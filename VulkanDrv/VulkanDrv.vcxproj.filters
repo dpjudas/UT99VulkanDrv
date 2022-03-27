@@ -22,6 +22,9 @@
     <ClInclude Include="SceneSamplers.h" />
     <ClInclude Include="VulkanTexture.h" />
     <ClInclude Include="Renderer.h" />
+    <ClInclude Include="..\Thirdparty\volk\volk.h">
+      <Filter>Thirdparty</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="VulkanDrv.cpp" />
