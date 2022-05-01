@@ -104,6 +104,6 @@ public:
 		uint32_t sampler;
 	};
 
-	std::map<QWORD, VulkanTexture*> TextureCache;
+	std::map<QWORD, VulkanTexture*> TextureCache[2];
 	std::map<TexDescriptorKey, VulkanDescriptorSet*> TextureDescriptorSets;
 };

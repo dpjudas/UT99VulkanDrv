@@ -78,6 +78,8 @@ std::string FileResource::readAllText(const std::string& filename)
 					outColor *= texture(texLightmap, texCoord2);
 				}
 
+				outColor *= color;
+
 				if ((flags & 4) != 0) // Detail texture
 				{
 					/* To do: apply fade out: Min( appRound(100.f * (NearZ / Poly->Pts[i]->Point.Z - 1.f)), 255) */
@@ -94,8 +96,11 @@ std::string FileResource::readAllText(const std::string& filename)
 					vec4 fogcolor = texture(texDetail, texCoord4);
 					outColor = fogcolor + outColor * (1.0 - fogcolor.a);
 				}
-
-				outColor *= color;
+				else if ((flags & 16) != 0) // Fog color
+				{
+					vec4 fogcolor = vec4(texCoord2, texCoord3);
+					outColor = fogcolor + outColor * (1.0 - fogcolor.a);
+				}
 
 				#if defined(ALPHATEST)
 				if (outColor.a < 0.5) discard;

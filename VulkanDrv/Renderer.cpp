@@ -266,7 +266,7 @@ VulkanTexture* Renderer::GetTexture(FTextureInfo* texture, DWORD polyFlags)
 	if (!texture)
 		return nullptr;
 
-	VulkanTexture*& tex = TextureCache[texture->CacheID];
+	VulkanTexture*& tex = TextureCache[(polyFlags & PF_Masked) ? 1 : 0][texture->CacheID];
 	if (!tex)
 	{
 		tex = new VulkanTexture(this, *texture, polyFlags);
@@ -327,9 +327,12 @@ void Renderer::ClearTextureCache()
 	SceneDescriptorPool.clear();
 	SceneDescriptorPoolSetsLeft = 0;
 
-	for (auto it : TextureCache)
-		delete it.second;
-	TextureCache.clear();
+	for (auto& cache : TextureCache)
+	{
+		for (auto it : cache)
+			delete it.second;
+		cache.clear();
+	}
 }
 
 void Renderer::CopyScreenToBuffer(int w, int h, void* data, float gamma)

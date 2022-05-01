@@ -390,8 +390,6 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 	cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->SceneRenderPass->getPipeline(Surface.PolyFlags));
 	cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->ScenePipelineLayout, 0, renderer->GetTextureDescriptorSet(Surface.PolyFlags, tex, lightmap, macrotex, detailtex));
 
-	float r = 1.0f, g = 1.0f, b = 1.0f, a = 1.0f;
-
 	for (FSavedPoly* Poly = Facet.Polys; Poly; Poly = Poly->Next)
 	{
 		SceneVertex* vertexdata = &renderer->SceneVertices[renderer->SceneVertexPos];
@@ -415,10 +413,10 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 			vtx.v3 = (v - MacroVPan) * MacroVMult;
 			vtx.u4 = (u - DetailUPan) * DetailUMult;
 			vtx.v4 = (v - DetailVPan) * DetailVMult;
-			vtx.r = r;
-			vtx.g = g;
-			vtx.b = b;
-			vtx.a = a;
+			vtx.r = 1.0f;
+			vtx.g = 1.0f;
+			vtx.b = 1.0f;
+			vtx.a = 1.0f;
 		}
 
 		size_t start = renderer->SceneVertexPos;
@@ -447,23 +445,24 @@ void UVulkanRenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& In
 
 	SceneVertex* vertexdata = &renderer->SceneVertices[renderer->SceneVertexPos];
 
+	int flags = (PolyFlags & (PF_RenderFog | PF_Translucent | PF_Modulated)) == PF_RenderFog ? 16 : 0;
+
 	for (INT i = 0; i < NumPts; i++)
 	{
 		FTransTexture* P = Pts[i];
 		SceneVertex& v = vertexdata[i];
-		v.flags = 0;
+		v.flags = flags;
 		v.x = P->Point.X;
 		v.y = P->Point.Y;
 		v.z = P->Point.Z;
 		v.u = P->U * UMult;
 		v.v = P->V * VMult;
-		v.u2 = 0.0f;
-		v.v2 = 0.0f;
-		v.u3 = 0.0f;
-		v.v3 = 0.0f;
+		v.u2 = P->Fog.X;
+		v.v2 = P->Fog.Y;
+		v.u3 = P->Fog.Z;
+		v.v3 = P->Fog.W;
 		v.u4 = 0.0f;
 		v.v4 = 0.0f;
-
 		if (PolyFlags & PF_Modulated)
 		{
 			v.r = 1.0f;
@@ -648,6 +647,22 @@ void UVulkanRenderDevice::ReadPixels(FColor* Pixels)
 	unguard;
 }
 
+static float easeinout(float n)
+{
+	if (n <= 0.0f)
+		return 0.0f;
+	if (n >= 1.0f)
+		return 1.0f;
+	float q = 0.48f - n / 1.04f;
+	float Q = sqrt(0.1734f + q * q);
+	float x = Q - q;
+	float X = pow(abs(x), 1.0f / 3.0f) * (x < 0.0f ? -1.0f : 1.0f);
+	float y = -Q - q;
+	float Y = pow(abs(y), 1.0f / 3.0f) * (y < 0.0f ? -1.0f : 1.0f);
+	float t = X + Y + 0.5f;
+	return (1.0f - t) * 3.0f * t * t + t * t * t;
+}
+
 void UVulkanRenderDevice::EndFlash()
 {
 	guard(UVulkanRenderDevice::EndFlash);
@@ -657,9 +672,19 @@ void UVulkanRenderDevice::EndFlash()
 		float g = FlashFog.Y;
 		float b = FlashFog.Z;
 		float a = 1.0f - Min(FlashScale.X * 2.0f, 1.0f);
-		r *= a;
-		g *= a;
-		b *= a;
+
+		// Ease the flashes a bit
+		float eased_a = easeinout(a);
+		if (a > 0.00001f && eased_a > 0.00001f)
+		{
+			r = r / a * eased_a;
+			g = g / a * eased_a;
+			b = b / a * eased_a;
+		}
+		else
+		{
+			a = eased_a;
+		}
 
 		auto cmdbuffer = renderer->GetDrawCommands();
 
