@@ -82,24 +82,20 @@ std::string FileResource::readAllText(const std::string& filename)
 
 				if ((flags & 4) != 0) // Detail texture
 				{
-					/* To do: apply fade out: Min( appRound(100.f * (NearZ / Poly->Pts[i]->Point.Z - 1.f)), 255) */
-
-					float detailScale = 1.0;
-					for (int i = 0; i < 3; i++)
-					{
-						outColor *= texture(texDetail, texCoord4 * detailScale) + 0.5;
-						detailScale *= 4.223f;
-					}
+					float fadedistance = 300.0f;
+					float a = clamp(2.0f - (1.0f / gl_FragCoord.w) / fadedistance, 0.0f, 1.0f);
+					vec4 detailColor = texture(texDetail, texCoord4) + 0.5f;
+					outColor.rgb = mix(outColor.rgb, outColor.rgb * detailColor.rgb, a);
 				}
 				else if ((flags & 8) != 0) // Fog map
 				{
 					vec4 fogcolor = texture(texDetail, texCoord4);
-					outColor = fogcolor + outColor * (1.0 - fogcolor.a);
+					outColor.rgb = fogcolor.rgb + outColor.rgb * (1.0 - fogcolor.a);
 				}
 				else if ((flags & 16) != 0) // Fog color
 				{
 					vec4 fogcolor = vec4(texCoord2, texCoord3);
-					outColor = fogcolor + outColor * (1.0 - fogcolor.a);
+					outColor.rgb = fogcolor.rgb + outColor.rgb * (1.0 - fogcolor.a);
 				}
 
 				#if defined(ALPHATEST)

@@ -33,12 +33,6 @@ void UVulkanRenderDevice::StaticConstructor()
 	Multisample = 0;
 	UsePrecache = 0;
 
-	// VolumetricLighting = 1;
-	// ShinySurfaces = 1;
-	// Coronas = 1;
-	// HighDetailActors = 1;
-	// DetailTextures = 1;
-
 	new(GetClass(), TEXT("UseVSync"), RF_Public) UBoolProperty(CPP_PROPERTY(UseVSync), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("UsePrecache"), RF_Public) UBoolProperty(CPP_PROPERTY(UsePrecache), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("FPSLimit"), RF_Public) UIntProperty(CPP_PROPERTY(FPSLimit), TEXT("Display"), CPF_Config);
