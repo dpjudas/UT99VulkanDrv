@@ -63,44 +63,52 @@ std::string FileResource::readAllText(const std::string& filename)
 				return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(c, vec3(0.04045)));
 			}
 
+			vec4 darkClamp(vec4 c)
+			{
+				// Make all textures a little darker as some of the textures (i.e coronas) never become completely black as they should have
+				float cutoff = 3.1/255.0;
+				return vec4(clamp((c.rgb - cutoff) / (1.0 - cutoff), 0.0, 1.0), c.a);
+			}
+
 			void main()
 			{
-				outColor = texture(tex, texCoord);
-				//outColor.rgb = linear(outColor.rgb);
+				outColor = darkClamp(texture(tex, texCoord));
 
 				if ((flags & 2) != 0) // Macro texture
 				{
-					outColor *= texture(texMacro, texCoord3);
+					outColor *= darkClamp(texture(texMacro, texCoord3));
 				}
 
 				if ((flags & 1) != 0) // Lightmap
 				{
-					outColor *= texture(texLightmap, texCoord2);
+					outColor *= darkClamp(texture(texLightmap, texCoord2));
 				}
 
-				outColor *= color;
+				outColor *= darkClamp(color);
 
 				if ((flags & 4) != 0) // Detail texture
 				{
 					float fadedistance = 300.0f;
 					float a = clamp(2.0f - (1.0f / gl_FragCoord.w) / fadedistance, 0.0f, 1.0f);
-					vec4 detailColor = texture(texDetail, texCoord4) + 0.5f;
+					vec4 detailColor = (texture(texDetail, texCoord4) - 0.5) * 0.5 + 1.0;
 					outColor.rgb = mix(outColor.rgb, outColor.rgb * detailColor.rgb, a);
 				}
 				else if ((flags & 8) != 0) // Fog map
 				{
-					vec4 fogcolor = texture(texDetail, texCoord4);
+					vec4 fogcolor = darkClamp(texture(texDetail, texCoord4));
 					outColor.rgb = fogcolor.rgb + outColor.rgb * (1.0 - fogcolor.a);
 				}
 				else if ((flags & 16) != 0) // Fog color
 				{
-					vec4 fogcolor = vec4(texCoord2, texCoord3);
+					vec4 fogcolor = darkClamp(vec4(texCoord2, texCoord3));
 					outColor.rgb = fogcolor.rgb + outColor.rgb * (1.0 - fogcolor.a);
 				}
 
 				#if defined(ALPHATEST)
 				if (outColor.a < 0.5) discard;
 				#endif
+
+				outColor = clamp(outColor, 0.0, 1.0);
 			}
 		)";
 	}
@@ -139,6 +147,11 @@ std::string FileResource::readAllText(const std::string& filename)
 				vec2 texSize = vec2(textureSize(texDither, 0));
 				float threshold = texture(texDither, gl_FragCoord.xy / texSize).r;
 				return floor(c.rgb * 255.0 + threshold) / 255.0;
+			}
+
+			vec3 srgb(vec3 c)
+			{
+				return mix(c * 12.92, 1.055 * pow(c, vec3(1.0/2.4)) - 0.055, step(c, vec3(0.0031308)));
 			}
 
 			void main()
