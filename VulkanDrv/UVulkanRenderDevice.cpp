@@ -288,7 +288,7 @@ void UVulkanRenderDevice::Unlock(UBOOL Blit)
 	if (Blit)
 		CheckFPSLimit();
 
-	renderer->PostprocessModel->present.gamma = 2.5f * Viewport->GetOuterUClient()->Brightness;
+	renderer->PostprocessModel->present.gamma = 1.5f * Viewport->GetOuterUClient()->Brightness * 2.0f;
 
 	renderer->SubmitCommands(Blit ? true : false, Viewport->SizeX, Viewport->SizeY);
 	renderer->SceneVertexPos = 0;

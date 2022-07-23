@@ -72,7 +72,7 @@ std::string FileResource::readAllText(const std::string& filename)
 
 			void main()
 			{
-				outColor = darkClamp(texture(tex, texCoord));
+				outColor = darkClamp(texture(tex, texCoord)) * darkClamp(color);
 
 				if ((flags & 2) != 0) // Macro texture
 				{
@@ -82,9 +82,8 @@ std::string FileResource::readAllText(const std::string& filename)
 				if ((flags & 1) != 0) // Lightmap
 				{
 					outColor *= darkClamp(texture(texLightmap, texCoord2));
+					outColor.rgb *= 2.0;
 				}
-
-				outColor *= darkClamp(color);
 
 				if ((flags & 4) != 0) // Detail texture
 				{

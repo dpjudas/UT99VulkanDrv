@@ -106,6 +106,10 @@ void SceneRenderPass::createPipeline()
 		builder.setLayout(renderer->ScenePipelineLayout);
 		builder.setRenderPass(renderPass.get());
 
+		// Avoid clipping the weapon. The UE1 engine clips the geometry anyway.
+		if (renderer->Device->enabledDeviceFeatures.depthClamp)
+			builder.setDepthClampEnable(true);
+
 		switch (i & 3)
 		{
 		case 0: // PF_Translucent
