@@ -81,8 +81,7 @@ std::string FileResource::readAllText(const std::string& filename)
 
 				if ((flags & 1) != 0) // Lightmap
 				{
-					outColor *= darkClamp(texture(texLightmap, texCoord2));
-					outColor.rgb *= 2.0;
+					outColor.rgb *= clamp(texture(texLightmap, texCoord2).rgb - 0.03, 0.0, 1.0) * 2.0;
 				}
 
 				if ((flags & 4) != 0) // Detail texture

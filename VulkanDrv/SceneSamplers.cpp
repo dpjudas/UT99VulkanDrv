@@ -9,6 +9,7 @@ SceneSamplers::SceneSamplers(VulkanDevice *device)
 	{
 		SamplerBuilder builder;
 		builder.setAnisotropy(8.0);
+		builder.setMipLodBias(-0.5);
 
 		if (i & 1)
 		{

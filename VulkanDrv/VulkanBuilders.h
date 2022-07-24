@@ -78,6 +78,7 @@ public:
 	void setMipmapMode(VkSamplerMipmapMode mode);
 	void setAnisotropy(float maxAnisotropy);
 	void setMaxLod(float value);
+	void setMipLodBias(float value);
 
 	std::unique_ptr<VulkanSampler> create(VulkanDevice *device);
 
@@ -601,6 +602,11 @@ inline void SamplerBuilder::setAnisotropy(float maxAnisotropy)
 inline void SamplerBuilder::setMaxLod(float value)
 {
 	samplerInfo.maxLod = value;
+}
+
+inline void SamplerBuilder::setMipLodBias(float value)
+{
+	samplerInfo.mipLodBias = value;
 }
 
 inline std::unique_ptr<VulkanSampler> SamplerBuilder::create(VulkanDevice *device)
