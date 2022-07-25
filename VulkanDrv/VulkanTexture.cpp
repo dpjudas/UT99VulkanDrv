@@ -6,25 +6,82 @@
 #include "PixelBuffer.h"
 #include "Renderer.h"
 
-VulkanTexture::VulkanTexture(Renderer* renderer, const FTextureInfo& Info, DWORD PolyFlags)
+VulkanTexture::VulkanTexture(Renderer* renderer, const FTextureInfo& Info, bool masked)
 {
-	Update(renderer, Info, PolyFlags);
+	Update(renderer, Info, masked);
 }
 
 VulkanTexture::~VulkanTexture()
 {
 }
 
-void VulkanTexture::Update(Renderer* renderer, const FTextureInfo& Info, DWORD PolyFlags)
+void VulkanTexture::UpdateRect(Renderer* renderer, FTextureInfo& Info, int xx, int yy, int w, int h)
 {
-	UMult = 1.0f / (Info.UScale * Info.USize);
-	VMult = 1.0f / (Info.VScale * Info.VSize);
+	if (Info.Format != TEXF_RGBA7 || Info.NumMips < 1 || xx < 0 || yy < 0 || w <= 0 || h <= 0 || xx + w > Info.Mips[0]->USize || yy + h > Info.Mips[0]->VSize || !Info.Mips[0]->DataPtr)
+		return;
+
+	size_t pixelsSize = w * h * 4;
+	pixelsSize = (pixelsSize + 15) / 16 * 16; // memory alignment
+
+	BufferBuilder builder;
+	builder.setUsage(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+	builder.setSize(pixelsSize);
+	auto stagingbuffer = builder.create(renderer->Device);
+
+	FMipmapBase* Mip = Info.Mips[0];
+
+	auto data = (BYTE*)stagingbuffer->Map(0, pixelsSize);
+
+	auto Ptr = (FColor*)data;
+	for (int y = yy; y < yy + h; y++)
+	{
+		FColor* line = (FColor*)Mip->DataPtr + y * Mip->USize;
+		for (int x = xx; x < xx + w; x++)
+		{
+			const FColor& Src = line[x];
+			Ptr->R = Src.B * 2;
+			Ptr->G = Src.G * 2;
+			Ptr->B = Src.R * 2;
+			Ptr->A = Src.A * 2;
+			Ptr++;
+		}
+	}
+
+	stagingbuffer->Unmap();
+
+	auto cmdbuffer = renderer->GetTransferCommands();
+
+	PipelineBarrier imageTransition0;
+	imageTransition0.addImage(image.get(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_ASPECT_COLOR_BIT, 0, 1);
+	imageTransition0.execute(cmdbuffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+
+	VkBufferImageCopy region = {};
+	region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	region.imageSubresource.mipLevel = 0;
+	region.imageSubresource.layerCount = 1;
+	region.imageOffset = { (int32_t)xx, (int32_t)yy, 0 };
+	region.imageExtent = { (uint32_t)w, (uint32_t)h, 1 };
+	cmdbuffer->copyBufferToImage(stagingbuffer->buffer, image->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+	PipelineBarrier imageTransition1;
+	imageTransition1.addImage(image.get(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT, 0, 1);
+	imageTransition1.execute(cmdbuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+
+	renderer->FrameDeleteList->buffers.push_back(std::move(stagingbuffer));
+
+	Info.bRealtimeChanged = 0;
+}
+
+void VulkanTexture::Update(Renderer* renderer, const FTextureInfo& Info, bool masked)
+{
+	//UMult = 1.0f / (Info.UScale * Info.USize);
+	//VMult = 1.0f / (Info.VScale * Info.VSize);
 
 	UploadedData data;
 	if ((uint32_t)Info.USize > renderer->Device->physicalDevice.properties.limits.maxImageDimension2D || (uint32_t)Info.VSize > renderer->Device->physicalDevice.properties.limits.maxImageDimension2D)
 	{
 		// To do: texture is too big. find the first mipmap level that fits and use that as the base size
-		data = UploadWhite(renderer, Info, PolyFlags);
+		data = UploadWhite(renderer, Info, masked);
 	}
 	else
 	{
@@ -44,10 +101,10 @@ void VulkanTexture::Update(Renderer* renderer, const FTextureInfo& Info, DWORD P
 					NewPal[i].B = Src.B;
 					NewPal[i].A = Src.A;
 				}
-				if (PolyFlags & PF_Masked)
+				if (masked)
 					NewPal[0] = FColor(0, 0, 0, 0);
 
-				data = UploadData(renderer, Info, PolyFlags, VK_FORMAT_R8G8B8A8_UNORM, [](auto mip) { return mip->USize * mip->VSize * 4; },
+				data = UploadData(renderer, Info, masked, VK_FORMAT_R8G8B8A8_UNORM, [](auto mip) { return mip->USize * mip->VSize * 4; },
 					[&](auto mip, auto dst)
 					{
 						auto Ptr = (FColor*)dst;
@@ -65,7 +122,7 @@ void VulkanTexture::Update(Renderer* renderer, const FTextureInfo& Info, DWORD P
 			}
 			break;
 		case TEXF_RGBA7:
-			data = UploadData(renderer, Info, PolyFlags, VK_FORMAT_R8G8B8A8_UNORM, [](auto mip) { return mip->USize * mip->VSize * 4; },
+			data = UploadData(renderer, Info, masked, VK_FORMAT_R8G8B8A8_UNORM, [](auto mip) { return mip->USize * mip->VSize * 4; },
 				[](auto mip, auto dst)
 				{
 					auto Ptr = (FColor*)dst;
@@ -86,21 +143,20 @@ void VulkanTexture::Update(Renderer* renderer, const FTextureInfo& Info, DWORD P
 					}
 				});
 			break;
-		case TEXF_RGB16: data = UploadData(renderer, Info, PolyFlags, VK_FORMAT_R5G6B5_UNORM_PACK16, [](auto mip) { return mip->USize * mip->VSize * 2; }); break;
-		case TEXF_DXT1: data = UploadData(renderer, Info, PolyFlags, VK_FORMAT_BC1_RGBA_UNORM_BLOCK, block4x4_to_64bits); break;
-		case TEXF_RGB8: data = UploadData(renderer, Info, PolyFlags, VK_FORMAT_R8G8B8_UNORM, [](auto mip) { return mip->USize * mip->VSize * 3; }); break;
-		case TEXF_RGBA8: data = UploadData(renderer, Info, PolyFlags, VK_FORMAT_B8G8R8A8_UNORM, [](auto mip) { return mip->USize * mip->VSize * 4; }); break;
-		case 0x06/*TEXF_BC2*/: data = UploadData(renderer, Info, PolyFlags, VK_FORMAT_BC2_UNORM_BLOCK, block4x4_to_128bits); break;
-		case 0x07/*TEXF_BC3*/: data = UploadData(renderer, Info, PolyFlags, VK_FORMAT_BC3_UNORM_BLOCK, block4x4_to_128bits); break;
-		case 0x1a/*TEXF_BC1_PA*/: data = UploadData(renderer, Info, PolyFlags, VK_FORMAT_BC1_RGBA_UNORM_BLOCK, block4x4_to_64bits); break;
-		case 0x0c/*TEXF_BC7*/: data = UploadData(renderer, Info, PolyFlags, VK_FORMAT_BC7_UNORM_BLOCK, block4x4_to_128bits); break;
-		case 0x0d/*TEXF_BC6H_S*/: data = UploadData(renderer, Info, PolyFlags, VK_FORMAT_BC6H_SFLOAT_BLOCK, block4x4_to_128bits); break;
-		case 0x0e/*TEXF_BC6H*/: data = UploadData(renderer, Info, PolyFlags, VK_FORMAT_BC6H_UFLOAT_BLOCK, block4x4_to_128bits); break;
-		default: data = UploadWhite(renderer, Info, PolyFlags); break;
+		case TEXF_R5G6B5: data = UploadData(renderer, Info, masked, VK_FORMAT_R5G6B5_UNORM_PACK16, [](auto mip) { return mip->USize * mip->VSize * 2; }); break;
+		case TEXF_DXT1: data = UploadData(renderer, Info, masked, VK_FORMAT_BC1_RGBA_UNORM_BLOCK, block4x4_to_64bits); break;
+		case TEXF_RGB8: data = UploadData(renderer, Info, masked, VK_FORMAT_R8G8B8_UNORM, [](auto mip) { return mip->USize * mip->VSize * 3; }); break;
+		case TEXF_BGRA8: data = UploadData(renderer, Info, masked, VK_FORMAT_B8G8R8A8_UNORM, [](auto mip) { return mip->USize * mip->VSize * 4; }); break;
+		case TEXF_BC2: data = UploadData(renderer, Info, masked, VK_FORMAT_BC2_UNORM_BLOCK, block4x4_to_128bits); break;
+		case TEXF_BC3: data = UploadData(renderer, Info, masked, VK_FORMAT_BC3_UNORM_BLOCK, block4x4_to_128bits); break;
+		case TEXF_BC1_PA: data = UploadData(renderer, Info, masked, VK_FORMAT_BC1_RGBA_UNORM_BLOCK, block4x4_to_64bits); break;
+		case TEXF_BC7: data = UploadData(renderer, Info, masked, VK_FORMAT_BC7_UNORM_BLOCK, block4x4_to_128bits); break;
+		case TEXF_BC6H_S: data = UploadData(renderer, Info, masked, VK_FORMAT_BC6H_SFLOAT_BLOCK, block4x4_to_128bits); break;
+		case TEXF_BC6H: data = UploadData(renderer, Info, masked, VK_FORMAT_BC6H_UFLOAT_BLOCK, block4x4_to_128bits); break;
+		default: data = UploadWhite(renderer, Info, masked); break;
 		}
 
 		// To do: upgrade to the 469 SDK and implement all the new texture formats (since they are all essentially OpenGL/Vulkan standard formats it is trivial to do)
-		// Important: the TEXF_RGBA8 is renamed to TEXF_BGRA8 in that version of the SDK!
 	}
 
 	if (!image)
@@ -131,7 +187,7 @@ void VulkanTexture::Update(Renderer* renderer, const FTextureInfo& Info, DWORD P
 	renderer->FrameDeleteList->buffers.push_back(std::move(data.stagingbuffer));
 }
 
-UploadedData VulkanTexture::UploadData(Renderer* renderer, const FTextureInfo& Info, DWORD PolyFlags, VkFormat imageFormat, std::function<int(FMipmapBase* mip)> calcMipSize, std::function<void(FMipmapBase* mip, void* dst)> copyMip)
+UploadedData VulkanTexture::UploadData(Renderer* renderer, const FTextureInfo& Info, bool masked, VkFormat imageFormat, std::function<int(FMipmapBase* mip)> calcMipSize, std::function<void(FMipmapBase* mip, void* dst)> copyMip)
 {
 	UploadedData result;
 	result.imageFormat = imageFormat;
@@ -192,7 +248,7 @@ UploadedData VulkanTexture::UploadData(Renderer* renderer, const FTextureInfo& I
 	return result;
 }
 
-UploadedData VulkanTexture::UploadWhite(Renderer* renderer, const FTextureInfo& Info, DWORD PolyFlags)
+UploadedData VulkanTexture::UploadWhite(Renderer* renderer, const FTextureInfo& Info, bool masked)
 {
 	UploadedData result;
 	result.imageFormat = VK_FORMAT_R8G8B8A8_UNORM;

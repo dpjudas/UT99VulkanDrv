@@ -58,7 +58,7 @@
       <SDLCheck>false</SDLCheck>
       <PreprocessorDefinitions>WIN32;_DEBUG;VULKANDRV_EXPORTS;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>false</ConformanceMode>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(SolutionDir)Thirdparty\ut432pubsrc\Core\Inc;$(SolutionDir)Thirdparty\ut432pubsrc\Engine\Inc;$(SolutionDir)Thirdparty;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(SolutionDir)Thirdparty\UnrealTournamentSDK\Core\Inc;$(SolutionDir)Thirdparty\UnrealTournamentSDK\Engine\Inc;$(SolutionDir)Thirdparty;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <TreatWChar_tAsBuiltInType>false</TreatWChar_tAsBuiltInType>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <StructMemberAlignment>4Bytes</StructMemberAlignment>
@@ -81,7 +81,7 @@
       <SDLCheck>false</SDLCheck>
       <PreprocessorDefinitions>WIN32;NDEBUG;VULKANDRV_EXPORTS;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>false</ConformanceMode>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(SolutionDir)Thirdparty\ut432pubsrc\Core\Inc;$(SolutionDir)Thirdparty\ut432pubsrc\Engine\Inc;$(SolutionDir)Thirdparty;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(SolutionDir)Thirdparty\UnrealTournamentSDK\Core\Inc;$(SolutionDir)Thirdparty\UnrealTournamentSDK\Engine\Inc;$(SolutionDir)Thirdparty;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <TreatWChar_tAsBuiltInType>false</TreatWChar_tAsBuiltInType>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <StructMemberAlignment>4Bytes</StructMemberAlignment>
@@ -95,7 +95,7 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableUAC>false</EnableUAC>
-      <AdditionalLibraryDirectories>$(SolutionDir)Thirdparty\ut432pubsrc\Core\Lib;$(SolutionDir)Thirdparty\ut432pubsrc\Engine\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(SolutionDir)Thirdparty\UnrealTournamentSDK\Core\Lib;$(SolutionDir)Thirdparty\UnrealTournamentSDK\Engine\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -111,9 +111,7 @@
     <ClInclude Include="SceneBuffers.h" />
     <ClInclude Include="SceneRenderPass.h" />
     <ClInclude Include="SceneSamplers.h" />
-    <ClInclude Include="UVulkanClient.h" />
     <ClInclude Include="UVulkanRenderDevice.h" />
-    <ClInclude Include="UVulkanViewport.h" />
     <ClInclude Include="vec.h" />
     <ClInclude Include="VulkanBuilders.h" />
     <ClInclude Include="VulkanDevice.h" />
@@ -143,9 +141,7 @@
     <ClCompile Include="SceneBuffers.cpp" />
     <ClCompile Include="SceneRenderPass.cpp" />
     <ClCompile Include="SceneSamplers.cpp" />
-    <ClCompile Include="UVulkanClient.cpp" />
     <ClCompile Include="UVulkanRenderDevice.cpp" />
-    <ClCompile Include="UVulkanViewport.cpp" />
     <ClCompile Include="VulkanBuilders.cpp" />
     <ClCompile Include="VulkanDevice.cpp" />
     <ClCompile Include="VulkanDrv.cpp" />

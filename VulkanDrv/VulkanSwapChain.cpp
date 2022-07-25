@@ -14,6 +14,9 @@ VulkanSwapChain::~VulkanSwapChain()
 
 uint32_t VulkanSwapChain::acquireImage(int width, int height, VulkanSemaphore *semaphore, VulkanFence *fence)
 {
+	if (width <= 0 || height <= 0)
+		return 0xffffffff;
+
 	if (lastSwapWidth != width || lastSwapHeight != height || !swapChain)
 	{
 		recreate(width, height);

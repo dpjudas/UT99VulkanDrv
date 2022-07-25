@@ -27,15 +27,18 @@ void UVulkanRenderDevice::StaticConstructor()
 	SupportsLazyTextures = 0;
 	PrefersDeferredLoad = 0;
 	UseVSync = 1;
-	FPSLimit = 400;
 	VkDeviceIndex = 0;
 	VkDebug = 0;
 	Multisample = 0;
 	UsePrecache = 0;
 
+	UseLightmapAtlas = 0;
+	SupportsUpdateTextureRect = 1;
+	MaxTextureSize = 4096;
+
+	new(GetClass(), TEXT("UseLightmapAtlas"), RF_Public) UBoolProperty(CPP_PROPERTY(UseLightmapAtlas), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("UseVSync"), RF_Public) UBoolProperty(CPP_PROPERTY(UseVSync), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("UsePrecache"), RF_Public) UBoolProperty(CPP_PROPERTY(UsePrecache), TEXT("Display"), CPF_Config);
-	new(GetClass(), TEXT("FPSLimit"), RF_Public) UIntProperty(CPP_PROPERTY(FPSLimit), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("Multisample"), RF_Public) UIntProperty(CPP_PROPERTY(Multisample), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("VkDeviceIndex"), RF_Public) UIntProperty(CPP_PROPERTY(VkDeviceIndex), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("VkDebug"), RF_Public) UBoolProperty(CPP_PROPERTY(VkDebug), TEXT("Display"), CPF_Config);
@@ -285,9 +288,6 @@ void UVulkanRenderDevice::Unlock(UBOOL Blit)
 	int sceneWidth = renderer->SceneBuffers->colorBuffer->width;
 	int sceneHeight = renderer->SceneBuffers->colorBuffer->height;
 
-	if (Blit)
-		CheckFPSLimit();
-
 	renderer->PostprocessModel->present.gamma = 1.5f * Viewport->GetOuterUClient()->Brightness * 2.0f;
 
 	renderer->SubmitCommands(Blit ? true : false, Viewport->SizeX, Viewport->SizeY);
@@ -298,39 +298,39 @@ void UVulkanRenderDevice::Unlock(UBOOL Blit)
 	unguard;
 }
 
-void UVulkanRenderDevice::CheckFPSLimit()
+UBOOL UVulkanRenderDevice::SupportsTextureFormat(ETextureFormat Format)
 {
-	using namespace std::chrono;
-	using namespace std::this_thread;
-
-	if (UseVSync || FPSLimit <= 0)
-		return;
-
-	uint64_t targetWakeTime = fpsLimitTime + 1'000'000 / FPSLimit;
-
-	while (true)
+	static const ETextureFormat knownFormats[] =
 	{
-		fpsLimitTime = duration_cast<microseconds>(steady_clock::now().time_since_epoch()).count();
-		int64_t timeToWait = targetWakeTime - fpsLimitTime;
+		TEXF_P8,
+		TEXF_RGBA7,
+		TEXF_R5G6B5,
+		TEXF_DXT1,
+		TEXF_RGB8,
+		TEXF_BGRA8,
+		TEXF_BC2,
+		TEXF_BC3,
+		TEXF_BC1_PA,
+		TEXF_BC7,
+		TEXF_BC6H_S,
+		TEXF_BC6H
+	};
 
-		if (timeToWait > 1'000'000 || timeToWait <= 0)
-		{
-			break;
-		}
-
-		if (timeToWait <= 2'000)
-		{
-			// We are too close to the deadline. OS sleep is not precise enough to wake us before it elapses.
-			// Yield execution and check time again.
-			sleep_for(nanoseconds(0));
-		}
-		else
-		{
-			// Sleep, but try to wake before deadline.
-			sleep_for(microseconds(timeToWait - 2'000));
-		}
+	for (ETextureFormat known : knownFormats)
+	{
+		if (known == Format)
+			return TRUE;
 	}
+	return FALSE;
 }
+
+void UVulkanRenderDevice::UpdateTextureRect(FTextureInfo& Info, INT U, INT V, INT UL, INT VL)
+{
+	renderer->UpdateTextureRect(&Info, U, V, UL, VL);
+}
+
+static float GetUMult(const FTextureInfo& Info) { return 1.0f / (Info.UScale * Info.USize); }
+static float GetVMult(const FTextureInfo& Info) { return 1.0f / (Info.VScale * Info.VSize); }
 
 void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Surface, FSurfaceFacet& Facet)
 {
@@ -338,11 +338,11 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 
 	VulkanCommandBuffer* cmdbuffer = renderer->GetDrawCommands();
 
-	VulkanTexture* tex = renderer->GetTexture(Surface.Texture, Surface.PolyFlags);
-	VulkanTexture* lightmap = renderer->GetTexture(Surface.LightMap, 0);
-	VulkanTexture* macrotex = renderer->GetTexture(Surface.MacroTexture, 0);
-	VulkanTexture* detailtex = renderer->GetTexture(Surface.DetailTexture, 0);
-	VulkanTexture* fogmap = renderer->GetTexture(Surface.FogMap, 0);
+	VulkanTexture* tex = renderer->GetTexture(Surface.Texture, !!(Surface.PolyFlags & PF_Masked));
+	VulkanTexture* lightmap = renderer->GetTexture(Surface.LightMap, false);
+	VulkanTexture* macrotex = renderer->GetTexture(Surface.MacroTexture, false);
+	VulkanTexture* detailtex = renderer->GetTexture(Surface.DetailTexture, false);
+	VulkanTexture* fogmap = renderer->GetTexture(Surface.FogMap, false);
 
 	if ((Surface.DetailTexture && Surface.FogMap) || (!DetailTextures)) detailtex = nullptr;
 
@@ -351,20 +351,20 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 
 	float UPan = tex ? UDot + Surface.Texture->Pan.X : 0.0f;
 	float VPan = tex ? VDot + Surface.Texture->Pan.Y : 0.0f;
-	float UMult = tex ? tex->UMult : 0.0f;
-	float VMult = tex ? tex->VMult : 0.0f;
+	float UMult = tex ? GetUMult(*Surface.Texture) : 0.0f;
+	float VMult = tex ? GetVMult(*Surface.Texture) : 0.0f;
 	float LMUPan = lightmap ? UDot + Surface.LightMap->Pan.X - 0.5f * Surface.LightMap->UScale : 0.0f;
 	float LMVPan = lightmap ? VDot + Surface.LightMap->Pan.Y - 0.5f * Surface.LightMap->VScale : 0.0f;
-	float LMUMult = lightmap ? lightmap->UMult : 0.0f;
-	float LMVMult = lightmap ? lightmap->VMult : 0.0f;
+	float LMUMult = lightmap ? GetUMult(*Surface.LightMap) : 0.0f;
+	float LMVMult = lightmap ? GetVMult(*Surface.LightMap) : 0.0f;
 	float MacroUPan = macrotex ? UDot + Surface.MacroTexture->Pan.X : 0.0f;
 	float MacroVPan = macrotex ? VDot + Surface.MacroTexture->Pan.Y : 0.0f;
-	float MacroUMult = macrotex ? macrotex->UMult : 0.0f;
-	float MacroVMult = macrotex ? macrotex->VMult : 0.0f;
+	float MacroUMult = macrotex ? GetUMult(*Surface.MacroTexture) : 0.0f;
+	float MacroVMult = macrotex ? GetVMult(*Surface.MacroTexture) : 0.0f;
 	float DetailUPan = detailtex ? UDot + Surface.DetailTexture->Pan.X : 0.0f;
 	float DetailVPan = detailtex ? VDot + Surface.DetailTexture->Pan.Y : 0.0f;
-	float DetailUMult = detailtex ? detailtex->UMult : 0.0f;
-	float DetailVMult = detailtex ? detailtex->VMult : 0.0f;
+	float DetailUMult = detailtex ? GetUMult(*Surface.DetailTexture) : 0.0f;
+	float DetailVMult = detailtex ? GetVMult(*Surface.DetailTexture) : 0.0f;
 
 	uint32_t flags = 0;
 	if (lightmap) flags |= 1;
@@ -377,8 +377,8 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 		detailtex = fogmap;
 		DetailUPan = UDot + Surface.FogMap->Pan.X - 0.5f * Surface.FogMap->UScale;
 		DetailVPan = VDot + Surface.FogMap->Pan.Y - 0.5f * Surface.FogMap->VScale;
-		DetailUMult = fogmap->UMult;
-		DetailVMult = fogmap->VMult;
+		DetailUMult = GetUMult(*Surface.FogMap);
+		DetailVMult = GetVMult(*Surface.FogMap);
 	}
 
 	cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->SceneRenderPass->getPipeline(Surface.PolyFlags));
@@ -431,11 +431,11 @@ void UVulkanRenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& In
 
 	cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->SceneRenderPass->getPipeline(PolyFlags));
 
-	VulkanTexture* tex = renderer->GetTexture(&Info, PolyFlags);
+	VulkanTexture* tex = renderer->GetTexture(&Info, !!(PolyFlags & PF_Masked));
 	cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->ScenePipelineLayout, 0, renderer->GetTextureDescriptorSet(PolyFlags, tex));
 
-	float UMult = tex ? tex->UMult : 0.0f;
-	float VMult = tex ? tex->VMult : 0.0f;
+	float UMult = tex ? GetUMult(Info) : 0.0f;
+	float VMult = tex ? GetVMult(Info) : 0.0f;
 
 	SceneVertex* vertexdata = &renderer->SceneVertices[renderer->SceneVertexPos];
 
@@ -491,13 +491,13 @@ void UVulkanRenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT 
 
 	auto cmdbuffer = renderer->GetDrawCommands();
 
-	VulkanTexture* tex = renderer->GetTexture(&Info, PolyFlags);
+	VulkanTexture* tex = renderer->GetTexture(&Info, !!(PolyFlags & PF_Masked));
 
 	cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->SceneRenderPass->getPipeline(PolyFlags));
 	cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->ScenePipelineLayout, 0, renderer->GetTextureDescriptorSet(PolyFlags, tex, nullptr, nullptr, nullptr, true));
 
-	float UMult = tex ? tex->UMult : 0.0f;
-	float VMult = tex ? tex->VMult : 0.0f;
+	float UMult = tex ? GetUMult(Info) : 0.0f;
+	float VMult = tex ? GetVMult(Info) : 0.0f;
 
 	SceneVertex* v = &renderer->SceneVertices[renderer->SceneVertexPos];
 
@@ -741,7 +741,7 @@ void UVulkanRenderDevice::SetSceneNode(FSceneNode* Frame)
 void UVulkanRenderDevice::PrecacheTexture(FTextureInfo& Info, DWORD PolyFlags)
 {
 	guard(UVulkanRenderDevice::PrecacheTexture);
-	renderer->GetTexture(&Info, PolyFlags);
+	renderer->GetTexture(&Info, !!(PolyFlags & PF_Masked));
 	unguard;
 }
 

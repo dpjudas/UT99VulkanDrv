@@ -2,7 +2,6 @@
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <ClInclude Include="UVulkanRenderDevice.h" />
-    <ClInclude Include="UVulkanClient.h" />
     <ClInclude Include="VulkanBuilders.h" />
     <ClInclude Include="VulkanDevice.h" />
     <ClInclude Include="VulkanObjects.h" />
@@ -16,7 +15,6 @@
     <ClInclude Include="vec.h" />
     <ClInclude Include="Postprocess.h" />
     <ClInclude Include="PixelBuffer.h" />
-    <ClInclude Include="UVulkanViewport.h" />
     <ClInclude Include="FileResource.h" />
     <ClInclude Include="SceneRenderPass.h" />
     <ClInclude Include="SceneSamplers.h" />
@@ -29,7 +27,6 @@
   <ItemGroup>
     <ClCompile Include="VulkanDrv.cpp" />
     <ClCompile Include="UVulkanRenderDevice.cpp" />
-    <ClCompile Include="UVulkanClient.cpp" />
     <ClCompile Include="VulkanBuilders.cpp" />
     <ClCompile Include="VulkanDevice.cpp" />
     <ClCompile Include="VulkanSwapChain.cpp" />
@@ -39,7 +36,6 @@
     <ClCompile Include="halffloat.cpp" />
     <ClCompile Include="mat.cpp" />
     <ClCompile Include="Postprocess.cpp" />
-    <ClCompile Include="UVulkanViewport.cpp" />
     <ClCompile Include="FileResource.cpp" />
     <ClCompile Include="SceneRenderPass.cpp" />
     <ClCompile Include="SceneSamplers.cpp" />

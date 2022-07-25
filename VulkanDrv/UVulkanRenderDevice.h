@@ -2,10 +2,10 @@
 
 #include "Renderer.h"
 
-class UVulkanRenderDevice : public URenderDevice
+class UVulkanRenderDevice : public URenderDeviceOldUnreal469
 {
 public:
-	DECLARE_CLASS(UVulkanRenderDevice, URenderDevice, CLASS_Config, VulkanDrv)
+	DECLARE_CLASS(UVulkanRenderDevice, URenderDeviceOldUnreal469, CLASS_Config, VulkanDrv)
 
 	UVulkanRenderDevice();
 	void StaticConstructor();
@@ -33,11 +33,14 @@ public:
 	void SetSceneNode(FSceneNode* Frame) override;
 	void PrecacheTexture(FTextureInfo& Info, DWORD PolyFlags) override;
 
+	// URenderDeviceOldUnreal469 extensions
+	// void DrawGouraudTriangles(const FSceneNode* Frame, const FTextureInfo& Info, FTransTexture* const Pts, INT NumPts, DWORD PolyFlags, DWORD DataFlags, FSpanBuffer* Span) override;
+	UBOOL SupportsTextureFormat(ETextureFormat Format) override;
+	void UpdateTextureRect(FTextureInfo& Info, INT U, INT V, INT UL, INT VL) override;
+
 	Renderer* renderer = nullptr;
 
 private:
-	void CheckFPSLimit();
-
 	UBOOL UsePrecache;
 	FPlane FlashScale;
 	FPlane FlashFog;
@@ -49,8 +52,6 @@ private:
 
 	// Configuration.
 	BITFIELD UseVSync;
-	INT FPSLimit;
-	uint64_t fpsLimitTime = 0;
 	INT VkDeviceIndex;
 	BITFIELD VkDebug;
 	INT Multisample;

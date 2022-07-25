@@ -35,7 +35,8 @@ public:
 	void CreateSceneVertexBuffer();
 	void CreateNullTexture();
 
-	VulkanTexture* GetTexture(FTextureInfo* texture, DWORD polyFlags);
+	void UpdateTextureRect(FTextureInfo* texture, int x, int y, int w, int h);
+	VulkanTexture* GetTexture(FTextureInfo* texture, bool masked);
 	VulkanDescriptorSet* GetTextureDescriptorSet(DWORD PolyFlags, VulkanTexture* tex, VulkanTexture* lightmap = nullptr, VulkanTexture* macrotex = nullptr, VulkanTexture* detailtex = nullptr, bool clamp = false);
 	void ClearTextureCache();
 
