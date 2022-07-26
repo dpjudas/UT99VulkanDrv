@@ -21,6 +21,14 @@ struct ScenePushConstants
 	mat4 objectToProjection;
 };
 
+struct PresentPushConstants
+{
+	float InvGamma;
+	float padding1;
+	float padding2;
+	float padding3;
+};
+
 class ShaderManager
 {
 public:
@@ -30,6 +38,9 @@ public:
 	std::unique_ptr<VulkanShader> vertexShader;
 	std::unique_ptr<VulkanShader> fragmentShader;
 	std::unique_ptr<VulkanShader> fragmentShaderAlphaTest;
+
+	std::unique_ptr<VulkanShader> ppVertexShader;
+	std::unique_ptr<VulkanShader> ppFragmentPresentShader;
 
 	static std::unique_ptr<VulkanShader> CreateVertexShader(VulkanDevice* device, const std::string& name, const std::string& defines = {});
 	static std::unique_ptr<VulkanShader> CreateFragmentShader(VulkanDevice* device, const std::string& name, const std::string& defines = {});

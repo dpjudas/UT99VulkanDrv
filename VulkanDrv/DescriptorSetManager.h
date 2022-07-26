@@ -14,14 +14,19 @@ public:
 	VulkanDescriptorSet* GetTextureDescriptorSet(DWORD PolyFlags, VulkanTexture* tex, VulkanTexture* lightmap = nullptr, VulkanTexture* macrotex = nullptr, VulkanTexture* detailtex = nullptr, bool clamp = false);
 	void ClearCache();
 
-	VulkanDescriptorSetLayout* SceneDescriptorSetLayout = nullptr;
+	VulkanDescriptorSet* GetPresentDescriptorSet() { return PresentDescriptorSet.get(); }
+
+	std::unique_ptr<VulkanDescriptorSetLayout> SceneDescriptorSetLayout;
+	std::unique_ptr<VulkanDescriptorSetLayout> PresentDescriptorSetLayout;
 
 private:
 	void CreateSceneDescriptorSetLayout();
+	void CreatePresentDescriptorSetLayout();
+	void CreatePresentDescriptorSet();
 
 	UVulkanRenderDevice* renderer = nullptr;
 
-	std::vector<VulkanDescriptorPool*> SceneDescriptorPool;
+	std::vector<std::unique_ptr<VulkanDescriptorPool>> SceneDescriptorPool;
 	int SceneDescriptorPoolSetsLeft = 0;
 
 	struct TexDescriptorKey
@@ -49,5 +54,8 @@ private:
 		uint32_t sampler;
 	};
 
-	std::map<TexDescriptorKey, VulkanDescriptorSet*> TextureDescriptorSets;
+	std::map<TexDescriptorKey, std::unique_ptr<VulkanDescriptorSet>> TextureDescriptorSets;
+
+	std::unique_ptr<VulkanDescriptorPool> PresentDescriptorPool;
+	std::unique_ptr<VulkanDescriptorSet> PresentDescriptorSet;
 };

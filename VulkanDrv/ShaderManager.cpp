@@ -12,6 +12,9 @@ ShaderManager::ShaderManager(UVulkanRenderDevice* renderer) : renderer(renderer)
 	vertexShader = ShaderManager::CreateVertexShader(renderer->Device, "shaders/Scene.vert");
 	fragmentShader = ShaderManager::CreateFragmentShader(renderer->Device, "shaders/Scene.frag");
 	fragmentShaderAlphaTest = ShaderManager::CreateFragmentShader(renderer->Device, "shaders/Scene.frag", "#define ALPHATEST");
+
+	ppVertexShader = ShaderManager::CreateVertexShader(renderer->Device, "shaders/PPStep.vert");
+	ppFragmentPresentShader = ShaderManager::CreateFragmentShader(renderer->Device, "shaders/Present.frag");
 }
 
 ShaderManager::~ShaderManager()

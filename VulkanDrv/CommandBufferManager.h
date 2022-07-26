@@ -3,8 +3,6 @@
 #include "VulkanObjects.h"
 
 class UVulkanRenderDevice;
-class Postprocess;
-class VulkanPostprocess;
 
 class CommandBufferManager
 {
@@ -12,15 +10,10 @@ public:
 	CommandBufferManager(UVulkanRenderDevice* renderer);
 	~CommandBufferManager();
 
-	void BeginFrame();
-	void EndFrame();
-
 	void SubmitCommands(bool present, int presentWidth, int presentHeight);
 	VulkanCommandBuffer* GetTransferCommands();
 	VulkanCommandBuffer* GetDrawCommands();
 	void DeleteFrameObjects();
-
-	void CopyScreenToBuffer(int w, int h, void* data, float gamma);
 
 	struct DeleteList
 	{
@@ -29,22 +22,19 @@ public:
 		std::vector<std::unique_ptr<VulkanBuffer>> buffers;
 		std::vector<std::unique_ptr<VulkanDescriptorSet>> descriptors;
 	};
-	DeleteList* FrameDeleteList = nullptr;
+	std::unique_ptr<DeleteList> FrameDeleteList;
 
-	Postprocess* PostprocessModel = nullptr;
-	VulkanPostprocess* Postprocess = nullptr;
-
-	VulkanSwapChain* SwapChain = nullptr;
+	std::unique_ptr<VulkanSwapChain> SwapChain;
 	uint32_t PresentImageIndex = 0xffffffff;
 
 private:
 	UVulkanRenderDevice* renderer = nullptr;
 
-	VulkanSemaphore* ImageAvailableSemaphore = nullptr;
-	VulkanSemaphore* RenderFinishedSemaphore = nullptr;
-	VulkanSemaphore* TransferSemaphore = nullptr;
-	VulkanFence* RenderFinishedFence = nullptr;
-	VulkanCommandPool* CommandPool = nullptr;
-	VulkanCommandBuffer* DrawCommands = nullptr;
-	VulkanCommandBuffer* TransferCommands = nullptr;
+	std::unique_ptr<VulkanSemaphore> ImageAvailableSemaphore;
+	std::unique_ptr<VulkanSemaphore> RenderFinishedSemaphore;
+	std::unique_ptr<VulkanSemaphore> TransferSemaphore;
+	std::unique_ptr<VulkanFence> RenderFinishedFence;
+	std::unique_ptr<VulkanCommandPool> CommandPool;
+	std::unique_ptr<VulkanCommandBuffer> DrawCommands;
+	std::unique_ptr<VulkanCommandBuffer> TransferCommands;
 };

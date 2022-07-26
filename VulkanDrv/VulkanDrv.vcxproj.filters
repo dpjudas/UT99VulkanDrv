@@ -7,14 +7,11 @@
     <ClInclude Include="VulkanObjects.h" />
     <ClInclude Include="VulkanSwapChain.h" />
     <ClInclude Include="Precomp.h" />
-    <ClInclude Include="VulkanPostprocess.h" />
     <ClInclude Include="SceneTextures.h" />
     <ClInclude Include="halffloat.h" />
     <ClInclude Include="mat.h" />
     <ClInclude Include="quaternion.h" />
     <ClInclude Include="vec.h" />
-    <ClInclude Include="Postprocess.h" />
-    <ClInclude Include="PixelBuffer.h" />
     <ClInclude Include="FileResource.h" />
     <ClInclude Include="VulkanTexture.h" />
     <ClInclude Include="..\Thirdparty\volk\volk.h">
@@ -37,11 +34,9 @@
     <ClCompile Include="VulkanDevice.cpp" />
     <ClCompile Include="VulkanSwapChain.cpp" />
     <ClCompile Include="Precomp.cpp" />
-    <ClCompile Include="VulkanPostprocess.cpp" />
     <ClCompile Include="SceneTextures.cpp" />
     <ClCompile Include="halffloat.cpp" />
     <ClCompile Include="mat.cpp" />
-    <ClCompile Include="Postprocess.cpp" />
     <ClCompile Include="FileResource.cpp" />
     <ClCompile Include="VulkanTexture.cpp" />
     <ClCompile Include="..\Thirdparty\volk\volk.c">

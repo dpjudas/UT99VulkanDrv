@@ -72,8 +72,11 @@ public:
 	BITFIELD VkDebug;
 	INT Multisample;
 
+	void DrawPresentTexture(int x, int y, int width, int height);
+
 private:
 	void ClearTextureCache();
+	void BlitSceneToPostprocess();
 
 	UBOOL UsePrecache;
 	FPlane FlashScale;

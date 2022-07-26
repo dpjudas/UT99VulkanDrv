@@ -18,12 +18,17 @@ public:
 
 	void ClearCache();
 
-	VulkanImage* NullTexture = nullptr;
-	VulkanImageView* NullTextureView = nullptr;
+	std::unique_ptr<VulkanImage> NullTexture;
+	std::unique_ptr<VulkanImageView> NullTextureView;
+
+	std::unique_ptr<VulkanImage> DitherImage;
+	std::unique_ptr<VulkanImageView> DitherImageView;
+
 	std::unique_ptr<SceneTextures> Scene;
 
 private:
 	void CreateNullTexture();
+	void CreateDitherTexture();
 
 	UVulkanRenderDevice* renderer = nullptr;
 	std::map<QWORD, VulkanTexture*> TextureCache[2];

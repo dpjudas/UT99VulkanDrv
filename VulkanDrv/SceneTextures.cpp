@@ -10,12 +10,16 @@ SceneTextures::SceneTextures(UVulkanRenderDevice* renderer, int width, int heigh
 
 	createImage(colorBuffer, colorBufferView, renderer->Device, width, height, sceneSamples, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
 	createImage(depthBuffer, depthBufferView, renderer->Device, width, height, sceneSamples, VK_FORMAT_D32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_IMAGE_ASPECT_DEPTH_BIT);
+	createImage(ppImage, ppImageView, renderer->Device, width, height, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
 
 	colorBuffer->SetDebugName("SceneTextures.colorBuffer");
 	colorBufferView->SetDebugName("SceneTextures.colorBufferView");
 
 	depthBuffer->SetDebugName("SceneTextures.depthBuffer");
 	depthBufferView->SetDebugName("SceneTextures.depthBufferView");
+
+	ppImage->SetDebugName("SceneTextures.ppImage");
+	ppImageView->SetDebugName("SceneTextures.ppImageView");
 
 	PipelineBarrier barrier;
 	barrier.addImage(colorBuffer.get(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0, VK_ACCESS_COLOR_ATTACHMENT_READ_BIT| VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_IMAGE_ASPECT_COLOR_BIT);

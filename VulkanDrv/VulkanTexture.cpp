@@ -3,7 +3,6 @@
 #include "VulkanTexture.h"
 #include "VulkanObjects.h"
 #include "VulkanBuilders.h"
-#include "PixelBuffer.h"
 #include "UVulkanRenderDevice.h"
 
 VulkanTexture::VulkanTexture(UVulkanRenderDevice* renderer, const FTextureInfo& Info, bool masked)

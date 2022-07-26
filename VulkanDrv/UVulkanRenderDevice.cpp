@@ -2,6 +2,8 @@
 #include "Precomp.h"
 #include "UVulkanRenderDevice.h"
 #include "VulkanTexture.h"
+#include "VulkanBuilders.h"
+#include "VulkanSwapChain.h"
 #include "UTF16.h"
 
 IMPLEMENT_CLASS(UVulkanRenderDevice);
@@ -157,11 +159,12 @@ void UVulkanRenderDevice::Flush(UBOOL AllowPrecache)
 
 	if (IsLocked)
 	{
+		RenderPasses->EndScene(Commands->GetDrawCommands());
 		Commands->SubmitCommands(false, 0, 0);
 		ClearTextureCache();
 
 		auto cmdbuffer = Commands->GetDrawCommands();
-		RenderPasses->begin(cmdbuffer);
+		RenderPasses->BeginScene(cmdbuffer);
 
 		VkBuffer vertexBuffers[] = { Buffers->SceneVertexBuffer->buffer };
 		VkDeviceSize offsets[] = { 0 };
@@ -263,18 +266,26 @@ void UVulkanRenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane Sc
 	{
 		if (!Textures->Scene || Textures->Scene->width != Viewport->SizeX || Textures->Scene->height != Viewport->SizeY)
 		{
-			Framebuffers->destroySceneFramebuffer();
+			Framebuffers->DestroySceneFramebuffer();
 			Textures->Scene.reset();
 			Textures->Scene.reset(new SceneTextures(this, Viewport->SizeX, Viewport->SizeY, Multisample));
-			RenderPasses->createRenderPass();
-			RenderPasses->createPipelines();
-			Framebuffers->createSceneFramebuffer();
+			RenderPasses->CreateRenderPass();
+			RenderPasses->CreatePipelines();
+			Framebuffers->CreateSceneFramebuffer();
+
+			auto descriptors = DescriptorSets->GetPresentDescriptorSet();
+			WriteDescriptors write;
+			write.addCombinedImageSampler(descriptors, 0, Textures->Scene->ppImageView.get(), Samplers->ppLinearClamp.get(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+			write.addCombinedImageSampler(descriptors, 1, Textures->DitherImageView.get(), Samplers->ppNearestRepeat.get(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+			write.updateSets(Device);
 		}
 
-		Commands->BeginFrame();
+		PipelineBarrier barrier;
+		barrier.addImage(Textures->Scene->colorBuffer.get(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
+		barrier.execute(Commands->GetDrawCommands(), VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
 
 		auto cmdbuffer = Commands->GetDrawCommands();
-		RenderPasses->begin(cmdbuffer);
+		RenderPasses->BeginScene(cmdbuffer);
 
 		VkBuffer vertexBuffers[] = { Buffers->SceneVertexBuffer->buffer };
 		VkDeviceSize offsets[] = { 0 };
@@ -296,8 +307,10 @@ void UVulkanRenderDevice::Unlock(UBOOL Blit)
 {
 	guard(UVulkanRenderDevice::Unlock);
 
-	RenderPasses->end(Commands->GetDrawCommands());
-	Commands->EndFrame();
+	RenderPasses->EndScene(Commands->GetDrawCommands());
+
+	BlitSceneToPostprocess();
+
 	Commands->SubmitCommands(Blit ? true : false, Viewport->SizeX, Viewport->SizeY);
 	SceneVertexPos = 0;
 
@@ -398,7 +411,7 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 	}
 
 	cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, RenderPasses->getPipeline(Surface.PolyFlags));
-	cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, RenderPasses->ScenePipelineLayout, 0, DescriptorSets->GetTextureDescriptorSet(Surface.PolyFlags, tex, lightmap, macrotex, detailtex));
+	cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, RenderPasses->ScenePipelineLayout.get(), 0, DescriptorSets->GetTextureDescriptorSet(Surface.PolyFlags, tex, lightmap, macrotex, detailtex));
 
 	for (FSavedPoly* Poly = Facet.Polys; Poly; Poly = Poly->Next)
 	{
@@ -448,7 +461,7 @@ void UVulkanRenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& In
 	cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, RenderPasses->getPipeline(PolyFlags));
 
 	VulkanTexture* tex = Textures->GetTexture(&Info, !!(PolyFlags & PF_Masked));
-	cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, RenderPasses->ScenePipelineLayout, 0, DescriptorSets->GetTextureDescriptorSet(PolyFlags, tex));
+	cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, RenderPasses->ScenePipelineLayout.get(), 0, DescriptorSets->GetTextureDescriptorSet(PolyFlags, tex));
 
 	float UMult = tex ? GetUMult(Info) : 0.0f;
 	float VMult = tex ? GetVMult(Info) : 0.0f;
@@ -510,7 +523,7 @@ void UVulkanRenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT 
 	VulkanTexture* tex = Textures->GetTexture(&Info, !!(PolyFlags & PF_Masked));
 
 	cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, RenderPasses->getPipeline(PolyFlags));
-	cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, RenderPasses->ScenePipelineLayout, 0, DescriptorSets->GetTextureDescriptorSet(PolyFlags, tex, nullptr, nullptr, nullptr, true));
+	cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, RenderPasses->ScenePipelineLayout.get(), 0, DescriptorSets->GetTextureDescriptorSet(PolyFlags, tex, nullptr, nullptr, nullptr, true));
 
 	float UMult = tex ? GetUMult(Info) : 0.0f;
 	float VMult = tex ? GetVMult(Info) : 0.0f;
@@ -653,24 +666,93 @@ void UVulkanRenderDevice::GetStats(TCHAR* Result)
 void UVulkanRenderDevice::ReadPixels(FColor* Pixels)
 {
 	guard(UVulkanRenderDevice::GetStats);
-	Commands->CopyScreenToBuffer(Viewport->SizeX, Viewport->SizeY, Pixels, 2.5f * Viewport->GetOuterUClient()->Brightness);
-	unguard;
-}
 
-static float easeinout(float n)
-{
-	if (n <= 0.0f)
-		return 0.0f;
-	if (n >= 1.0f)
-		return 1.0f;
-	float q = 0.48f - n / 1.04f;
-	float Q = sqrt(0.1734f + q * q);
-	float x = Q - q;
-	float X = pow(abs(x), 1.0f / 3.0f) * (x < 0.0f ? -1.0f : 1.0f);
-	float y = -Q - q;
-	float Y = pow(abs(y), 1.0f / 3.0f) * (y < 0.0f ? -1.0f : 1.0f);
-	float t = X + Y + 0.5f;
-	return (1.0f - t) * 3.0f * t * t + t * t * t;
+	int w = Viewport->SizeX;
+	int h = Viewport->SizeY;
+	void* data = Pixels;
+	float gamma = 1.5f * Viewport->GetOuterUClient()->Brightness;
+
+	ImageBuilder imgbuilder;
+	imgbuilder.setFormat(VK_FORMAT_B8G8R8A8_UNORM);
+	imgbuilder.setUsage(VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+	imgbuilder.setSize(w, h);
+	auto dstimage = imgbuilder.create(Device);
+
+	// Convert from rgba16f to bgra8 using the GPU:
+	auto srcimage = Textures->Scene->ppImage.get();
+	auto cmdbuffer = Commands->GetDrawCommands();
+
+	PipelineBarrier barrier0;
+	barrier0.addImage(srcimage, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_READ_BIT);
+	barrier0.addImage(dstimage.get(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, VK_ACCESS_TRANSFER_WRITE_BIT);
+	barrier0.execute(cmdbuffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+
+	VkImageBlit blit = {};
+	blit.srcOffsets[0] = { 0, 0, 0 };
+	blit.srcOffsets[1] = { srcimage->width, srcimage->height, 1 };
+	blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	blit.srcSubresource.mipLevel = 0;
+	blit.srcSubresource.baseArrayLayer = 0;
+	blit.srcSubresource.layerCount = 1;
+	blit.dstOffsets[0] = { 0, 0, 0 };
+	blit.dstOffsets[1] = { dstimage->width, dstimage->height, 1 };
+	blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	blit.dstSubresource.mipLevel = 0;
+	blit.dstSubresource.baseArrayLayer = 0;
+	blit.dstSubresource.layerCount = 1;
+	cmdbuffer->blitImage(
+		srcimage->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+		dstimage->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+		1, &blit, VK_FILTER_NEAREST);
+
+	PipelineBarrier barrier1;
+	barrier1.addImage(srcimage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_SHADER_READ_BIT);
+	barrier1.addImage(dstimage.get(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
+	barrier1.execute(cmdbuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+
+	// Staging buffer for download
+	BufferBuilder bufbuilder;
+	bufbuilder.setSize(w * h * 4);
+	bufbuilder.setUsage(VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_TO_CPU);
+	auto staging = bufbuilder.create(Device);
+
+	// Copy from image to buffer
+	VkBufferImageCopy region = {};
+	region.imageExtent.width = w;
+	region.imageExtent.height = h;
+	region.imageExtent.depth = 1;
+	region.imageSubresource.layerCount = 1;
+	region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	cmdbuffer->copyImageToBuffer(dstimage->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, staging->buffer, 1, &region);
+
+	// Submit command buffers and wait for device to finish the work
+	Commands->SubmitCommands(false, 0, 0);
+
+	uint8_t* pixels = (uint8_t*)staging->Map(0, w * h * 4);
+	if (gamma != 1.0f)
+	{
+		float invGamma = 1.0f / gamma;
+
+		uint8_t gammatable[256];
+		for (int i = 0; i < 256; i++)
+			gammatable[i] = (int)clamp(std::round(std::pow(i / 255.0f, invGamma) * 255.0f), 0.0f, 255.0f);
+
+		uint8_t* dest = (uint8_t*)data;
+		for (int i = 0; i < w * h * 4; i += 4)
+		{
+			dest[i] = gammatable[pixels[i]];
+			dest[i + 1] = gammatable[pixels[i + 1]];
+			dest[i + 2] = gammatable[pixels[i + 2]];
+			dest[i + 3] = pixels[i + 3];
+		}
+	}
+	else
+	{
+		memcpy(data, pixels, w * h * 4);
+	}
+	staging->Unmap();
+
+	unguard;
 }
 
 void UVulkanRenderDevice::EndFlash()
@@ -683,27 +765,14 @@ void UVulkanRenderDevice::EndFlash()
 		float b = FlashFog.Z;
 		float a = 1.0f - Min(FlashScale.X * 2.0f, 1.0f);
 
-		// Ease the flashes a bit
-		float eased_a = easeinout(a);
-		if (a > 0.00001f && eased_a > 0.00001f)
-		{
-			r = r / a * eased_a;
-			g = g / a * eased_a;
-			b = b / a * eased_a;
-		}
-		else
-		{
-			a = eased_a;
-		}
-
 		auto cmdbuffer = Commands->GetDrawCommands();
 
 		ScenePushConstants pushconstants;
 		pushconstants.objectToProjection = mat4::identity();
-		cmdbuffer->pushConstants(RenderPasses->ScenePipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ScenePushConstants), &pushconstants);
+		cmdbuffer->pushConstants(RenderPasses->ScenePipelineLayout.get(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ScenePushConstants), &pushconstants);
 
 		cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, RenderPasses->getEndFlashPipeline());
-		cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, RenderPasses->ScenePipelineLayout, 0, DescriptorSets->GetTextureDescriptorSet(0, nullptr));
+		cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, RenderPasses->ScenePipelineLayout.get(), 0, DescriptorSets->GetTextureDescriptorSet(0, nullptr));
 
 		SceneVertex* v = &Buffers->SceneVertices[SceneVertexPos];
 
@@ -729,7 +798,7 @@ void UVulkanRenderDevice::SetSceneNode(FSceneNode* Frame)
 
 	CurrentFrame = Frame;
 	Aspect = Frame->FY / Frame->FX;
-	RProjZ = (float)appTan(radians(Viewport->Actor->FovAngle) * 0.5f);
+	RProjZ = (float)appTan(radians(Viewport->Actor->FovAngle) * 0.5);
 	RFX2 = 2.0f * RProjZ / Frame->FX;
 	RFY2 = 2.0f * RProjZ * Aspect / Frame->FY;
 
@@ -745,11 +814,10 @@ void UVulkanRenderDevice::SetSceneNode(FSceneNode* Frame)
 	commands->setViewport(0, 1, &viewportdesc);
 
 	mat4 projection = mat4::frustum(-RProjZ, RProjZ, -Aspect * RProjZ, Aspect * RProjZ, 1.0f, 32768.0f, handedness::left, clipzrange::zero_positive_w);
-	mat4 modelview = mat4::scale(1.0f, 1.0f, 1.0f);
 
 	ScenePushConstants pushconstants;
-	pushconstants.objectToProjection = projection * modelview;
-	commands->pushConstants(RenderPasses->ScenePipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ScenePushConstants), &pushconstants);
+	pushconstants.objectToProjection = projection;
+	commands->pushConstants(RenderPasses->ScenePipelineLayout.get(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ScenePushConstants), &pushconstants);
 
 	unguard;
 }
@@ -765,4 +833,103 @@ void UVulkanRenderDevice::ClearTextureCache()
 {
 	DescriptorSets->ClearCache();
 	Textures->ClearCache();
+}
+
+void UVulkanRenderDevice::BlitSceneToPostprocess()
+{
+	auto buffers = Textures->Scene.get();
+	auto cmdbuffer = Commands->GetDrawCommands();
+
+	PipelineBarrier barrier0;
+	barrier0.addImage(
+		buffers->colorBuffer.get(),
+		VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+		VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+		VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+		VK_ACCESS_TRANSFER_READ_BIT);
+	barrier0.addImage(
+		buffers->ppImage.get(),
+		VK_IMAGE_LAYOUT_UNDEFINED,
+		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+		VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+		VK_ACCESS_TRANSFER_WRITE_BIT);
+	barrier0.execute(Commands->GetDrawCommands(), VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+
+	if (buffers->sceneSamples != VK_SAMPLE_COUNT_1_BIT)
+	{
+		VkImageResolve resolve = {};
+		resolve.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		resolve.srcSubresource.layerCount = 1;
+		resolve.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		resolve.dstSubresource.layerCount = 1;
+		resolve.extent = { (uint32_t)buffers->colorBuffer->width, (uint32_t)buffers->colorBuffer->height, 1 };
+		cmdbuffer->resolveImage(
+			buffers->colorBuffer->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+			buffers->ppImage->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			1, &resolve);
+	}
+	else
+	{
+		auto colorBuffer = buffers->colorBuffer.get();
+		VkImageBlit blit = {};
+		blit.srcOffsets[0] = { 0, 0, 0 };
+		blit.srcOffsets[1] = { colorBuffer->width, colorBuffer->height, 1 };
+		blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		blit.srcSubresource.layerCount = 1;
+		blit.dstOffsets[0] = { 0, 0, 0 };
+		blit.dstOffsets[1] = { colorBuffer->width, colorBuffer->height, 1 };
+		blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		blit.dstSubresource.layerCount = 1;
+		cmdbuffer->blitImage(
+			colorBuffer->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+			buffers->ppImage->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			1, &blit, VK_FILTER_NEAREST);
+	}
+
+	PipelineBarrier barrier1;
+	barrier1.addImage(
+		buffers->ppImage.get(),
+		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+		VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+		VK_ACCESS_TRANSFER_WRITE_BIT,
+		VK_ACCESS_SHADER_READ_BIT);
+	barrier1.execute(Commands->GetDrawCommands(), VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+}
+
+void UVulkanRenderDevice::DrawPresentTexture(int x, int y, int width, int height)
+{
+	if (Commands->SwapChain->newSwapChain)
+	{
+		Commands->SwapChain->newSwapChain = false;
+		RenderPasses->CreatePresentRenderPass();
+		RenderPasses->CreatePresentPipeline();
+	}
+
+	float gamma = (1.5f * Viewport->GetOuterUClient()->Brightness * 2.0f);
+
+	PresentPushConstants pushconstants;
+	pushconstants.InvGamma = 1.0f / gamma;
+
+	VkViewport viewport = {};
+	viewport.x = x;
+	viewport.y = y;
+	viewport.width = width;
+	viewport.height = height;
+	viewport.minDepth = 0.0f;
+	viewport.maxDepth = 1.0f;
+
+	VkRect2D scissor = {};
+	scissor.extent.width = width;
+	scissor.extent.height = height;
+
+	auto cmdbuffer = Commands->GetDrawCommands();
+
+	RenderPasses->BeginPresent(cmdbuffer);
+	cmdbuffer->setViewport(0, 1, &viewport);
+	cmdbuffer->setScissor(0, 1, &scissor);
+	cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, RenderPasses->PresentPipeline.get());
+	cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, RenderPasses->PresentPipelineLayout.get(), 0, DescriptorSets->GetPresentDescriptorSet());
+	cmdbuffer->pushConstants(RenderPasses->PresentPipelineLayout.get(), VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PresentPushConstants), &pushconstants);
+	cmdbuffer->draw(6, 1, 0, 0);
+	RenderPasses->EndPresent(cmdbuffer);
 }

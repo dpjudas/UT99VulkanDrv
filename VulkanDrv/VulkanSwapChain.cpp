@@ -100,6 +100,8 @@ void VulkanSwapChain::queuePresent(uint32_t imageIndex, VulkanSemaphore *semapho
 
 void VulkanSwapChain::recreate(int width, int height)
 {
+	newSwapChain = true;
+
 	releaseViews();
 	swapChainImages.clear();
 

@@ -135,6 +135,14 @@ std::string FileResource::readAllText(const std::string& filename)
 	else if (filename == "shaders/Present.frag")
 	{
 		return R"(
+			layout(push_constant) uniform PresentPushConstants
+			{
+				float InvGamma;
+				float padding1;
+				float padding2;
+				float padding3;
+			};
+
 			layout(binding = 0) uniform sampler2D texSampler;
 			layout(binding = 1) uniform sampler2D texDither;
 			layout(location = 0) in vec2 texCoord;

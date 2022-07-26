@@ -8,11 +8,12 @@
 DescriptorSetManager::DescriptorSetManager(UVulkanRenderDevice* renderer) : renderer(renderer)
 {
 	CreateSceneDescriptorSetLayout();
+	CreatePresentDescriptorSetLayout();
+	CreatePresentDescriptorSet();
 }
 
 DescriptorSetManager::~DescriptorSetManager()
 {
-	delete SceneDescriptorSetLayout; SceneDescriptorSetLayout = nullptr;
 }
 
 VulkanDescriptorSet* DescriptorSetManager::GetTextureDescriptorSet(DWORD PolyFlags, VulkanTexture* tex, VulkanTexture* lightmap, VulkanTexture* macrotex, VulkanTexture* detailtex, bool clamp)
@@ -29,11 +30,11 @@ VulkanDescriptorSet* DescriptorSetManager::GetTextureDescriptorSet(DWORD PolyFla
 			DescriptorPoolBuilder builder;
 			builder.addPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 * 4);
 			builder.setMaxSets(1000);
-			SceneDescriptorPool.push_back(builder.create(renderer->Device).release());
+			SceneDescriptorPool.push_back(builder.create(renderer->Device));
 			SceneDescriptorPoolSetsLeft = 1000;
 		}
 
-		descriptorSet = SceneDescriptorPool.back()->allocate(SceneDescriptorSetLayout).release();
+		descriptorSet = SceneDescriptorPool.back()->allocate(SceneDescriptorSetLayout.get());
 		SceneDescriptorPoolSetsLeft--;
 
 		WriteDescriptors writes;
@@ -43,23 +44,19 @@ VulkanDescriptorSet* DescriptorSetManager::GetTextureDescriptorSet(DWORD PolyFla
 			VulkanSampler* sampler = (i == 0) ? renderer->Samplers->samplers[samplermode].get() : renderer->Samplers->samplers[0].get();
 
 			if (texture)
-				writes.addCombinedImageSampler(descriptorSet, i++, texture->imageView.get(), sampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+				writes.addCombinedImageSampler(descriptorSet.get(), i++, texture->imageView.get(), sampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 			else
-				writes.addCombinedImageSampler(descriptorSet, i++, renderer->Textures->NullTextureView, sampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+				writes.addCombinedImageSampler(descriptorSet.get(), i++, renderer->Textures->NullTextureView.get(), sampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 		}
 		writes.updateSets(renderer->Device);
 	}
-	return descriptorSet;
+	return descriptorSet.get();
 }
 
 void DescriptorSetManager::ClearCache()
 {
-	for (auto it : TextureDescriptorSets)
-		delete it.second;
 	TextureDescriptorSets.clear();
 
-	for (auto pool : SceneDescriptorPool)
-		delete pool;
 	SceneDescriptorPool.clear();
 	SceneDescriptorPoolSetsLeft = 0;
 }
@@ -67,10 +64,26 @@ void DescriptorSetManager::ClearCache()
 void DescriptorSetManager::CreateSceneDescriptorSetLayout()
 {
 	DescriptorSetLayoutBuilder builder;
-	//builder.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 	builder.addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
 	builder.addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
 	builder.addBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
 	builder.addBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
-	SceneDescriptorSetLayout = builder.create(renderer->Device).release();
+	SceneDescriptorSetLayout = builder.create(renderer->Device);
+}
+
+void DescriptorSetManager::CreatePresentDescriptorSetLayout()
+{
+	DescriptorSetLayoutBuilder builder;
+	builder.addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
+	builder.addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
+	PresentDescriptorSetLayout = builder.create(renderer->Device);
+}
+
+void DescriptorSetManager::CreatePresentDescriptorSet()
+{
+	DescriptorPoolBuilder builder;
+	builder.addPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2);
+	builder.setMaxSets(1);
+	PresentDescriptorPool = builder.create(renderer->Device);
+	PresentDescriptorSet = PresentDescriptorPool->allocate(PresentDescriptorSetLayout.get());
 }
