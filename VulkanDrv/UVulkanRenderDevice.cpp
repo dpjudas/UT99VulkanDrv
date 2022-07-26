@@ -160,6 +160,7 @@ void UVulkanRenderDevice::Flush(UBOOL AllowPrecache)
 	if (IsLocked)
 	{
 		RenderPasses->EndScene(Commands->GetDrawCommands());
+		LastPipeline = nullptr;
 		Commands->SubmitCommands(false, 0, 0);
 		ClearTextureCache();
 
@@ -169,6 +170,7 @@ void UVulkanRenderDevice::Flush(UBOOL AllowPrecache)
 		VkBuffer vertexBuffers[] = { Buffers->SceneVertexBuffer->buffer };
 		VkDeviceSize offsets[] = { 0 };
 		cmdbuffer->bindVertexBuffers(0, 1, vertexBuffers, offsets);
+		cmdbuffer->bindIndexBuffer(Buffers->SceneIndexBuffer->buffer, 0, VK_INDEX_TYPE_UINT32);
 	}
 	else
 	{
@@ -290,6 +292,7 @@ void UVulkanRenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane Sc
 		VkBuffer vertexBuffers[] = { Buffers->SceneVertexBuffer->buffer };
 		VkDeviceSize offsets[] = { 0 };
 		cmdbuffer->bindVertexBuffers(0, 1, vertexBuffers, offsets);
+		cmdbuffer->bindIndexBuffer(Buffers->SceneIndexBuffer->buffer, 0, VK_INDEX_TYPE_UINT32);
 
 		IsLocked = true;
 	}
@@ -308,11 +311,13 @@ void UVulkanRenderDevice::Unlock(UBOOL Blit)
 	guard(UVulkanRenderDevice::Unlock);
 
 	RenderPasses->EndScene(Commands->GetDrawCommands());
+	LastPipeline = nullptr;
 
 	BlitSceneToPostprocess();
 
 	Commands->SubmitCommands(Blit ? true : false, Viewport->SizeX, Viewport->SizeY);
 	SceneVertexPos = 0;
+	SceneIndexPos = 0;
 
 	IsLocked = false;
 
@@ -410,44 +415,69 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 		DetailVMult = GetVMult(*Surface.FogMap);
 	}
 
-	cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, RenderPasses->getPipeline(Surface.PolyFlags));
+	VulkanPipeline* pipeline = RenderPasses->getPipeline(Surface.PolyFlags);
+	if (pipeline != LastPipeline)
+	{
+		LastPipeline = pipeline;
+		cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+	}
+
 	cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, RenderPasses->ScenePipelineLayout.get(), 0, DescriptorSets->GetTextureDescriptorSet(Surface.PolyFlags, tex, lightmap, macrotex, detailtex));
+
+	uint32_t vpos = SceneVertexPos;
+	uint32_t ipos = SceneIndexPos;
+
+	SceneVertex* vptr = Buffers->SceneVertices + vpos;
+	uint32_t* iptr = Buffers->SceneIndexes + ipos;
+
+	uint32_t istart = ipos;
+	uint32_t icount = 0;
 
 	for (FSavedPoly* Poly = Facet.Polys; Poly; Poly = Poly->Next)
 	{
-		SceneVertex* vertexdata = &Buffers->SceneVertices[SceneVertexPos];
+		auto pts = Poly->Pts;
+		uint32_t vcount = Poly->NumPts;
 
-		for (INT i = 0; i < Poly->NumPts; i++)
+		for (uint32_t i = 0; i < vcount; i++)
 		{
-			SceneVertex& vtx = vertexdata[i];
+			FVector point = pts[i]->Point;
+			FLOAT u = Facet.MapCoords.XAxis | point;
+			FLOAT v = Facet.MapCoords.YAxis | point;
 
-			FLOAT u = Facet.MapCoords.XAxis | Poly->Pts[i]->Point;
-			FLOAT v = Facet.MapCoords.YAxis | Poly->Pts[i]->Point;
-
-			vtx.flags = flags;
-			vtx.x = Poly->Pts[i]->Point.X;
-			vtx.y = Poly->Pts[i]->Point.Y;
-			vtx.z = Poly->Pts[i]->Point.Z;
-			vtx.u = (u - UPan) * UMult;
-			vtx.v = (v - VPan) * VMult;
-			vtx.u2 = (u - LMUPan) * LMUMult;
-			vtx.v2 = (v - LMVPan) * LMVMult;
-			vtx.u3 = (u - MacroUPan) * MacroUMult;
-			vtx.v3 = (v - MacroVPan) * MacroVMult;
-			vtx.u4 = (u - DetailUPan) * DetailUMult;
-			vtx.v4 = (v - DetailVPan) * DetailVMult;
-			vtx.r = 1.0f;
-			vtx.g = 1.0f;
-			vtx.b = 1.0f;
-			vtx.a = 1.0f;
+			vptr->flags = flags;
+			vptr->x = point.X;
+			vptr->y = point.Y;
+			vptr->z = point.Z;
+			vptr->u = (u - UPan) * UMult;
+			vptr->v = (v - VPan) * VMult;
+			vptr->u2 = (u - LMUPan) * LMUMult;
+			vptr->v2 = (v - LMVPan) * LMVMult;
+			vptr->u3 = (u - MacroUPan) * MacroUMult;
+			vptr->v3 = (v - MacroVPan) * MacroVMult;
+			vptr->u4 = (u - DetailUPan) * DetailUMult;
+			vptr->v4 = (v - DetailVPan) * DetailVMult;
+			vptr->r = 1.0f;
+			vptr->g = 1.0f;
+			vptr->b = 1.0f;
+			vptr->a = 1.0f;
+			vptr++;
 		}
 
-		size_t start = SceneVertexPos;
-		size_t count = Poly->NumPts;
-		SceneVertexPos += count;
+		for (uint32_t i = vpos + 2; i < vpos + vcount; i++)
+		{
+			*(iptr++) = vpos;
+			*(iptr++) = i - 1;
+			*(iptr++) = i;
+		}
 
-		cmdbuffer->draw(count, 1, start, 0);
+		vpos += vcount;
+		icount += (vcount - 2) * 3;
 	}
+
+	cmdbuffer->drawIndexed(icount, 1, istart, 0, 0);
+
+	SceneVertexPos = vpos;
+	SceneIndexPos = ipos + icount;
 
 	unguard;
 }
@@ -458,7 +488,12 @@ void UVulkanRenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& In
 
 	auto cmdbuffer = Commands->GetDrawCommands();
 
-	cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, RenderPasses->getPipeline(PolyFlags));
+	VulkanPipeline* pipeline = RenderPasses->getPipeline(PolyFlags);
+	if (pipeline != LastPipeline)
+	{
+		LastPipeline = pipeline;
+		cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+	}
 
 	VulkanTexture* tex = Textures->GetTexture(&Info, !!(PolyFlags & PF_Masked));
 	cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, RenderPasses->ScenePipelineLayout.get(), 0, DescriptorSets->GetTextureDescriptorSet(PolyFlags, tex));
@@ -502,11 +537,23 @@ void UVulkanRenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& In
 		}
 	}
 
-	size_t start = SceneVertexPos;
-	size_t count = NumPts;
-	SceneVertexPos += count;
+	size_t vstart = SceneVertexPos;
+	size_t vcount = NumPts;
+	size_t istart = SceneIndexPos;
+	size_t icount = (vcount - 2) * 3;
 
-	cmdbuffer->draw(count, 1, start, 0);
+	uint32_t* iptr = Buffers->SceneIndexes + istart;
+	for (uint32_t i = vstart + 2; i < vstart + vcount; i++)
+	{
+		*(iptr++) = vstart;
+		*(iptr++) = i - 1;
+		*(iptr++) = i;
+	}
+
+	SceneVertexPos += vcount;
+	SceneIndexPos += icount;
+
+	cmdbuffer->drawIndexed(icount, 1, istart, 0, 0);
 
 	unguard;
 }
@@ -522,7 +569,13 @@ void UVulkanRenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT 
 
 	VulkanTexture* tex = Textures->GetTexture(&Info, !!(PolyFlags & PF_Masked));
 
-	cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, RenderPasses->getPipeline(PolyFlags));
+	VulkanPipeline* pipeline = RenderPasses->getPipeline(PolyFlags);
+	if (pipeline != LastPipeline)
+	{
+		LastPipeline = pipeline;
+		cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+	}
+
 	cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, RenderPasses->ScenePipelineLayout.get(), 0, DescriptorSets->GetTextureDescriptorSet(PolyFlags, tex, nullptr, nullptr, nullptr, true));
 
 	float UMult = tex ? GetUMult(Info) : 0.0f;
@@ -550,10 +603,23 @@ void UVulkanRenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT 
 	v[2] = { 0, RFX2 * Z * (X + XL - Frame->FX2), RFY2 * Z * (Y + YL - Frame->FY2), Z, (U + UL) * UMult, (V + VL) * VMult, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, r, g, b, a };
 	v[3] = { 0, RFX2 * Z * (X - Frame->FX2),      RFY2 * Z * (Y + YL - Frame->FY2), Z, U * UMult,        (V + VL) * VMult, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, r, g, b, a };
 
-	size_t start = SceneVertexPos;
-	size_t count = 4;
-	SceneVertexPos += count;
-	cmdbuffer->draw(count, 1, start, 0);
+	size_t vstart = SceneVertexPos;
+	size_t vcount = 4;
+	size_t istart = SceneIndexPos;
+	size_t icount = (vcount - 2) * 3;
+
+	uint32_t* iptr = Buffers->SceneIndexes + istart;
+	for (uint32_t i = vstart + 2; i < vstart + vcount; i++)
+	{
+		*(iptr++) = vstart;
+		*(iptr++) = i - 1;
+		*(iptr++) = i;
+	}
+
+	SceneVertexPos += vcount;
+	SceneIndexPos += icount;
+
+	cmdbuffer->drawIndexed(icount, 1, istart, 0, 0);
 
 	unguard;
 }
@@ -781,10 +847,23 @@ void UVulkanRenderDevice::EndFlash()
 		v[2] = { 0,  1.0f,  1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, r, g, b, a };
 		v[3] = { 0, -1.0f,  1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, r, g, b, a };
 
-		size_t start = SceneVertexPos;
-		size_t count = 4;
-		SceneVertexPos += count;
-		cmdbuffer->draw(count, 1, start, 0);
+		size_t vstart = SceneVertexPos;
+		size_t vcount = 4;
+		size_t istart = SceneIndexPos;
+		size_t icount = (vcount - 2) * 3;
+
+		uint32_t* iptr = Buffers->SceneIndexes + istart;
+		for (uint32_t i = vstart + 2; i < vstart + vcount; i++)
+		{
+			*(iptr++) = vstart;
+			*(iptr++) = i - 1;
+			*(iptr++) = i;
+		}
+
+		SceneVertexPos += vcount;
+		SceneIndexPos += icount;
+
+		cmdbuffer->drawIndexed(icount, 1, istart, 0, 0);
 
 		if (CurrentFrame)
 			SetSceneNode(CurrentFrame);

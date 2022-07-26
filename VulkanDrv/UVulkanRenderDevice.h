@@ -90,4 +90,6 @@ private:
 	bool IsLocked = false;
 
 	size_t SceneVertexPos = 0;
+	size_t SceneIndexPos = 0;
+	VulkanPipeline* LastPipeline = nullptr;
 };

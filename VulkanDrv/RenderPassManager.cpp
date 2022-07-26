@@ -117,7 +117,7 @@ void RenderPassManager::CreatePipelines()
 		builder.addVertexShader(renderer->Shaders->vertexShader.get());
 		builder.setViewport(0.0f, 0.0f, (float)renderer->Textures->Scene->width, (float)renderer->Textures->Scene->height);
 		builder.setScissor(0, 0, renderer->Textures->Scene->width, renderer->Textures->Scene->height);
-		builder.setTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN);
+		builder.setTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 		builder.setCull(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
 		builder.addVertexBufferBinding(0, sizeof(SceneVertex));
 		builder.addVertexAttribute(0, 0, VK_FORMAT_R32_UINT, offsetof(SceneVertex, flags));

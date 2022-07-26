@@ -12,11 +12,15 @@ public:
 	BufferManager(UVulkanRenderDevice* renderer);
 	~BufferManager();
 
-	VulkanBuffer* SceneVertexBuffer = nullptr;
+	std::unique_ptr<VulkanBuffer> SceneVertexBuffer;
+	std::unique_ptr<VulkanBuffer> SceneIndexBuffer;
+
 	SceneVertex* SceneVertices = nullptr;
+	uint32_t* SceneIndexes = nullptr;
 
 private:
 	void CreateSceneVertexBuffer();
+	void CreateSceneIndexBuffer();
 
 	UVulkanRenderDevice* renderer = nullptr;
 };
