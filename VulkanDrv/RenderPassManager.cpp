@@ -1,43 +1,44 @@
 
 #include "Precomp.h"
-#include "SceneRenderPass.h"
-#include "SceneBuffers.h"
-#include "VulkanObjects.h"
+#include "RenderPassManager.h"
+#include "UVulkanRenderDevice.h"
 #include "VulkanBuilders.h"
-#include "Renderer.h"
 
-SceneRenderPass::SceneRenderPass(Renderer* renderer) : renderer(renderer)
+RenderPassManager::RenderPassManager(UVulkanRenderDevice* renderer) : renderer(renderer)
 {
-	vertexShader = Renderer::CreateVertexShader(renderer->Device, "shaders/Scene.vert");
-	fragmentShader = Renderer::CreateFragmentShader(renderer->Device, "shaders/Scene.frag");
-	fragmentShaderAlphaTest = Renderer::CreateFragmentShader(renderer->Device, "shaders/Scene.frag", "#define ALPHATEST");
-
-	createRenderPass();
-	createPipeline();
-	createFramebuffer();
+	CreateScenePipelineLayout();
 }
 
-SceneRenderPass::~SceneRenderPass()
+RenderPassManager::~RenderPassManager()
 {
+	delete ScenePipelineLayout; ScenePipelineLayout = nullptr;
 }
 
-void SceneRenderPass::begin(VulkanCommandBuffer *cmdbuffer)
+void RenderPassManager::CreateScenePipelineLayout()
+{
+	PipelineLayoutBuilder builder;
+	builder.addSetLayout(renderer->DescriptorSets->SceneDescriptorSetLayout);
+	builder.addPushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ScenePushConstants));
+	ScenePipelineLayout = builder.create(renderer->Device).release();
+}
+
+void RenderPassManager::begin(VulkanCommandBuffer* cmdbuffer)
 {
 	RenderPassBegin renderPassInfo;
 	renderPassInfo.setRenderPass(renderPass.get());
-	renderPassInfo.setFramebuffer(sceneFramebuffer.get());
-	renderPassInfo.setRenderArea(0, 0, renderer->SceneBuffers->width, renderer->SceneBuffers->height);
+	renderPassInfo.setFramebuffer(renderer->Framebuffers->sceneFramebuffer.get());
+	renderPassInfo.setRenderArea(0, 0, renderer->Textures->Scene->width, renderer->Textures->Scene->height);
 	renderPassInfo.addClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	renderPassInfo.addClearDepthStencil(1.0f, 0);
 	cmdbuffer->beginRenderPass(renderPassInfo);
 }
 
-void SceneRenderPass::end(VulkanCommandBuffer *cmdbuffer)
+void RenderPassManager::end(VulkanCommandBuffer* cmdbuffer)
 {
 	cmdbuffer->endRenderPass();
 }
 
-VulkanPipeline* SceneRenderPass::getPipeline(DWORD PolyFlags)
+VulkanPipeline* RenderPassManager::getPipeline(DWORD PolyFlags)
 {
 	// Adjust PolyFlags according to Unreal's precedence rules.
 	if (!(PolyFlags & (PF_Translucent | PF_Modulated)))
@@ -79,19 +80,19 @@ VulkanPipeline* SceneRenderPass::getPipeline(DWORD PolyFlags)
 	return pipeline[index].get();
 }
 
-VulkanPipeline* SceneRenderPass::getEndFlashPipeline()
+VulkanPipeline* RenderPassManager::getEndFlashPipeline()
 {
 	return pipeline[2].get();
 }
 
-void SceneRenderPass::createPipeline()
+void RenderPassManager::createPipelines()
 {
 	for (int i = 0; i < 32; i++)
 	{
 		GraphicsPipelineBuilder builder;
-		builder.addVertexShader(vertexShader.get());
-		builder.setViewport(0.0f, 0.0f, (float)renderer->SceneBuffers->width, (float)renderer->SceneBuffers->height);
-		builder.setScissor(0, 0, renderer->SceneBuffers->width, renderer->SceneBuffers->height);
+		builder.addVertexShader(renderer->Shaders->vertexShader.get());
+		builder.setViewport(0.0f, 0.0f, (float)renderer->Textures->Scene->width, (float)renderer->Textures->Scene->height);
+		builder.setScissor(0, 0, renderer->Textures->Scene->width, renderer->Textures->Scene->height);
 		builder.setTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN);
 		builder.setCull(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
 		builder.addVertexBufferBinding(0, sizeof(SceneVertex));
@@ -103,7 +104,7 @@ void SceneRenderPass::createPipeline()
 		builder.addVertexAttribute(5, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, u4));
 		builder.addVertexAttribute(6, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(SceneVertex, r));
 		builder.addDynamicState(VK_DYNAMIC_STATE_VIEWPORT);
-		builder.setLayout(renderer->ScenePipelineLayout);
+		builder.setLayout(renderer->RenderPasses->ScenePipelineLayout);
 		builder.setRenderPass(renderPass.get());
 
 		// Avoid clipping the weapon. The UE1 engine clips the geometry anyway.
@@ -141,26 +142,26 @@ void SceneRenderPass::createPipeline()
 		}
 
 		if (i & 16) // PF_Masked
-			builder.addFragmentShader(fragmentShaderAlphaTest.get());
+			builder.addFragmentShader(renderer->Shaders->fragmentShaderAlphaTest.get());
 		else
-			builder.addFragmentShader(fragmentShader.get());
+			builder.addFragmentShader(renderer->Shaders->fragmentShader.get());
 
 		builder.setSubpassColorAttachmentCount(1);
-		builder.setRasterizationSamples(renderer->SceneBuffers->sceneSamples);
+		builder.setRasterizationSamples(renderer->Textures->Scene->sceneSamples);
 
 		pipeline[i] = builder.create(renderer->Device);
 	}
 }
 
-void SceneRenderPass::createRenderPass()
+void RenderPassManager::createRenderPass()
 {
 	int numColorAttachments = 1;
 
 	RenderPassBuilder builder;
 
 	for (int i = 0; i < numColorAttachments; i++)
-		builder.addAttachment(VK_FORMAT_R16G16B16A16_SFLOAT, renderer->SceneBuffers->sceneSamples, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-	builder.addDepthStencilAttachment(VK_FORMAT_D32_SFLOAT, renderer->SceneBuffers->sceneSamples, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+		builder.addAttachment(VK_FORMAT_R16G16B16A16_SFLOAT, renderer->Textures->Scene->sceneSamples, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+	builder.addDepthStencilAttachment(VK_FORMAT_D32_SFLOAT, renderer->Textures->Scene->sceneSamples, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
 	builder.addExternalSubpassDependency(
 		VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
@@ -174,14 +175,4 @@ void SceneRenderPass::createRenderPass()
 	builder.addSubpassDepthStencilAttachmentRef(numColorAttachments, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
 	renderPass = builder.create(renderer->Device);
-}
-
-void SceneRenderPass::createFramebuffer()
-{
-	FramebufferBuilder builder;
-	builder.setRenderPass(renderPass.get());
-	builder.setSize(renderer->SceneBuffers->width, renderer->SceneBuffers->height);
-	builder.addAttachment(renderer->SceneBuffers->colorBufferView.get());
-	builder.addAttachment(renderer->SceneBuffers->depthBufferView.get());
-	sceneFramebuffer = builder.create(renderer->Device);
 }

@@ -8,7 +8,7 @@
     <ClInclude Include="VulkanSwapChain.h" />
     <ClInclude Include="Precomp.h" />
     <ClInclude Include="VulkanPostprocess.h" />
-    <ClInclude Include="SceneBuffers.h" />
+    <ClInclude Include="SceneTextures.h" />
     <ClInclude Include="halffloat.h" />
     <ClInclude Include="mat.h" />
     <ClInclude Include="quaternion.h" />
@@ -16,13 +16,19 @@
     <ClInclude Include="Postprocess.h" />
     <ClInclude Include="PixelBuffer.h" />
     <ClInclude Include="FileResource.h" />
-    <ClInclude Include="SceneRenderPass.h" />
-    <ClInclude Include="SceneSamplers.h" />
     <ClInclude Include="VulkanTexture.h" />
-    <ClInclude Include="Renderer.h" />
     <ClInclude Include="..\Thirdparty\volk\volk.h">
       <Filter>Thirdparty</Filter>
     </ClInclude>
+    <ClInclude Include="ShaderManager.h" />
+    <ClInclude Include="SamplerManager.h" />
+    <ClInclude Include="BufferManager.h" />
+    <ClInclude Include="TextureManager.h" />
+    <ClInclude Include="DescriptorSetManager.h" />
+    <ClInclude Include="RenderPassManager.h" />
+    <ClInclude Include="FramebufferManager.h" />
+    <ClInclude Include="CommandBufferManager.h" />
+    <ClInclude Include="UTF16.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="VulkanDrv.cpp" />
@@ -32,21 +38,27 @@
     <ClCompile Include="VulkanSwapChain.cpp" />
     <ClCompile Include="Precomp.cpp" />
     <ClCompile Include="VulkanPostprocess.cpp" />
-    <ClCompile Include="SceneBuffers.cpp" />
+    <ClCompile Include="SceneTextures.cpp" />
     <ClCompile Include="halffloat.cpp" />
     <ClCompile Include="mat.cpp" />
     <ClCompile Include="Postprocess.cpp" />
     <ClCompile Include="FileResource.cpp" />
-    <ClCompile Include="SceneRenderPass.cpp" />
-    <ClCompile Include="SceneSamplers.cpp" />
     <ClCompile Include="VulkanTexture.cpp" />
-    <ClCompile Include="Renderer.cpp" />
     <ClCompile Include="..\Thirdparty\volk\volk.c">
       <Filter>Thirdparty</Filter>
     </ClCompile>
     <ClCompile Include="..\Thirdparty\vk_mem_alloc\vk_mem_alloc.cpp">
       <Filter>Thirdparty</Filter>
     </ClCompile>
+    <ClCompile Include="ShaderManager.cpp" />
+    <ClCompile Include="SamplerManager.cpp" />
+    <ClCompile Include="BufferManager.cpp" />
+    <ClCompile Include="TextureManager.cpp" />
+    <ClCompile Include="DescriptorSetManager.cpp" />
+    <ClCompile Include="RenderPassManager.cpp" />
+    <ClCompile Include="FramebufferManager.cpp" />
+    <ClCompile Include="CommandBufferManager.cpp" />
+    <ClCompile Include="UTF16.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\VulkanDrv.int" />

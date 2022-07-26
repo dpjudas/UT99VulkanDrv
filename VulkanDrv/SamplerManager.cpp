@@ -1,9 +1,10 @@
 
 #include "Precomp.h"
-#include "SceneSamplers.h"
+#include "SamplerManager.h"
+#include "UVulkanRenderDevice.h"
 #include "VulkanBuilders.h"
 
-SceneSamplers::SceneSamplers(VulkanDevice *device)
+SamplerManager::SamplerManager(UVulkanRenderDevice* renderer) : renderer(renderer)
 {
 	for (int i = 0; i < 4; i++)
 	{
@@ -33,7 +34,7 @@ SceneSamplers::SceneSamplers(VulkanDevice *device)
 			builder.setAddressMode(VK_SAMPLER_ADDRESS_MODE_REPEAT);
 		}
 
-		samplers[i] = builder.create(device);
+		samplers[i] = builder.create(renderer->Device);
 	}
 
 	// To do: detail texture needs a zbias of 15

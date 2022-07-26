@@ -4,9 +4,9 @@
 #include "VulkanObjects.h"
 #include "VulkanBuilders.h"
 #include "PixelBuffer.h"
-#include "Renderer.h"
+#include "UVulkanRenderDevice.h"
 
-VulkanTexture::VulkanTexture(Renderer* renderer, const FTextureInfo& Info, bool masked)
+VulkanTexture::VulkanTexture(UVulkanRenderDevice* renderer, const FTextureInfo& Info, bool masked)
 {
 	Update(renderer, Info, masked);
 }
@@ -15,7 +15,7 @@ VulkanTexture::~VulkanTexture()
 {
 }
 
-void VulkanTexture::UpdateRect(Renderer* renderer, FTextureInfo& Info, int xx, int yy, int w, int h)
+void VulkanTexture::UpdateRect(UVulkanRenderDevice* renderer, FTextureInfo& Info, int xx, int yy, int w, int h)
 {
 	if (Info.Format != TEXF_RGBA7 || Info.NumMips < 1 || xx < 0 || yy < 0 || w <= 0 || h <= 0 || xx + w > Info.Mips[0]->USize || yy + h > Info.Mips[0]->VSize || !Info.Mips[0]->DataPtr)
 		return;
@@ -49,7 +49,7 @@ void VulkanTexture::UpdateRect(Renderer* renderer, FTextureInfo& Info, int xx, i
 
 	stagingbuffer->Unmap();
 
-	auto cmdbuffer = renderer->GetTransferCommands();
+	auto cmdbuffer = renderer->Commands->GetTransferCommands();
 
 	PipelineBarrier imageTransition0;
 	imageTransition0.addImage(image.get(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_ASPECT_COLOR_BIT, 0, 1);
@@ -67,12 +67,12 @@ void VulkanTexture::UpdateRect(Renderer* renderer, FTextureInfo& Info, int xx, i
 	imageTransition1.addImage(image.get(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT, 0, 1);
 	imageTransition1.execute(cmdbuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
 
-	renderer->FrameDeleteList->buffers.push_back(std::move(stagingbuffer));
+	renderer->Commands->FrameDeleteList->buffers.push_back(std::move(stagingbuffer));
 
 	Info.bRealtimeChanged = 0;
 }
 
-void VulkanTexture::Update(Renderer* renderer, const FTextureInfo& Info, bool masked)
+void VulkanTexture::Update(UVulkanRenderDevice* renderer, const FTextureInfo& Info, bool masked)
 {
 	//UMult = 1.0f / (Info.UScale * Info.USize);
 	//VMult = 1.0f / (Info.VScale * Info.VSize);
@@ -172,7 +172,7 @@ void VulkanTexture::Update(Renderer* renderer, const FTextureInfo& Info, bool ma
 		imageView = viewbuilder.create(renderer->Device);
 	}
 
-	auto cmdbuffer = renderer->GetTransferCommands();
+	auto cmdbuffer = renderer->Commands->GetTransferCommands();
 
 	PipelineBarrier imageTransition0;
 	imageTransition0.addImage(image.get(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_ASPECT_COLOR_BIT, 0, data.miplevels.size());
@@ -184,10 +184,10 @@ void VulkanTexture::Update(Renderer* renderer, const FTextureInfo& Info, bool ma
 	imageTransition1.addImage(image.get(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT, 0, data.miplevels.size());
 	imageTransition1.execute(cmdbuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
 
-	renderer->FrameDeleteList->buffers.push_back(std::move(data.stagingbuffer));
+	renderer->Commands->FrameDeleteList->buffers.push_back(std::move(data.stagingbuffer));
 }
 
-UploadedData VulkanTexture::UploadData(Renderer* renderer, const FTextureInfo& Info, bool masked, VkFormat imageFormat, std::function<int(FMipmapBase* mip)> calcMipSize, std::function<void(FMipmapBase* mip, void* dst)> copyMip)
+UploadedData VulkanTexture::UploadData(UVulkanRenderDevice* renderer, const FTextureInfo& Info, bool masked, VkFormat imageFormat, std::function<int(FMipmapBase* mip)> calcMipSize, std::function<void(FMipmapBase* mip, void* dst)> copyMip)
 {
 	UploadedData result;
 	result.imageFormat = imageFormat;
@@ -248,7 +248,7 @@ UploadedData VulkanTexture::UploadData(Renderer* renderer, const FTextureInfo& I
 	return result;
 }
 
-UploadedData VulkanTexture::UploadWhite(Renderer* renderer, const FTextureInfo& Info, bool masked)
+UploadedData VulkanTexture::UploadWhite(UVulkanRenderDevice* renderer, const FTextureInfo& Info, bool masked)
 {
 	UploadedData result;
 	result.imageFormat = VK_FORMAT_R8G8B8A8_UNORM;

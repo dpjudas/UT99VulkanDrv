@@ -1,43 +1,19 @@
 #pragma once
 
 #include "VulkanObjects.h"
+#include "ShaderManager.h"
 #include "mat.h"
 #include "vec.h"
 
-class Renderer;
+class UVulkanRenderDevice;
 
-struct SceneUniforms
-{
-	mat4 worldToView;
-	mat4 viewToProjection;
-};
-
-struct SceneVertex
-{
-	uint32_t flags;
-	float x, y, z;
-	float u, v;
-	float u2, v2;
-	float u3, v3;
-	float u4, v4;
-	float r, g, b, a;
-};
-
-struct ScenePushConstants
-{
-	mat4 objectToProjection;
-};
-
-class SceneBuffers
+class SceneTextures
 {
 public:
-	SceneBuffers(Renderer* renderer, int width, int height, int multisample);
-	~SceneBuffers();
+	SceneTextures(UVulkanRenderDevice* renderer, int width, int height, int multisample);
+	~SceneTextures();
 
 	VkSampleCountFlagBits sceneSamples = VK_SAMPLE_COUNT_1_BIT;
-
-	std::unique_ptr<VulkanBuffer> sceneUniforms;
-	std::unique_ptr<VulkanBuffer> stagingSceneUniforms;
 
 	std::unique_ptr<VulkanImage> colorBuffer;
 	std::unique_ptr<VulkanImageView> colorBufferView;
@@ -48,12 +24,8 @@ public:
 
 	int width = 0;
 	int height = 0;
-	SceneUniforms uniforms;
 
 private:
-	SceneBuffers(const SceneBuffers &) = delete;
-	SceneBuffers &operator=(const SceneBuffers &) = delete;
-
 	static void createImage(std::unique_ptr<VulkanImage> &image, std::unique_ptr<VulkanImageView> &view, VulkanDevice *device, int width, int height, VkSampleCountFlagBits samples, VkFormat format, VkImageUsageFlags usage, VkImageAspectFlags aspect);
 	static VkSampleCountFlagBits getBestSampleCount(VulkanDevice* device, int multisample);
 };

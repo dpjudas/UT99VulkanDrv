@@ -1,10 +1,11 @@
 
 #include "Precomp.h"
 #include "VulkanPostprocess.h"
-#include "SceneBuffers.h"
+#include "UVulkanRenderDevice.h"
 #include "VulkanBuilders.h"
 #include "VulkanSwapChain.h"
 #include "VulkanObjects.h"
+#include "ShaderManager.h"
 
 #ifdef _MSC_VER
 #pragma warning(disable: 4267) // warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
@@ -18,7 +19,7 @@ CVarFloat r_gamma("r_gamma", 1.0f, [](float v) {
 });
 */
 
-VulkanPostprocess::VulkanPostprocess(Renderer* renderer) : renderer(renderer)
+VulkanPostprocess::VulkanPostprocess(UVulkanRenderDevice* renderer) : renderer(renderer)
 {
 }
 
@@ -28,15 +29,15 @@ VulkanPostprocess::~VulkanPostprocess()
 
 void VulkanPostprocess::blitSceneToPostprocess()
 {
-	auto buffers = renderer->SceneBuffers;
-	auto cmdbuffer = renderer->GetDrawCommands();
+	auto buffers = renderer->Textures->Scene.get();
+	auto cmdbuffer = renderer->Commands->GetDrawCommands();
 
 	mCurrentPipelineImage = 0;
 
 	VulkanPPImageTransition imageTransition0;
 	imageTransition0.addImage(buffers->colorBuffer.get(), &buffers->colorBufferLayout, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, false);
 	imageTransition0.addImage(pipelineImage[mCurrentPipelineImage].get(), &pipelineLayout[mCurrentPipelineImage], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, true);
-	imageTransition0.execute(renderer->GetDrawCommands());
+	imageTransition0.execute(renderer->Commands->GetDrawCommands());
 
 	if (buffers->sceneSamples != VK_SAMPLE_COUNT_1_BIT)
 	{
@@ -83,18 +84,18 @@ void VulkanPostprocess::blitSceneToPostprocess()
 
 void VulkanPostprocess::imageTransitionScene(bool undefinedSrcLayout)
 {
-	auto buffers = renderer->SceneBuffers;
+	auto buffers = renderer->Textures->Scene.get();
 
 	VulkanPPImageTransition imageTransition;
 	imageTransition.addImage(buffers->colorBuffer.get(), &buffers->colorBufferLayout, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, undefinedSrcLayout);
-	imageTransition.execute(renderer->GetDrawCommands());
+	imageTransition.execute(renderer->Commands->GetDrawCommands());
 }
 
 void VulkanPostprocess::blitCurrentToImage(VulkanImage *dstimage, VkImageLayout *dstlayout, VkImageLayout finallayout)
 {
 	auto srcimage = pipelineImage[mCurrentPipelineImage].get();
 	auto srclayout = &pipelineLayout[mCurrentPipelineImage];
-	auto cmdbuffer = renderer->GetDrawCommands();
+	auto cmdbuffer = renderer->Commands->GetDrawCommands();
 
 	*dstlayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL; // needed by VkPPImageTransition.addImage. Actual layout is undefined.
 
@@ -131,14 +132,14 @@ void VulkanPostprocess::drawPresentTexture(const PPViewport &box)
 	VulkanPPRenderState renderstate(renderer);
 
 	PresentUniforms uniforms;
-	uniforms.invGamma = 1.0f / renderer->PostprocessModel->present.gamma;
+	uniforms.invGamma = 1.0f / renderer->Commands->PostprocessModel->present.gamma;
 
 	renderstate.clear();
-	renderstate.shader = &renderer->PostprocessModel->present.present;
+	renderstate.shader = &renderer->Commands->PostprocessModel->present.present;
 	renderstate.uniforms.set(uniforms);
 	renderstate.viewport = box;
 	renderstate.setInputCurrent(0, PPFilterMode::Linear);
-	renderstate.setInputTexture(1, &renderer->PostprocessModel->present.dither, PPFilterMode::Nearest, PPWrapMode::Repeat);
+	renderstate.setInputTexture(1, &renderer->Commands->PostprocessModel->present.dither, PPFilterMode::Nearest, PPWrapMode::Repeat);
 	renderstate.setOutputSwapChain();
 	renderstate.setNoBlend();
 	renderstate.draw();
@@ -156,8 +157,8 @@ void VulkanPostprocess::beginFrame()
 		mDescriptorPool->SetDebugName("VulkanPostprocess.mDescriptorPool");
 	}
 
-	int width = renderer->SceneBuffers->colorBuffer->width;
-	int height = renderer->SceneBuffers->colorBuffer->height;
+	int width = renderer->Textures->Scene->colorBuffer->width;
+	int height = renderer->Textures->Scene->colorBuffer->height;
 
 	if (!pipelineImage[0] || pipelineImage[0]->width != width || pipelineImage[0]->height != height)
 	{
@@ -203,7 +204,7 @@ VulkanSampler *VulkanPostprocess::getSampler(PPFilterMode filter, PPWrapMode wra
 
 /////////////////////////////////////////////////////////////////////////////
 
-VulkanPPTexture::VulkanPPTexture(Renderer* renderer, PPTexture *texture)
+VulkanPPTexture::VulkanPPTexture(UVulkanRenderDevice* renderer, PPTexture *texture)
 {
 	int pixelsize;
 	switch (texture->format)
@@ -244,7 +245,7 @@ VulkanPPTexture::VulkanPPTexture(Renderer* renderer, PPTexture *texture)
 
 		PipelineBarrier barrier0;
 		barrier0.addImage(image.get(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, VK_ACCESS_TRANSFER_WRITE_BIT);
-		barrier0.execute(renderer->GetTransferCommands(), VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+		barrier0.execute(renderer->Commands->GetTransferCommands(), VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 
 		void *data = staging->Map(0, totalsize);
 		memcpy(data, texture->data.get(), totalsize);
@@ -256,25 +257,25 @@ VulkanPPTexture::VulkanPPTexture(Renderer* renderer, PPTexture *texture)
 		region.imageExtent.depth = 1;
 		region.imageExtent.width = texture->width;
 		region.imageExtent.height = texture->height;
-		renderer->GetTransferCommands()->copyBufferToImage(staging->buffer, image->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+		renderer->Commands->GetTransferCommands()->copyBufferToImage(staging->buffer, image->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
 		PipelineBarrier barrier1;
 		barrier1.addImage(image.get(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
-		barrier1.execute(renderer->GetTransferCommands(), VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+		barrier1.execute(renderer->Commands->GetTransferCommands(), VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
 		layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 	}
 	else
 	{
 		PipelineBarrier barrier;
 		barrier.addImage(image.get(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT);
-		barrier.execute(renderer->GetTransferCommands(), VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+		barrier.execute(renderer->Commands->GetTransferCommands(), VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
 		layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 	}
 }
 
 /////////////////////////////////////////////////////////////////////////////
 
-VulkanPPShader::VulkanPPShader(Renderer* renderer, const PPShader *shaderdesc)
+VulkanPPShader::VulkanPPShader(UVulkanRenderDevice* renderer, const PPShader *shaderdesc)
 {
 	std::string decl;
 
@@ -292,8 +293,8 @@ VulkanPPShader::VulkanPPShader(Renderer* renderer, const PPShader *shaderdesc)
 		decl += "};\n";
 	}
 
-	vertexShader = Renderer::CreateVertexShader(renderer->Device, "shaders/PPStep.vert");
-	fragmentShader = Renderer::CreateFragmentShader(renderer->Device, shaderdesc->fragmentShader, decl + shaderdesc->defines);
+	vertexShader = ShaderManager::CreateVertexShader(renderer->Device, "shaders/PPStep.vert");
+	fragmentShader = ShaderManager::CreateFragmentShader(renderer->Device, shaderdesc->fragmentShader, decl + shaderdesc->defines);
 }
 
 const char *VulkanPPShader::getTypeStr(UniformType type)
@@ -319,14 +320,14 @@ const char *VulkanPPShader::getTypeStr(UniformType type)
 
 /////////////////////////////////////////////////////////////////////////////
 
-VulkanPPRenderState::VulkanPPRenderState(Renderer* renderer) : renderer(renderer)
+VulkanPPRenderState::VulkanPPRenderState(UVulkanRenderDevice* renderer) : renderer(renderer)
 {
-	model = renderer->PostprocessModel;
+	model = renderer->Commands->PostprocessModel;
 }
 
 void VulkanPPRenderState::draw()
 {
-	auto pp = renderer->Postprocess;
+	auto pp = renderer->Commands->Postprocess;
 
 	VulkanPPRenderPassKey key;
 	key.blendMode = blendMode;
@@ -337,7 +338,7 @@ void VulkanPPRenderState::draw()
 	if (output.type == PPTextureType::PPTexture)
 		key.outputFormat = getVulkanTexture(output.texture)->format;
 	else if (output.type == PPTextureType::SwapChain)
-		key.outputFormat = renderer->SwapChain->swapChainFormat.format;
+		key.outputFormat = renderer->Commands->SwapChain->swapChainFormat.format;
 	else
 		key.outputFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
 
@@ -362,7 +363,7 @@ void VulkanPPRenderState::draw()
 
 void VulkanPPRenderState::renderScreenQuad(VulkanPPRenderPassSetup *passSetup, VulkanDescriptorSet *descriptorSet, VulkanFramebuffer *framebuffer, int framebufferWidth, int framebufferHeight, int x, int y, int width, int height, const void *pushConstants, uint32_t pushConstantsSize)
 {
-	auto cmdbuffer = renderer->GetDrawCommands();
+	auto cmdbuffer = renderer->Commands->GetDrawCommands();
 
 	VkViewport viewport = { };
 	viewport.x = x;
@@ -397,7 +398,7 @@ void VulkanPPRenderState::renderScreenQuad(VulkanPPRenderPassSetup *passSetup, V
 
 VulkanDescriptorSet *VulkanPPRenderState::getInput(VulkanPPRenderPassSetup *passSetup, const std::vector<PPTextureInput> &textures)
 {
-	auto pp = renderer->Postprocess;
+	auto pp = renderer->Commands->Postprocess;
 	auto descriptors = pp->mDescriptorPool->allocate(passSetup->descriptorLayout.get());
 	descriptors->SetDebugName("VulkanPostprocess.descriptors");
 
@@ -415,10 +416,10 @@ VulkanDescriptorSet *VulkanPPRenderState::getInput(VulkanPPRenderPassSetup *pass
 	}
 
 	write.updateSets(renderer->Device);
-	imageTransition.execute(renderer->GetDrawCommands());
+	imageTransition.execute(renderer->Commands->GetDrawCommands());
 
 	VulkanDescriptorSet *set = descriptors.get();
-	renderer->FrameDeleteList->descriptors.push_back(std::move(descriptors));
+	renderer->Commands->FrameDeleteList->descriptors.push_back(std::move(descriptors));
 	return set;
 }
 
@@ -432,7 +433,7 @@ VulkanFramebuffer *VulkanPPRenderState::getOutput(VulkanPPRenderPassSetup *passS
 	{
 		VulkanPPImageTransition imageTransition;
 		imageTransition.addImage(tex.image, tex.layout, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, output.type == PPTextureType::NextPipelineTexture);
-		imageTransition.execute(renderer->GetDrawCommands());
+		imageTransition.execute(renderer->Commands->GetDrawCommands());
 
 		view = tex.view->view;
 		w = tex.image->width;
@@ -440,9 +441,9 @@ VulkanFramebuffer *VulkanPPRenderState::getOutput(VulkanPPRenderPassSetup *passS
 	}
 	else
 	{
-		view = renderer->SwapChain->swapChainImageViews[renderer->PresentImageIndex];
-		w = renderer->SwapChain->actualExtent.width;
-		h = renderer->SwapChain->actualExtent.height;
+		view = renderer->Commands->SwapChain->swapChainImageViews[renderer->Commands->PresentImageIndex];
+		w = renderer->Commands->SwapChain->actualExtent.width;
+		h = renderer->Commands->SwapChain->actualExtent.height;
 	}
 
 	auto &framebuffer = passSetup->framebuffers[view];
@@ -467,13 +468,13 @@ VulkanPPRenderState::TextureImage VulkanPPRenderState::getTexture(const PPTextur
 
 	if (type == PPTextureType::CurrentPipelineTexture || type == PPTextureType::NextPipelineTexture)
 	{
-		int idx = renderer->Postprocess->mCurrentPipelineImage;
+		int idx = renderer->Commands->Postprocess->mCurrentPipelineImage;
 		if (type == PPTextureType::NextPipelineTexture)
 			idx = (idx + 1) % VulkanPostprocess::numPipelineImages;
 
-		tex.image = renderer->Postprocess->pipelineImage[idx].get();
-		tex.view = renderer->Postprocess->pipelineView[idx].get();
-		tex.layout = &renderer->Postprocess->pipelineLayout[idx];
+		tex.image = renderer->Commands->Postprocess->pipelineImage[idx].get();
+		tex.view = renderer->Commands->Postprocess->pipelineView[idx].get();
+		tex.layout = &renderer->Commands->Postprocess->pipelineLayout[idx];
 		tex.debugname = "PipelineTexture";
 	}
 	else if (type == PPTextureType::PPTexture)
@@ -515,7 +516,7 @@ VulkanPPTexture *VulkanPPRenderState::getVulkanTexture(PPTexture *texture)
 
 /////////////////////////////////////////////////////////////////////////////
 
-VulkanPPRenderPassSetup::VulkanPPRenderPassSetup(Renderer* renderer, const VulkanPPRenderPassKey &key) : renderer(renderer)
+VulkanPPRenderPassSetup::VulkanPPRenderPassSetup(UVulkanRenderDevice* renderer, const VulkanPPRenderPassKey &key) : renderer(renderer)
 {
 	createDescriptorLayout(key);
 	createPipelineLayout(key);

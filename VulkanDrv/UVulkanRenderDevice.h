@@ -1,6 +1,18 @@
 #pragma once
 
-#include "Renderer.h"
+#include "VulkanObjects.h"
+#include "CommandBufferManager.h"
+#include "BufferManager.h"
+#include "DescriptorSetManager.h"
+#include "FramebufferManager.h"
+#include "RenderPassManager.h"
+#include "SamplerManager.h"
+#include "ShaderManager.h"
+#include "TextureManager.h"
+#include "vec.h"
+#include "mat.h"
+
+class VulkanTexture;
 
 class UVulkanRenderDevice : public URenderDeviceOldUnreal469
 {
@@ -38,9 +50,31 @@ public:
 	UBOOL SupportsTextureFormat(ETextureFormat Format) override;
 	void UpdateTextureRect(FTextureInfo& Info, INT U, INT V, INT UL, INT VL) override;
 
-	Renderer* renderer = nullptr;
+	int InterfacePadding[64]; // For allowing URenderDeviceOldUnreal469 interface to add things
+
+	HWND WindowHandle = 0;
+	VulkanDevice* Device = nullptr;
+
+	std::unique_ptr<CommandBufferManager> Commands;
+
+	std::unique_ptr<SamplerManager> Samplers;
+	std::unique_ptr<TextureManager> Textures;
+	std::unique_ptr<BufferManager> Buffers;
+	std::unique_ptr<ShaderManager> Shaders;
+
+	std::unique_ptr<DescriptorSetManager> DescriptorSets;
+	std::unique_ptr<RenderPassManager> RenderPasses;
+	std::unique_ptr<FramebufferManager> Framebuffers;
+
+	// Configuration.
+	BITFIELD UseVSync;
+	INT VkDeviceIndex;
+	BITFIELD VkDebug;
+	INT Multisample;
 
 private:
+	void ClearTextureCache();
+
 	UBOOL UsePrecache;
 	FPlane FlashScale;
 	FPlane FlashFog;
@@ -50,14 +84,7 @@ private:
 	float RFX2;
 	float RFY2;
 
-	// Configuration.
-	BITFIELD UseVSync;
-	INT VkDeviceIndex;
-	BITFIELD VkDebug;
-	INT Multisample;
-
 	bool IsLocked = false;
-};
 
-std::wstring to_utf16(const std::string& str);
-std::string from_utf16(const std::wstring& str);
+	size_t SceneVertexPos = 0;
+};

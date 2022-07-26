@@ -1,12 +1,8 @@
 
 #include "Precomp.h"
 #include "UVulkanRenderDevice.h"
-#include "VulkanSwapChain.h"
-#include "VulkanPostprocess.h"
 #include "VulkanTexture.h"
-#include "SceneBuffers.h"
-#include "SceneRenderPass.h"
-#include "SceneSamplers.h"
+#include "UTF16.h"
 
 IMPLEMENT_CLASS(UVulkanRenderDevice);
 
@@ -58,10 +54,19 @@ UBOOL UVulkanRenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT N
 
 	try
 	{
-		renderer = new Renderer((HWND)Viewport->GetWindow(), UseVSync, VkDeviceIndex, VkDebug, printLog);
+		Device = new VulkanDevice((HWND)Viewport->GetWindow(), VkDeviceIndex, VkDebug, printLog);
+		Commands.reset(new CommandBufferManager(this));
+		Samplers.reset(new SamplerManager(this));
+		Textures.reset(new TextureManager(this));
+		Buffers.reset(new BufferManager(this));
+		Shaders.reset(new ShaderManager(this));
+		DescriptorSets.reset(new DescriptorSetManager(this));
+		RenderPasses.reset(new RenderPassManager(this));
+		Framebuffers.reset(new FramebufferManager(this));
+
 		if (VkDebug)
 		{
-			const auto& props = renderer->Device->physicalDevice.properties;
+			const auto& props = Device->physicalDevice.properties;
 
 			FString deviceType;
 			switch (props.deviceType)
@@ -83,7 +88,7 @@ UBOOL UVulkanRenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT N
 			debugf(TEXT("Vulkan version: %s (api) %s (driver)"), *apiVersion, *driverVersion);
 
 			debugf(TEXT("Vulkan extensions:"));
-			for (const VkExtensionProperties& p : renderer->Device->physicalDevice.extensions)
+			for (const VkExtensionProperties& p : Device->physicalDevice.extensions)
 			{
 				debugf(TEXT(" %s"), to_utf16(p.extensionName).c_str());
 			}
@@ -130,8 +135,18 @@ void UVulkanRenderDevice::Exit()
 {
 	guard(UVulkanRenderDevice::Exit);
 
-	delete renderer;
-	renderer = nullptr;
+	if (Device) vkDeviceWaitIdle(Device->device);
+
+	Framebuffers.reset();
+	RenderPasses.reset();
+	DescriptorSets.reset();
+	Shaders.reset();
+	Buffers.reset();
+	Textures.reset();
+	Samplers.reset();
+	Commands.reset();
+
+	delete Device; Device = nullptr;
 
 	unguard;
 }
@@ -142,19 +157,19 @@ void UVulkanRenderDevice::Flush(UBOOL AllowPrecache)
 
 	if (IsLocked)
 	{
-		renderer->SubmitCommands(false, 0, 0);
-		renderer->ClearTextureCache();
+		Commands->SubmitCommands(false, 0, 0);
+		ClearTextureCache();
 
-		auto cmdbuffer = renderer->GetDrawCommands();
-		renderer->SceneRenderPass->begin(cmdbuffer);
+		auto cmdbuffer = Commands->GetDrawCommands();
+		RenderPasses->begin(cmdbuffer);
 
-		VkBuffer vertexBuffers[] = { renderer->SceneVertexBuffer->buffer };
+		VkBuffer vertexBuffers[] = { Buffers->SceneVertexBuffer->buffer };
 		VkDeviceSize offsets[] = { 0 };
 		cmdbuffer->bindVertexBuffers(0, 1, vertexBuffers, offsets);
 	}
 	else
 	{
-		renderer->ClearTextureCache();
+		ClearTextureCache();
 	}
 
 	if (AllowPrecache && UsePrecache && !GIsEditor)
@@ -215,16 +230,16 @@ UBOOL UVulkanRenderDevice::Exec(const TCHAR* Cmd, FOutputDevice& Ar)
 	}
 	else if (ParseCommand(&Cmd, TEXT("GetVkDevices")))
 	{
-		for (size_t i = 0; i < renderer->Device->supportedDevices.size(); i++)
+		for (size_t i = 0; i < Device->supportedDevices.size(); i++)
 		{
-			Ar.Log(FString::Printf(TEXT("#%d - %s\r\n"), (int)i, to_utf16(renderer->Device->supportedDevices[i].device->properties.deviceName)));
+			Ar.Log(FString::Printf(TEXT("#%d - %s\r\n"), (int)i, to_utf16(Device->supportedDevices[i].device->properties.deviceName)));
 		}
 		return 1;
 	}
 	else if (ParseCommand(&Cmd, TEXT("VkMemStats")))
 	{
 		VmaStats stats = {};
-		vmaCalculateStats(renderer->Device->allocator, &stats);
+		vmaCalculateStats(Device->allocator, &stats);
 		Ar.Log(FString::Printf(TEXT("Allocated objects: %d, used bytes: %d MB\r\n"), (int)stats.total.allocationCount, (int)stats.total.usedBytes / (1024 * 1024)));
 		Ar.Log(FString::Printf(TEXT("Unused range count: %d, unused bytes: %d MB\r\n"), (int)stats.total.unusedRangeCount, (int)stats.total.unusedBytes / (1024 * 1024)));
 		return 1;
@@ -246,21 +261,22 @@ void UVulkanRenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane Sc
 
 	try
 	{
-		if (!renderer->SceneBuffers || renderer->SceneBuffers->width != Viewport->SizeX || renderer->SceneBuffers->height != Viewport->SizeY)
+		if (!Textures->Scene || Textures->Scene->width != Viewport->SizeX || Textures->Scene->height != Viewport->SizeY)
 		{
-			delete renderer->SceneRenderPass; renderer->SceneRenderPass = nullptr;
-			delete renderer->SceneBuffers; renderer->SceneBuffers = nullptr;
-			renderer->SceneBuffers = new SceneBuffers(renderer, Viewport->SizeX, Viewport->SizeY, Multisample);
-			renderer->SceneRenderPass = new SceneRenderPass(renderer);
+			Framebuffers->destroySceneFramebuffer();
+			Textures->Scene.reset();
+			Textures->Scene.reset(new SceneTextures(this, Viewport->SizeX, Viewport->SizeY, Multisample));
+			RenderPasses->createRenderPass();
+			RenderPasses->createPipelines();
+			Framebuffers->createSceneFramebuffer();
 		}
 
-		auto cmdbuffer = renderer->GetDrawCommands();
+		Commands->BeginFrame();
 
-		renderer->Postprocess->beginFrame();
-		renderer->Postprocess->imageTransitionScene(true);
-		renderer->SceneRenderPass->begin(cmdbuffer);
+		auto cmdbuffer = Commands->GetDrawCommands();
+		RenderPasses->begin(cmdbuffer);
 
-		VkBuffer vertexBuffers[] = { renderer->SceneVertexBuffer->buffer };
+		VkBuffer vertexBuffers[] = { Buffers->SceneVertexBuffer->buffer };
 		VkDeviceSize offsets[] = { 0 };
 		cmdbuffer->bindVertexBuffers(0, 1, vertexBuffers, offsets);
 
@@ -280,17 +296,10 @@ void UVulkanRenderDevice::Unlock(UBOOL Blit)
 {
 	guard(UVulkanRenderDevice::Unlock);
 
-	renderer->SceneRenderPass->end(renderer->GetDrawCommands());
-
-	renderer->Postprocess->blitSceneToPostprocess();
-
-	int sceneWidth = renderer->SceneBuffers->colorBuffer->width;
-	int sceneHeight = renderer->SceneBuffers->colorBuffer->height;
-
-	renderer->PostprocessModel->present.gamma = 1.5f * Viewport->GetOuterUClient()->Brightness * 2.0f;
-
-	renderer->SubmitCommands(Blit ? true : false, Viewport->SizeX, Viewport->SizeY);
-	renderer->SceneVertexPos = 0;
+	RenderPasses->end(Commands->GetDrawCommands());
+	Commands->EndFrame();
+	Commands->SubmitCommands(Blit ? true : false, Viewport->SizeX, Viewport->SizeY);
+	SceneVertexPos = 0;
 
 	IsLocked = false;
 
@@ -299,6 +308,8 @@ void UVulkanRenderDevice::Unlock(UBOOL Blit)
 
 UBOOL UVulkanRenderDevice::SupportsTextureFormat(ETextureFormat Format)
 {
+	guard(UVulkanRenderDevice::SupportsTextureFormat);
+
 	static const ETextureFormat knownFormats[] =
 	{
 		TEXF_P8,
@@ -321,11 +332,17 @@ UBOOL UVulkanRenderDevice::SupportsTextureFormat(ETextureFormat Format)
 			return TRUE;
 	}
 	return FALSE;
+
+	unguard;
 }
 
 void UVulkanRenderDevice::UpdateTextureRect(FTextureInfo& Info, INT U, INT V, INT UL, INT VL)
 {
-	renderer->UpdateTextureRect(&Info, U, V, UL, VL);
+	guard(UVulkanRenderDevice::UpdateTextureRect);
+
+	Textures->UpdateTextureRect(&Info, U, V, UL, VL);
+
+	unguard;
 }
 
 static float GetUMult(const FTextureInfo& Info) { return 1.0f / (Info.UScale * Info.USize); }
@@ -335,13 +352,13 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 {
 	guard(UVulkanRenderDevice::DrawComplexSurface);
 
-	VulkanCommandBuffer* cmdbuffer = renderer->GetDrawCommands();
+	VulkanCommandBuffer* cmdbuffer = Commands->GetDrawCommands();
 
-	VulkanTexture* tex = renderer->GetTexture(Surface.Texture, !!(Surface.PolyFlags & PF_Masked));
-	VulkanTexture* lightmap = renderer->GetTexture(Surface.LightMap, false);
-	VulkanTexture* macrotex = renderer->GetTexture(Surface.MacroTexture, false);
-	VulkanTexture* detailtex = renderer->GetTexture(Surface.DetailTexture, false);
-	VulkanTexture* fogmap = renderer->GetTexture(Surface.FogMap, false);
+	VulkanTexture* tex = Textures->GetTexture(Surface.Texture, !!(Surface.PolyFlags & PF_Masked));
+	VulkanTexture* lightmap = Textures->GetTexture(Surface.LightMap, false);
+	VulkanTexture* macrotex = Textures->GetTexture(Surface.MacroTexture, false);
+	VulkanTexture* detailtex = Textures->GetTexture(Surface.DetailTexture, false);
+	VulkanTexture* fogmap = Textures->GetTexture(Surface.FogMap, false);
 
 	if ((Surface.DetailTexture && Surface.FogMap) || (!DetailTextures)) detailtex = nullptr;
 
@@ -380,12 +397,12 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 		DetailVMult = GetVMult(*Surface.FogMap);
 	}
 
-	cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->SceneRenderPass->getPipeline(Surface.PolyFlags));
-	cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->ScenePipelineLayout, 0, renderer->GetTextureDescriptorSet(Surface.PolyFlags, tex, lightmap, macrotex, detailtex));
+	cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, RenderPasses->getPipeline(Surface.PolyFlags));
+	cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, RenderPasses->ScenePipelineLayout, 0, DescriptorSets->GetTextureDescriptorSet(Surface.PolyFlags, tex, lightmap, macrotex, detailtex));
 
 	for (FSavedPoly* Poly = Facet.Polys; Poly; Poly = Poly->Next)
 	{
-		SceneVertex* vertexdata = &renderer->SceneVertices[renderer->SceneVertexPos];
+		SceneVertex* vertexdata = &Buffers->SceneVertices[SceneVertexPos];
 
 		for (INT i = 0; i < Poly->NumPts; i++)
 		{
@@ -412,9 +429,9 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 			vtx.a = 1.0f;
 		}
 
-		size_t start = renderer->SceneVertexPos;
+		size_t start = SceneVertexPos;
 		size_t count = Poly->NumPts;
-		renderer->SceneVertexPos += count;
+		SceneVertexPos += count;
 
 		cmdbuffer->draw(count, 1, start, 0);
 	}
@@ -426,17 +443,17 @@ void UVulkanRenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& In
 {
 	guard(UVulkanRenderDevice::DrawGouraudPolygon);
 
-	auto cmdbuffer = renderer->GetDrawCommands();
+	auto cmdbuffer = Commands->GetDrawCommands();
 
-	cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->SceneRenderPass->getPipeline(PolyFlags));
+	cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, RenderPasses->getPipeline(PolyFlags));
 
-	VulkanTexture* tex = renderer->GetTexture(&Info, !!(PolyFlags & PF_Masked));
-	cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->ScenePipelineLayout, 0, renderer->GetTextureDescriptorSet(PolyFlags, tex));
+	VulkanTexture* tex = Textures->GetTexture(&Info, !!(PolyFlags & PF_Masked));
+	cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, RenderPasses->ScenePipelineLayout, 0, DescriptorSets->GetTextureDescriptorSet(PolyFlags, tex));
 
 	float UMult = tex ? GetUMult(Info) : 0.0f;
 	float VMult = tex ? GetVMult(Info) : 0.0f;
 
-	SceneVertex* vertexdata = &renderer->SceneVertices[renderer->SceneVertexPos];
+	SceneVertex* vertexdata = &Buffers->SceneVertices[SceneVertexPos];
 
 	int flags = (PolyFlags & (PF_RenderFog | PF_Translucent | PF_Modulated)) == PF_RenderFog ? 16 : 0;
 
@@ -472,9 +489,9 @@ void UVulkanRenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& In
 		}
 	}
 
-	size_t start = renderer->SceneVertexPos;
+	size_t start = SceneVertexPos;
 	size_t count = NumPts;
-	renderer->SceneVertexPos += count;
+	SceneVertexPos += count;
 
 	cmdbuffer->draw(count, 1, start, 0);
 
@@ -488,17 +505,17 @@ void UVulkanRenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT 
 	if ((PolyFlags & (PF_Modulated)) == (PF_Modulated) && Info.Format == TEXF_P8)
 		PolyFlags = PF_Modulated;
 
-	auto cmdbuffer = renderer->GetDrawCommands();
+	auto cmdbuffer = Commands->GetDrawCommands();
 
-	VulkanTexture* tex = renderer->GetTexture(&Info, !!(PolyFlags & PF_Masked));
+	VulkanTexture* tex = Textures->GetTexture(&Info, !!(PolyFlags & PF_Masked));
 
-	cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->SceneRenderPass->getPipeline(PolyFlags));
-	cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->ScenePipelineLayout, 0, renderer->GetTextureDescriptorSet(PolyFlags, tex, nullptr, nullptr, nullptr, true));
+	cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, RenderPasses->getPipeline(PolyFlags));
+	cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, RenderPasses->ScenePipelineLayout, 0, DescriptorSets->GetTextureDescriptorSet(PolyFlags, tex, nullptr, nullptr, nullptr, true));
 
 	float UMult = tex ? GetUMult(Info) : 0.0f;
 	float VMult = tex ? GetVMult(Info) : 0.0f;
 
-	SceneVertex* v = &renderer->SceneVertices[renderer->SceneVertexPos];
+	SceneVertex* v = &Buffers->SceneVertices[SceneVertexPos];
 
 	float r, g, b, a;
 	if (PolyFlags & PF_Modulated)
@@ -520,9 +537,9 @@ void UVulkanRenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT 
 	v[2] = { 0, RFX2 * Z * (X + XL - Frame->FX2), RFY2 * Z * (Y + YL - Frame->FY2), Z, (U + UL) * UMult, (V + VL) * VMult, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, r, g, b, a };
 	v[3] = { 0, RFX2 * Z * (X - Frame->FX2),      RFY2 * Z * (Y + YL - Frame->FY2), Z, U * UMult,        (V + VL) * VMult, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, r, g, b, a };
 
-	size_t start = renderer->SceneVertexPos;
+	size_t start = SceneVertexPos;
 	size_t count = 4;
-	renderer->SceneVertexPos += count;
+	SceneVertexPos += count;
 	cmdbuffer->draw(count, 1, start, 0);
 
 	unguard;
@@ -608,9 +625,9 @@ void UVulkanRenderDevice::ClearZ(FSceneNode* Frame)
 	attachment.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
 	attachment.clearValue.depthStencil.depth = 1.0f;
 	rect.layerCount = 1;
-	rect.rect.extent.width = renderer->SceneBuffers->width;
-	rect.rect.extent.height = renderer->SceneBuffers->height;
-	renderer->GetDrawCommands()->clearAttachments(1, &attachment, 1, &rect);
+	rect.rect.extent.width = Textures->Scene->width;
+	rect.rect.extent.height = Textures->Scene->height;
+	Commands->GetDrawCommands()->clearAttachments(1, &attachment, 1, &rect);
 	unguard;
 }
 
@@ -636,7 +653,7 @@ void UVulkanRenderDevice::GetStats(TCHAR* Result)
 void UVulkanRenderDevice::ReadPixels(FColor* Pixels)
 {
 	guard(UVulkanRenderDevice::GetStats);
-	renderer->CopyScreenToBuffer(Viewport->SizeX, Viewport->SizeY, Pixels, 2.5f * Viewport->GetOuterUClient()->Brightness);
+	Commands->CopyScreenToBuffer(Viewport->SizeX, Viewport->SizeY, Pixels, 2.5f * Viewport->GetOuterUClient()->Brightness);
 	unguard;
 }
 
@@ -679,25 +696,25 @@ void UVulkanRenderDevice::EndFlash()
 			a = eased_a;
 		}
 
-		auto cmdbuffer = renderer->GetDrawCommands();
+		auto cmdbuffer = Commands->GetDrawCommands();
 
 		ScenePushConstants pushconstants;
 		pushconstants.objectToProjection = mat4::identity();
-		cmdbuffer->pushConstants(renderer->ScenePipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ScenePushConstants), &pushconstants);
+		cmdbuffer->pushConstants(RenderPasses->ScenePipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ScenePushConstants), &pushconstants);
 
-		cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->SceneRenderPass->getEndFlashPipeline());
-		cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->ScenePipelineLayout, 0, renderer->GetTextureDescriptorSet(0, nullptr));
+		cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, RenderPasses->getEndFlashPipeline());
+		cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, RenderPasses->ScenePipelineLayout, 0, DescriptorSets->GetTextureDescriptorSet(0, nullptr));
 
-		SceneVertex* v = &renderer->SceneVertices[renderer->SceneVertexPos];
+		SceneVertex* v = &Buffers->SceneVertices[SceneVertexPos];
 
 		v[0] = { 0, -1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, r, g, b, a };
 		v[1] = { 0,  1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, r, g, b, a };
 		v[2] = { 0,  1.0f,  1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, r, g, b, a };
 		v[3] = { 0, -1.0f,  1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, r, g, b, a };
 
-		size_t start = renderer->SceneVertexPos;
+		size_t start = SceneVertexPos;
 		size_t count = 4;
-		renderer->SceneVertexPos += count;
+		SceneVertexPos += count;
 		cmdbuffer->draw(count, 1, start, 0);
 
 		if (CurrentFrame)
@@ -716,7 +733,7 @@ void UVulkanRenderDevice::SetSceneNode(FSceneNode* Frame)
 	RFX2 = 2.0f * RProjZ / Frame->FX;
 	RFY2 = 2.0f * RProjZ * Aspect / Frame->FY;
 
-	auto commands = renderer->GetDrawCommands();
+	auto commands = Commands->GetDrawCommands();
 
 	VkViewport viewportdesc = {};
 	viewportdesc.x = Frame->XB;
@@ -732,7 +749,7 @@ void UVulkanRenderDevice::SetSceneNode(FSceneNode* Frame)
 
 	ScenePushConstants pushconstants;
 	pushconstants.objectToProjection = projection * modelview;
-	commands->pushConstants(renderer->ScenePipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ScenePushConstants), &pushconstants);
+	commands->pushConstants(RenderPasses->ScenePipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ScenePushConstants), &pushconstants);
 
 	unguard;
 }
@@ -740,34 +757,12 @@ void UVulkanRenderDevice::SetSceneNode(FSceneNode* Frame)
 void UVulkanRenderDevice::PrecacheTexture(FTextureInfo& Info, DWORD PolyFlags)
 {
 	guard(UVulkanRenderDevice::PrecacheTexture);
-	renderer->GetTexture(&Info, !!(PolyFlags & PF_Masked));
+	Textures->GetTexture(&Info, !!(PolyFlags & PF_Masked));
 	unguard;
 }
 
-std::wstring to_utf16(const std::string& str)
+void UVulkanRenderDevice::ClearTextureCache()
 {
-	if (str.empty()) return {};
-	int needed = MultiByteToWideChar(CP_UTF8, 0, str.data(), (int)str.size(), nullptr, 0);
-	if (needed == 0)
-		throw std::runtime_error("MultiByteToWideChar failed");
-	std::wstring result;
-	result.resize(needed);
-	needed = MultiByteToWideChar(CP_UTF8, 0, str.data(), (int)str.size(), &result[0], (int)result.size());
-	if (needed == 0)
-		throw std::runtime_error("MultiByteToWideChar failed");
-	return result;
-}
-
-std::string from_utf16(const std::wstring& str)
-{
-	if (str.empty()) return {};
-	int needed = WideCharToMultiByte(CP_UTF8, 0, str.data(), (int)str.size(), nullptr, 0, nullptr, nullptr);
-	if (needed == 0)
-		throw std::runtime_error("WideCharToMultiByte failed");
-	std::string result;
-	result.resize(needed);
-	needed = WideCharToMultiByte(CP_UTF8, 0, str.data(), (int)str.size(), &result[0], (int)result.size(), nullptr, nullptr);
-	if (needed == 0)
-		throw std::runtime_error("WideCharToMultiByte failed");
-	return result;
+	DescriptorSets->ClearCache();
+	Textures->ClearCache();
 }

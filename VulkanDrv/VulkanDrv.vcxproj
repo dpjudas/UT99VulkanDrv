@@ -100,17 +100,23 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="..\Thirdparty\volk\volk.h" />
+    <ClInclude Include="BufferManager.h" />
+    <ClInclude Include="CommandBufferManager.h" />
+    <ClInclude Include="DescriptorSetManager.h" />
     <ClInclude Include="FileResource.h" />
+    <ClInclude Include="FramebufferManager.h" />
     <ClInclude Include="halffloat.h" />
     <ClInclude Include="mat.h" />
     <ClInclude Include="PixelBuffer.h" />
     <ClInclude Include="Postprocess.h" />
     <ClInclude Include="Precomp.h" />
     <ClInclude Include="quaternion.h" />
-    <ClInclude Include="Renderer.h" />
-    <ClInclude Include="SceneBuffers.h" />
-    <ClInclude Include="SceneRenderPass.h" />
-    <ClInclude Include="SceneSamplers.h" />
+    <ClInclude Include="RenderPassManager.h" />
+    <ClInclude Include="SamplerManager.h" />
+    <ClInclude Include="SceneTextures.h" />
+    <ClInclude Include="ShaderManager.h" />
+    <ClInclude Include="TextureManager.h" />
+    <ClInclude Include="UTF16.h" />
     <ClInclude Include="UVulkanRenderDevice.h" />
     <ClInclude Include="vec.h" />
     <ClInclude Include="VulkanBuilders.h" />
@@ -129,7 +135,11 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="BufferManager.cpp" />
+    <ClCompile Include="CommandBufferManager.cpp" />
+    <ClCompile Include="DescriptorSetManager.cpp" />
     <ClCompile Include="FileResource.cpp" />
+    <ClCompile Include="FramebufferManager.cpp" />
     <ClCompile Include="halffloat.cpp" />
     <ClCompile Include="mat.cpp" />
     <ClCompile Include="Postprocess.cpp" />
@@ -137,10 +147,12 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="Renderer.cpp" />
-    <ClCompile Include="SceneBuffers.cpp" />
-    <ClCompile Include="SceneRenderPass.cpp" />
-    <ClCompile Include="SceneSamplers.cpp" />
+    <ClCompile Include="RenderPassManager.cpp" />
+    <ClCompile Include="SamplerManager.cpp" />
+    <ClCompile Include="SceneTextures.cpp" />
+    <ClCompile Include="ShaderManager.cpp" />
+    <ClCompile Include="TextureManager.cpp" />
+    <ClCompile Include="UTF16.cpp" />
     <ClCompile Include="UVulkanRenderDevice.cpp" />
     <ClCompile Include="VulkanBuilders.cpp" />
     <ClCompile Include="VulkanDevice.cpp" />

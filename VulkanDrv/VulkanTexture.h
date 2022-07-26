@@ -3,7 +3,7 @@
 #include "VulkanObjects.h"
 #include <functional>
 
-class Renderer;
+class UVulkanRenderDevice;
 struct FTextureInfo;
 
 struct UploadedData
@@ -18,11 +18,11 @@ struct UploadedData
 class VulkanTexture
 {
 public:
-	VulkanTexture(Renderer* renderer, const FTextureInfo& Info, bool masked);
+	VulkanTexture(UVulkanRenderDevice* renderer, const FTextureInfo& Info, bool masked);
 	~VulkanTexture();
 
-	void Update(Renderer* renderer, const FTextureInfo& Info, bool masked);
-	void UpdateRect(Renderer* renderer, FTextureInfo& Info, int x, int y, int w, int h);
+	void Update(UVulkanRenderDevice* renderer, const FTextureInfo& Info, bool masked);
+	void UpdateRect(UVulkanRenderDevice* renderer, FTextureInfo& Info, int x, int y, int w, int h);
 
 	//float UMult = 1.0f;
 	//float VMult = 1.0f;
@@ -31,6 +31,6 @@ public:
 	std::unique_ptr<VulkanImageView> imageView;
 
 private:
-	UploadedData UploadData(Renderer* renderer, const FTextureInfo& Info, bool masked, VkFormat imageFormat, std::function<int(FMipmapBase* mip)> calcMipSize, std::function<void(FMipmapBase* mip, void* dst)> copyMip = {});
-	UploadedData UploadWhite(Renderer* renderer, const FTextureInfo& Info, bool masked);
+	UploadedData UploadData(UVulkanRenderDevice* renderer, const FTextureInfo& Info, bool masked, VkFormat imageFormat, std::function<int(FMipmapBase* mip)> calcMipSize, std::function<void(FMipmapBase* mip, void* dst)> copyMip = {});
+	UploadedData UploadWhite(UVulkanRenderDevice* renderer, const FTextureInfo& Info, bool masked);
 };
