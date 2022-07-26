@@ -1,7 +1,6 @@
 
 #include "Precomp.h"
 #include "UVulkanRenderDevice.h"
-#include "UVulkanClient.h"
 #include "VulkanSwapChain.h"
 #include "VulkanPostprocess.h"
 #include "VulkanTexture.h"

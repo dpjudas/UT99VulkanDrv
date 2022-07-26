@@ -2,8 +2,6 @@
 #include "Precomp.h"
 #include "VulkanPostprocess.h"
 #include "SceneBuffers.h"
-#include "UVulkanClient.h"
-//#include "CanvasRenderState.h"
 #include "VulkanBuilders.h"
 #include "VulkanSwapChain.h"
 #include "VulkanObjects.h"
