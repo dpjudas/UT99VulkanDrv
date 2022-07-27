@@ -186,6 +186,7 @@ void VulkanDevice::CreateDevice()
 	VkPhysicalDeviceBufferDeviceAddressFeatures deviceAddressFeatures = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES };
 	VkPhysicalDeviceAccelerationStructureFeaturesKHR deviceAccelFeatures = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR };
 	VkPhysicalDeviceRayQueryFeaturesKHR rayQueryFeatures = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR };
+	VkPhysicalDeviceDescriptorIndexingFeatures descriptorIndexingFeatures = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT };
 
 	deviceCreateInfo.queueCreateInfoCount = (uint32_t)queueCreateInfos.size();
 	deviceCreateInfo.pQueueCreateInfos = queueCreateInfos.data();
@@ -196,6 +197,8 @@ void VulkanDevice::CreateDevice()
 	deviceAddressFeatures.bufferDeviceAddress = true;
 	deviceAccelFeatures.accelerationStructure = true;
 	rayQueryFeatures.rayQuery = true;
+	descriptorIndexingFeatures.descriptorBindingPartiallyBound = true;
+	descriptorIndexingFeatures.runtimeDescriptorArray = true;
 
 	void** next = const_cast<void**>(&deviceCreateInfo.pNext);
 	if (SupportsDeviceExtension(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME))
@@ -207,20 +210,25 @@ void VulkanDevice::CreateDevice()
 	{
 		deviceCreateInfo.pEnabledFeatures = &deviceFeatures2.features;
 	}
-	if (SupportsDeviceExtension(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME))
+	if (SupportsDeviceExtension(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME) && PhysicalDevice.BufferDeviceAddressFeatures.bufferDeviceAddress)
 	{
 		*next = &deviceAddressFeatures;
 		next = &deviceAddressFeatures.pNext;
 	}
-	if (SupportsDeviceExtension(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME))
+	if (SupportsDeviceExtension(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME) && PhysicalDevice.AccelerationStructureFeatures.accelerationStructure)
 	{
 		*next = &deviceAccelFeatures;
 		next = &deviceAccelFeatures.pNext;
 	}
-	if (SupportsDeviceExtension(VK_KHR_RAY_QUERY_EXTENSION_NAME))
+	if (SupportsDeviceExtension(VK_KHR_RAY_QUERY_EXTENSION_NAME) && PhysicalDevice.RayQueryFeatures.rayQuery)
 	{
 		*next = &rayQueryFeatures;
 		next = &rayQueryFeatures.pNext;
+	}
+	if (SupportsDeviceExtension(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME) && PhysicalDevice.DescriptorIndexingFeatures.descriptorBindingPartiallyBound && PhysicalDevice.DescriptorIndexingFeatures.runtimeDescriptorArray)
+	{
+		*next = &descriptorIndexingFeatures;
+		next = &descriptorIndexingFeatures.pNext;
 	}
 
 	VkResult result = vkCreateDevice(PhysicalDevice.Device, &deviceCreateInfo, nullptr, &device);
@@ -469,7 +477,6 @@ std::vector<VulkanPhysicalDevice> VulkanDevice::GetPhysicalDevices(VkInstance in
 
 		vkGetPhysicalDeviceMemoryProperties(dev.Device, &dev.MemoryProperties);
 		vkGetPhysicalDeviceProperties(dev.Device, &dev.Properties);
-		vkGetPhysicalDeviceFeatures(dev.Device, &dev.Features);
 
 		uint32_t queueFamilyCount = 0;
 		vkGetPhysicalDeviceQueueFamilyProperties(dev.Device, &queueFamilyCount, nullptr);
@@ -480,6 +487,54 @@ std::vector<VulkanPhysicalDevice> VulkanDevice::GetPhysicalDevices(VkInstance in
 		vkEnumerateDeviceExtensionProperties(dev.Device, nullptr, &deviceExtensionCount, nullptr);
 		dev.Extensions.resize(deviceExtensionCount);
 		vkEnumerateDeviceExtensionProperties(dev.Device, nullptr, &deviceExtensionCount, dev.Extensions.data());
+
+		auto checkForExtension = [&](const char* name)
+		{
+			for (const auto& ext : dev.Extensions)
+			{
+				if (strcmp(ext.extensionName, name) == 0)
+					return true;
+			}
+			return false;
+		};
+
+		if (checkForExtension(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME))
+		{
+			VkPhysicalDeviceFeatures2 deviceFeatures2 = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
+
+			void** next = const_cast<void**>(&deviceFeatures2.pNext);
+			if (checkForExtension(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME))
+			{
+				*next = &dev.BufferDeviceAddressFeatures;
+				next = &dev.BufferDeviceAddressFeatures.pNext;
+			}
+			if (checkForExtension(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME))
+			{
+				*next = &dev.AccelerationStructureFeatures;
+				next = &dev.AccelerationStructureFeatures.pNext;
+			}
+			if (checkForExtension(VK_KHR_RAY_QUERY_EXTENSION_NAME))
+			{
+				*next = &dev.RayQueryFeatures;
+				next = &dev.RayQueryFeatures.pNext;
+			}
+			if (checkForExtension(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME))
+			{
+				*next = &dev.DescriptorIndexingFeatures;
+				next = &dev.DescriptorIndexingFeatures.pNext;
+			}
+
+			vkGetPhysicalDeviceFeatures2(dev.Device, &deviceFeatures2);
+			dev.Features = deviceFeatures2.features;
+			dev.BufferDeviceAddressFeatures.pNext = nullptr;
+			dev.AccelerationStructureFeatures.pNext = nullptr;
+			dev.RayQueryFeatures.pNext = nullptr;
+			dev.DescriptorIndexingFeatures.pNext = nullptr;
+		}
+		else
+		{
+			vkGetPhysicalDeviceFeatures(dev.Device, &dev.Features);
+		}
 	}
 	return devinfo;
 }

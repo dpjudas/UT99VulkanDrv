@@ -20,6 +20,10 @@ public:
 	VkPhysicalDeviceProperties Properties = {};
 	VkPhysicalDeviceFeatures Features = {};
 	VkPhysicalDeviceMemoryProperties MemoryProperties = {};
+	VkPhysicalDeviceBufferDeviceAddressFeatures BufferDeviceAddressFeatures = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES };
+	VkPhysicalDeviceAccelerationStructureFeaturesKHR AccelerationStructureFeatures = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR };
+	VkPhysicalDeviceRayQueryFeaturesKHR RayQueryFeatures = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR };
+	VkPhysicalDeviceDescriptorIndexingFeatures DescriptorIndexingFeatures = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT };
 };
 
 class VulkanCompatibleDevice
@@ -75,7 +79,8 @@ public:
 		VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
 		VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
 		VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
-		VK_KHR_RAY_QUERY_EXTENSION_NAME
+		VK_KHR_RAY_QUERY_EXTENSION_NAME,
+		VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME
 	};
 	VulkanPhysicalDevice PhysicalDevice;
 	bool DebugLayerActive = false;
