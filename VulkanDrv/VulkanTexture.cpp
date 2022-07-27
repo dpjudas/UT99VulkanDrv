@@ -22,10 +22,11 @@ void VulkanTexture::UpdateRect(UVulkanRenderDevice* renderer, FTextureInfo& Info
 	size_t pixelsSize = w * h * 4;
 	pixelsSize = (pixelsSize + 15) / 16 * 16; // memory alignment
 
-	BufferBuilder builder;
-	builder.setUsage(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
-	builder.setSize(pixelsSize);
-	auto stagingbuffer = builder.create(renderer->Device);
+	auto stagingbuffer = BufferBuilder()
+		.Usage(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY)
+		.Size(pixelsSize)
+		.DebugName("UpdateRectStaging")
+		.Create(renderer->Device);
 
 	FMipmapBase* Mip = Info.Mips[0];
 
@@ -50,9 +51,19 @@ void VulkanTexture::UpdateRect(UVulkanRenderDevice* renderer, FTextureInfo& Info
 
 	auto cmdbuffer = renderer->Commands->GetTransferCommands();
 
-	PipelineBarrier imageTransition0;
-	imageTransition0.addImage(image.get(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_ASPECT_COLOR_BIT, 0, 1);
-	imageTransition0.execute(cmdbuffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+	PipelineBarrier()
+		.AddImage(
+			image.get(),
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT,
+			VK_ACCESS_TRANSFER_WRITE_BIT,
+			VK_IMAGE_ASPECT_COLOR_BIT,
+			0, 1)
+		.Execute(
+			cmdbuffer,
+			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
+			VK_PIPELINE_STAGE_TRANSFER_BIT);
 
 	VkBufferImageCopy region = {};
 	region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -62,9 +73,19 @@ void VulkanTexture::UpdateRect(UVulkanRenderDevice* renderer, FTextureInfo& Info
 	region.imageExtent = { (uint32_t)w, (uint32_t)h, 1 };
 	cmdbuffer->copyBufferToImage(stagingbuffer->buffer, image->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
-	PipelineBarrier imageTransition1;
-	imageTransition1.addImage(image.get(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT, 0, 1);
-	imageTransition1.execute(cmdbuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+	PipelineBarrier()
+		.AddImage(
+			image.get(),
+			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			VK_ACCESS_TRANSFER_WRITE_BIT,
+			VK_ACCESS_SHADER_READ_BIT,
+			VK_IMAGE_ASPECT_COLOR_BIT,
+			0, 1)
+		.Execute(
+			cmdbuffer,
+			VK_PIPELINE_STAGE_TRANSFER_BIT,
+			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
 
 	renderer->Commands->FrameDeleteList->buffers.push_back(std::move(stagingbuffer));
 
@@ -77,7 +98,7 @@ void VulkanTexture::Update(UVulkanRenderDevice* renderer, const FTextureInfo& In
 	//VMult = 1.0f / (Info.VScale * Info.VSize);
 
 	UploadedData data;
-	if ((uint32_t)Info.USize > renderer->Device->physicalDevice.properties.limits.maxImageDimension2D || (uint32_t)Info.VSize > renderer->Device->physicalDevice.properties.limits.maxImageDimension2D)
+	if ((uint32_t)Info.USize > renderer->Device->PhysicalDevice.Properties.limits.maxImageDimension2D || (uint32_t)Info.VSize > renderer->Device->PhysicalDevice.Properties.limits.maxImageDimension2D)
 	{
 		// To do: texture is too big. find the first mipmap level that fits and use that as the base size
 		data = UploadWhite(renderer, Info, masked);
@@ -160,28 +181,50 @@ void VulkanTexture::Update(UVulkanRenderDevice* renderer, const FTextureInfo& In
 
 	if (!image)
 	{
-		ImageBuilder imgbuilder;
-		imgbuilder.setFormat(data.imageFormat);
-		imgbuilder.setSize(data.width, data.height, data.miplevels.size());
-		imgbuilder.setUsage(VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
-		image = imgbuilder.create(renderer->Device);
+		image = ImageBuilder()
+			.Format(data.imageFormat)
+			.Size(data.width, data.height, data.miplevels.size())
+			.Usage(VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
+			.DebugName("VulkanTexture.Image")
+			.Create(renderer->Device);
 
-		ImageViewBuilder viewbuilder;
-		viewbuilder.setImage(image.get(), data.imageFormat);
-		imageView = viewbuilder.create(renderer->Device);
+		imageView = ImageViewBuilder()
+			.Image(image.get(), data.imageFormat)
+			.DebugName("VulkanTexture.ImageView")
+			.Create(renderer->Device);
 	}
 
 	auto cmdbuffer = renderer->Commands->GetTransferCommands();
 
-	PipelineBarrier imageTransition0;
-	imageTransition0.addImage(image.get(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_ASPECT_COLOR_BIT, 0, data.miplevels.size());
-	imageTransition0.execute(cmdbuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+	PipelineBarrier()
+		.AddImage(
+			image.get(),
+			VK_IMAGE_LAYOUT_UNDEFINED,
+			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			0,
+			VK_ACCESS_TRANSFER_WRITE_BIT,
+			VK_IMAGE_ASPECT_COLOR_BIT,
+			0, data.miplevels.size())
+		.Execute(
+			cmdbuffer,
+			VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+			VK_PIPELINE_STAGE_TRANSFER_BIT);
 
 	cmdbuffer->copyBufferToImage(data.stagingbuffer->buffer, image->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, data.miplevels.size(), data.miplevels.data());
 
-	PipelineBarrier imageTransition1;
-	imageTransition1.addImage(image.get(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT, 0, data.miplevels.size());
-	imageTransition1.execute(cmdbuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+	PipelineBarrier()
+		.AddImage(
+			image.get(),
+			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			VK_ACCESS_TRANSFER_WRITE_BIT,
+			VK_ACCESS_SHADER_READ_BIT,
+			VK_IMAGE_ASPECT_COLOR_BIT,
+			0, data.miplevels.size())
+		.Execute(
+			cmdbuffer,
+			VK_PIPELINE_STAGE_TRANSFER_BIT,
+			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
 
 	renderer->Commands->FrameDeleteList->buffers.push_back(std::move(data.stagingbuffer));
 }
@@ -205,10 +248,11 @@ UploadedData VulkanTexture::UploadData(UVulkanRenderDevice* renderer, const FTex
 		}
 	}
 
-	BufferBuilder builder;
-	builder.setUsage(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
-	builder.setSize(pixelsSize);
-	result.stagingbuffer = builder.create(renderer->Device);
+	result.stagingbuffer = BufferBuilder()
+		.Usage(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY)
+		.Size(pixelsSize)
+		.DebugName("VulkanTexture.UploadDataStaging")
+		.Create(renderer->Device);
 
 	auto data = (BYTE*)result.stagingbuffer->Map(0, pixelsSize);
 	auto Ptr = data;
@@ -254,14 +298,14 @@ UploadedData VulkanTexture::UploadWhite(UVulkanRenderDevice* renderer, const FTe
 	result.width = 1;
 	result.height = 1;
 
-	BufferBuilder builder;
-	builder.setUsage(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
-	builder.setSize(4);
-	result.stagingbuffer = builder.create(renderer->Device);
+	result.stagingbuffer = BufferBuilder()
+		.Usage(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY)
+		.Size(4)
+		.DebugName("VulkanTexture.UploadWhite")
+		.Create(renderer->Device);
+
 	auto data = (uint32_t*)result.stagingbuffer->Map(0, 4);
-
 	data[0] = 0xffffffff;
-
 	result.stagingbuffer->Unmap();
 
 	VkBufferImageCopy region = {};

@@ -7,40 +7,37 @@
 
 ShaderManager::ShaderManager(UVulkanRenderDevice* renderer) : renderer(renderer)
 {
-	ShaderBuilder::init();
+	ShaderBuilder::Init();
 
-	vertexShader = ShaderManager::CreateVertexShader(renderer->Device, "shaders/Scene.vert");
-	fragmentShader = ShaderManager::CreateFragmentShader(renderer->Device, "shaders/Scene.frag");
-	fragmentShaderAlphaTest = ShaderManager::CreateFragmentShader(renderer->Device, "shaders/Scene.frag", "#define ALPHATEST");
+	vertexShader = ShaderBuilder()
+		.VertexShader(LoadShaderCode("shaders/Scene.vert"))
+		.DebugName("vertexShader")
+		.Create("vertexShader", renderer->Device);
 
-	ppVertexShader = ShaderManager::CreateVertexShader(renderer->Device, "shaders/PPStep.vert");
-	ppFragmentPresentShader = ShaderManager::CreateFragmentShader(renderer->Device, "shaders/Present.frag");
+	fragmentShader = ShaderBuilder()
+		.FragmentShader(LoadShaderCode("shaders/Scene.frag"))
+		.DebugName("fragmentShader")
+		.Create("fragmentShader", renderer->Device);
+
+	fragmentShaderAlphaTest = ShaderBuilder()
+		.FragmentShader(LoadShaderCode("shaders/Scene.frag", "#define ALPHATEST"))
+		.DebugName("fragmentShader")
+		.Create("fragmentShader", renderer->Device);
+
+	ppVertexShader = ShaderBuilder()
+		.VertexShader(LoadShaderCode("shaders/PPStep.vert"))
+		.DebugName("ppVertexShader")
+		.Create("ppVertexShader", renderer->Device);
+
+	ppFragmentPresentShader = ShaderBuilder()
+		.FragmentShader(LoadShaderCode("shaders/Present.frag"))
+		.DebugName("ppFragmentPresentShader")
+		.Create("ppFragmentPresentShader", renderer->Device);
 }
 
 ShaderManager::~ShaderManager()
 {
-	ShaderBuilder::deinit();
-}
-
-std::unique_ptr<VulkanShader> ShaderManager::CreateVertexShader(VulkanDevice* device, const std::string& name, const std::string& defines)
-{
-	ShaderBuilder builder;
-	builder.setVertexShader(LoadShaderCode(name, defines));
-	return builder.create(device);
-}
-
-std::unique_ptr<VulkanShader> ShaderManager::CreateFragmentShader(VulkanDevice* device, const std::string& name, const std::string& defines)
-{
-	ShaderBuilder builder;
-	builder.setFragmentShader(LoadShaderCode(name, defines));
-	return builder.create(device);
-}
-
-std::unique_ptr<VulkanShader> ShaderManager::CreateComputeShader(VulkanDevice* device, const std::string& name, const std::string& defines)
-{
-	ShaderBuilder builder;
-	builder.setComputeShader(LoadShaderCode(name, defines));
-	return builder.create(device);
+	ShaderBuilder::Deinit();
 }
 
 std::string ShaderManager::LoadShaderCode(const std::string& filename, const std::string& defines)

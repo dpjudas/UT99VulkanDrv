@@ -54,27 +54,31 @@ void TextureManager::CreateNullTexture()
 {
 	auto cmdbuffer = renderer->Commands->GetTransferCommands();
 
-	ImageBuilder imgbuilder;
-	imgbuilder.setFormat(VK_FORMAT_R8G8B8A8_UNORM);
-	imgbuilder.setSize(1, 1);
-	imgbuilder.setUsage(VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
-	NullTexture = imgbuilder.create(renderer->Device);
+	NullTexture = ImageBuilder()
+		.Format(VK_FORMAT_R8G8B8A8_UNORM)
+		.Size(1, 1)
+		.Usage(VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
+		.DebugName("NullTexture")
+		.Create(renderer->Device);
 
-	ImageViewBuilder viewbuilder;
-	viewbuilder.setImage(NullTexture.get(), VK_FORMAT_R8G8B8A8_UNORM);
-	NullTextureView = viewbuilder.create(renderer->Device);
+	NullTextureView = ImageViewBuilder()
+		.Image(NullTexture.get(), VK_FORMAT_R8G8B8A8_UNORM)
+		.DebugName("NullTextureView")
+		.Create(renderer->Device);
 
-	BufferBuilder builder;
-	builder.setUsage(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
-	builder.setSize(4);
-	auto stagingbuffer = builder.create(renderer->Device);
+	auto stagingbuffer = BufferBuilder()
+		.Usage(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY)
+		.Size(4)
+		.DebugName("NullTextureStaging")
+		.Create(renderer->Device);
+
 	auto data = (uint32_t*)stagingbuffer->Map(0, 4);
 	data[0] = 0xffffffff;
 	stagingbuffer->Unmap();
 
-	PipelineBarrier imageTransition0;
-	imageTransition0.addImage(NullTexture.get(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, VK_ACCESS_TRANSFER_WRITE_BIT);
-	imageTransition0.execute(cmdbuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+	PipelineBarrier()
+		.AddImage(NullTexture.get(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, VK_ACCESS_TRANSFER_WRITE_BIT)
+		.Execute(cmdbuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 
 	VkBufferImageCopy region = {};
 	region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -82,9 +86,9 @@ void TextureManager::CreateNullTexture()
 	region.imageExtent = { 1, 1, 1 };
 	cmdbuffer->copyBufferToImage(stagingbuffer->buffer, NullTexture->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
-	PipelineBarrier imageTransition1;
-	imageTransition1.addImage(NullTexture.get(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
-	imageTransition1.execute(cmdbuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+	PipelineBarrier()
+		.AddImage(NullTexture.get(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT)
+		.Execute(cmdbuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
 
 	renderer->Commands->FrameDeleteList->buffers.push_back(std::move(stagingbuffer));
 }
@@ -105,27 +109,31 @@ void TextureManager::CreateDitherTexture()
 
 	auto cmdbuffer = renderer->Commands->GetTransferCommands();
 
-	ImageBuilder imgbuilder;
-	imgbuilder.setFormat(VK_FORMAT_R32_SFLOAT);
-	imgbuilder.setSize(8, 8);
-	imgbuilder.setUsage(VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
-	DitherImage = imgbuilder.create(renderer->Device);
+	DitherImage = ImageBuilder()
+		.Format(VK_FORMAT_R32_SFLOAT)
+		.Size(8, 8)
+		.Usage(VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
+		.DebugName("DitherImage")
+		.Create(renderer->Device);
 
-	ImageViewBuilder viewbuilder;
-	viewbuilder.setImage(DitherImage.get(), VK_FORMAT_R8G8B8A8_UNORM);
-	DitherImageView = viewbuilder.create(renderer->Device);
+	DitherImageView = ImageViewBuilder()
+		.Image(DitherImage.get(), VK_FORMAT_R8G8B8A8_UNORM)
+		.DebugName("DitherImageView")
+		.Create(renderer->Device);
 
-	BufferBuilder builder;
-	builder.setUsage(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
-	builder.setSize(sizeof(ditherdata));
-	auto stagingbuffer = builder.create(renderer->Device);
+	auto stagingbuffer = BufferBuilder()
+		.Usage(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY)
+		.Size(sizeof(ditherdata))
+		.DebugName("DitherImageStaging")
+		.Create(renderer->Device);
+
 	auto data = (uint32_t*)stagingbuffer->Map(0, sizeof(ditherdata));
 	memcpy(data, ditherdata, sizeof(ditherdata));
 	stagingbuffer->Unmap();
 
-	PipelineBarrier imageTransition0;
-	imageTransition0.addImage(DitherImage.get(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, VK_ACCESS_TRANSFER_WRITE_BIT);
-	imageTransition0.execute(cmdbuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+	PipelineBarrier()
+		.AddImage(DitherImage.get(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, VK_ACCESS_TRANSFER_WRITE_BIT)
+		.Execute(cmdbuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 
 	VkBufferImageCopy region = {};
 	region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -133,9 +141,9 @@ void TextureManager::CreateDitherTexture()
 	region.imageExtent = { 8, 8, 1 };
 	cmdbuffer->copyBufferToImage(stagingbuffer->buffer, DitherImage->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
-	PipelineBarrier imageTransition1;
-	imageTransition1.addImage(DitherImage.get(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
-	imageTransition1.execute(cmdbuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+	PipelineBarrier()
+		.AddImage(DitherImage.get(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT)
+		.Execute(cmdbuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
 
 	renderer->Commands->FrameDeleteList->buffers.push_back(std::move(stagingbuffer));
 }

@@ -27,10 +27,11 @@ VulkanDescriptorSet* DescriptorSetManager::GetTextureDescriptorSet(DWORD PolyFla
 	{
 		if (SceneDescriptorPoolSetsLeft == 0)
 		{
-			DescriptorPoolBuilder builder;
-			builder.addPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 * 4);
-			builder.setMaxSets(1000);
-			SceneDescriptorPool.push_back(builder.create(renderer->Device));
+			SceneDescriptorPool.push_back(DescriptorPoolBuilder()
+				.AddPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 * 4)
+				.MaxSets(1000)
+				.DebugName("SceneDescriptorPool")
+				.Create(renderer->Device));
 			SceneDescriptorPoolSetsLeft = 1000;
 		}
 
@@ -44,11 +45,11 @@ VulkanDescriptorSet* DescriptorSetManager::GetTextureDescriptorSet(DWORD PolyFla
 			VulkanSampler* sampler = (i == 0) ? renderer->Samplers->samplers[samplermode].get() : renderer->Samplers->samplers[0].get();
 
 			if (texture)
-				writes.addCombinedImageSampler(descriptorSet.get(), i++, texture->imageView.get(), sampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+				writes.AddCombinedImageSampler(descriptorSet.get(), i++, texture->imageView.get(), sampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 			else
-				writes.addCombinedImageSampler(descriptorSet.get(), i++, renderer->Textures->NullTextureView.get(), sampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+				writes.AddCombinedImageSampler(descriptorSet.get(), i++, renderer->Textures->NullTextureView.get(), sampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 		}
-		writes.updateSets(renderer->Device);
+		writes.Execute(renderer->Device);
 	}
 	return descriptorSet.get();
 }
@@ -63,27 +64,30 @@ void DescriptorSetManager::ClearCache()
 
 void DescriptorSetManager::CreateSceneDescriptorSetLayout()
 {
-	DescriptorSetLayoutBuilder builder;
-	builder.addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
-	builder.addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
-	builder.addBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
-	builder.addBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
-	SceneDescriptorSetLayout = builder.create(renderer->Device);
+	SceneDescriptorSetLayout = DescriptorSetLayoutBuilder()
+		.AddBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT)
+		.AddBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT)
+		.AddBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT)
+		.AddBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT)
+		.DebugName("SceneDescriptorSetLayout")
+		.Create(renderer->Device);
 }
 
 void DescriptorSetManager::CreatePresentDescriptorSetLayout()
 {
-	DescriptorSetLayoutBuilder builder;
-	builder.addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
-	builder.addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
-	PresentDescriptorSetLayout = builder.create(renderer->Device);
+	PresentDescriptorSetLayout = DescriptorSetLayoutBuilder()
+		.AddBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT)
+		.AddBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT)
+		.DebugName("PresentDescriptorSetLayout")
+		.Create(renderer->Device);
 }
 
 void DescriptorSetManager::CreatePresentDescriptorSet()
 {
-	DescriptorPoolBuilder builder;
-	builder.addPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2);
-	builder.setMaxSets(1);
-	PresentDescriptorPool = builder.create(renderer->Device);
+	PresentDescriptorPool = DescriptorPoolBuilder()
+		.AddPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2)
+		.MaxSets(1)
+		.DebugName("PresentDescriptorPool")
+		.Create(renderer->Device);
 	PresentDescriptorSet = PresentDescriptorPool->allocate(PresentDescriptorSetLayout.get());
 }

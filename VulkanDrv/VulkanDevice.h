@@ -1,6 +1,10 @@
 #pragma once
 
 #include <functional>
+#include <mutex>
+#include <vector>
+#include <algorithm>
+#include <memory>
 
 class VulkanSwapChain;
 class VulkanSemaphore;
@@ -9,14 +13,13 @@ class VulkanFence;
 class VulkanPhysicalDevice
 {
 public:
-	VkPhysicalDevice device = VK_NULL_HANDLE;
+	VkPhysicalDevice Device = VK_NULL_HANDLE;
 
-	std::vector<VkExtensionProperties> extensions;
-	std::vector<VkQueueFamilyProperties> queueFamilies;
-	VkPhysicalDeviceProperties properties = {};
-	VkPhysicalDeviceRayTracingPropertiesNV rayTracingProperties = {};
-	VkPhysicalDeviceFeatures features = {};
-	VkPhysicalDeviceMemoryProperties memoryProperties = {};
+	std::vector<VkExtensionProperties> Extensions;
+	std::vector<VkQueueFamilyProperties> QueueFamilies;
+	VkPhysicalDeviceProperties Properties = {};
+	VkPhysicalDeviceFeatures Features = {};
+	VkPhysicalDeviceMemoryProperties MemoryProperties = {};
 };
 
 class VulkanCompatibleDevice
@@ -25,6 +28,7 @@ public:
 	VulkanPhysicalDevice *device = nullptr;
 	int graphicsFamily = -1;
 	int presentFamily = -1;
+	bool graphicsTimeQueries = false;
 };
 
 class VulkanDevice
@@ -33,9 +37,9 @@ public:
 	VulkanDevice(HWND window, int vk_device = 0, bool vk_debug = false, std::function<void(const char* typestr, const std::string& msg)> printLogCallback = {});
 	~VulkanDevice();
 
-	void setDebugObjectName(const char *name, uint64_t handle, VkObjectType type)
+	void SetDebugObjectName(const char *name, uint64_t handle, VkObjectType type)
 	{
-		if (!debugLayerActive) return;
+		if (!DebugLayerActive) return;
 
 		VkDebugUtilsObjectNameInfoEXT info = {};
 		info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
@@ -45,28 +49,36 @@ public:
 		vkSetDebugUtilsObjectNameEXT(device, &info);
 	}
 
-	uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
-
 	HWND window;
 
+	// Physical device info
+	std::vector<VulkanPhysicalDevice> AvailableDevices;
+	std::vector<VulkanCompatibleDevice> SupportedDevices;
+
 	// Instance setup
-	std::vector<VkLayerProperties> availableLayers;
-	std::vector<VkExtensionProperties> extensions;
-	std::vector<const char *> enabledExtensions;
-	std::vector<const char *> optionalExtensions = { VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME };
-	std::vector<const char*> enabledValidationLayers;
+	std::vector<VkLayerProperties> AvailableLayers;
+	std::vector<VkExtensionProperties> Extensions;
+	std::vector<const char *> EnabledExtensions;
+	std::vector<const char *> OptionalExtensions = { VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME };
+	std::vector<const char*> EnabledValidationLayers;
+	uint32_t ApiVersion = {};
 
 	// Device setup
-	VkPhysicalDeviceFeatures enabledDeviceFeatures = {};
-	std::vector<const char *> enabledDeviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
-	std::vector<const char *> optionalDeviceExtensions = {
+	VkPhysicalDeviceFeatures UsedDeviceFeatures = {};
+	std::vector<const char *> EnabledDeviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+	std::vector<const char *> OptionalDeviceExtensions =
+	{
 		VK_EXT_HDR_METADATA_EXTENSION_NAME,
 		VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME,
 		VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME,
-		VK_NV_RAY_TRACING_EXTENSION_NAME
+		VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
+		VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
+		VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
+		VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
+		VK_KHR_RAY_QUERY_EXTENSION_NAME
 	};
-	VulkanPhysicalDevice physicalDevice;
-	bool debugLayerActive = false;
+	VulkanPhysicalDevice PhysicalDevice;
+	bool DebugLayerActive = false;
 
 	VkInstance instance = VK_NULL_HANDLE;
 	VkSurfaceKHR surface = VK_NULL_HANDLE;
@@ -78,35 +90,47 @@ public:
 
 	int graphicsFamily = -1;
 	int presentFamily = -1;
+	bool graphicsTimeQueries = false;
 
-	// Physical device info
-	std::vector<VulkanPhysicalDevice> availableDevices;
-	std::vector<VulkanCompatibleDevice> supportedDevices;
+	bool SupportsDeviceExtension(const char* ext) const;
 
 private:
 	int vk_device;
 	bool vk_debug;
 	std::function<void(const char* typestr, const std::string& msg)> printLogCallback;
 
-	void createInstance();
-	void createSurface();
-	void selectPhysicalDevice();
-	void selectFeatures();
-	void createDevice();
-	void createAllocator();
-	void releaseResources();
+	void CreateInstance();
+	void CreateSurface();
+	void SelectPhysicalDevice();
+	void SelectFeatures();
+	void CreateDevice();
+	void CreateAllocator();
+	void ReleaseResources();
 
-	bool supportsDeviceExtension(const char *ext) const;
-
-	static bool checkRequiredFeatures(const VkPhysicalDeviceFeatures &f);
+	static bool CheckRequiredFeatures(const VkPhysicalDeviceFeatures &f);
 
 	VkDebugUtilsMessengerEXT debugMessenger = VK_NULL_HANDLE;
 
-	static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData);
+	static VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData);
 
-	static void initVolk();
-	static std::vector<VkLayerProperties> getAvailableLayers();
-	static std::vector<VkExtensionProperties> getExtensions();
-	static std::vector<const char *> getPlatformExtensions();
-	static std::vector<VulkanPhysicalDevice> getPhysicalDevices(VkInstance instance);
+	static void InitVolk();
+	static std::vector<VkLayerProperties> GetAvailableLayers();
+	static std::vector<VkExtensionProperties> GetExtensions();
+	static std::vector<const char *> GetPlatformExtensions();
+	static std::vector<VulkanPhysicalDevice> GetPhysicalDevices(VkInstance instance);
 };
+
+std::string VkResultToString(VkResult result);
+
+inline void VulkanError(const char *text)
+{
+	throw std::runtime_error(text);
+}
+
+inline void CheckVulkanError(VkResult result, const char *text)
+{
+	if (result >= VK_SUCCESS)
+		return;
+
+	throw std::runtime_error(text + std::string(": ") + VkResultToString(result));
+}

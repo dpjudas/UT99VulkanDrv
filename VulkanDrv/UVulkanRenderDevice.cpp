@@ -68,7 +68,7 @@ UBOOL UVulkanRenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT N
 
 		if (VkDebug)
 		{
-			const auto& props = Device->physicalDevice.properties;
+			const auto& props = Device->PhysicalDevice.Properties;
 
 			FString deviceType;
 			switch (props.deviceType)
@@ -90,7 +90,7 @@ UBOOL UVulkanRenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT N
 			debugf(TEXT("Vulkan version: %s (api) %s (driver)"), *apiVersion, *driverVersion);
 
 			debugf(TEXT("Vulkan extensions:"));
-			for (const VkExtensionProperties& p : Device->physicalDevice.extensions)
+			for (const VkExtensionProperties& p : Device->PhysicalDevice.Extensions)
 			{
 				debugf(TEXT(" %s"), to_utf16(p.extensionName).c_str());
 			}
@@ -235,9 +235,9 @@ UBOOL UVulkanRenderDevice::Exec(const TCHAR* Cmd, FOutputDevice& Ar)
 	}
 	else if (ParseCommand(&Cmd, TEXT("GetVkDevices")))
 	{
-		for (size_t i = 0; i < Device->supportedDevices.size(); i++)
+		for (size_t i = 0; i < Device->SupportedDevices.size(); i++)
 		{
-			Ar.Log(FString::Printf(TEXT("#%d - %s\r\n"), (int)i, to_utf16(Device->supportedDevices[i].device->properties.deviceName)));
+			Ar.Log(FString::Printf(TEXT("#%d - %s\r\n"), (int)i, to_utf16(Device->SupportedDevices[i].device->Properties.deviceName)));
 		}
 		return 1;
 	}
@@ -276,15 +276,21 @@ void UVulkanRenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane Sc
 			Framebuffers->CreateSceneFramebuffer();
 
 			auto descriptors = DescriptorSets->GetPresentDescriptorSet();
-			WriteDescriptors write;
-			write.addCombinedImageSampler(descriptors, 0, Textures->Scene->ppImageView.get(), Samplers->ppLinearClamp.get(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-			write.addCombinedImageSampler(descriptors, 1, Textures->DitherImageView.get(), Samplers->ppNearestRepeat.get(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-			write.updateSets(Device);
+			WriteDescriptors()
+				.AddCombinedImageSampler(descriptors, 0, Textures->Scene->ppImageView.get(), Samplers->ppLinearClamp.get(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+				.AddCombinedImageSampler(descriptors, 1, Textures->DitherImageView.get(), Samplers->ppNearestRepeat.get(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+				.Execute(Device);
 		}
 
-		PipelineBarrier barrier;
-		barrier.addImage(Textures->Scene->colorBuffer.get(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
-		barrier.execute(Commands->GetDrawCommands(), VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+		PipelineBarrier()
+			.AddImage(
+				Textures->Scene->colorBuffer.get(),
+				VK_IMAGE_LAYOUT_UNDEFINED,
+				VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+				VK_ACCESS_SHADER_READ_BIT,
+				VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+				VK_IMAGE_ASPECT_COLOR_BIT)
+			.Execute(Commands->GetDrawCommands(), VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
 
 		auto cmdbuffer = Commands->GetDrawCommands();
 		RenderPasses->BeginScene(cmdbuffer);
@@ -738,20 +744,21 @@ void UVulkanRenderDevice::ReadPixels(FColor* Pixels)
 	void* data = Pixels;
 	float gamma = 1.5f * Viewport->GetOuterUClient()->Brightness;
 
-	ImageBuilder imgbuilder;
-	imgbuilder.setFormat(VK_FORMAT_B8G8R8A8_UNORM);
-	imgbuilder.setUsage(VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
-	imgbuilder.setSize(w, h);
-	auto dstimage = imgbuilder.create(Device);
+	auto dstimage = ImageBuilder()
+		.Format(VK_FORMAT_B8G8R8A8_UNORM)
+		.Usage(VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
+		.Size(w, h)
+		.DebugName("ReadPixelsDstImage")
+		.Create(Device);
 
 	// Convert from rgba16f to bgra8 using the GPU:
 	auto srcimage = Textures->Scene->ppImage.get();
 	auto cmdbuffer = Commands->GetDrawCommands();
 
-	PipelineBarrier barrier0;
-	barrier0.addImage(srcimage, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_READ_BIT);
-	barrier0.addImage(dstimage.get(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, VK_ACCESS_TRANSFER_WRITE_BIT);
-	barrier0.execute(cmdbuffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+	PipelineBarrier()
+		.AddImage(srcimage, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_READ_BIT)
+		.AddImage(dstimage.get(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, VK_ACCESS_TRANSFER_WRITE_BIT)
+		.Execute(cmdbuffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 
 	VkImageBlit blit = {};
 	blit.srcOffsets[0] = { 0, 0, 0 };
@@ -771,16 +778,17 @@ void UVulkanRenderDevice::ReadPixels(FColor* Pixels)
 		dstimage->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 		1, &blit, VK_FILTER_NEAREST);
 
-	PipelineBarrier barrier1;
-	barrier1.addImage(srcimage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_SHADER_READ_BIT);
-	barrier1.addImage(dstimage.get(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
-	barrier1.execute(cmdbuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+	PipelineBarrier()
+		.AddImage(srcimage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_SHADER_READ_BIT)
+		.AddImage(dstimage.get(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT)
+		.Execute(cmdbuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
 
 	// Staging buffer for download
-	BufferBuilder bufbuilder;
-	bufbuilder.setSize(w * h * 4);
-	bufbuilder.setUsage(VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_TO_CPU);
-	auto staging = bufbuilder.create(Device);
+	auto staging = BufferBuilder()
+		.Size(w * h * 4)
+		.Usage(VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_TO_CPU)
+		.DebugName("ReadPixelsStaging")
+		.Create(Device);
 
 	// Copy from image to buffer
 	VkBufferImageCopy region = {};
@@ -919,20 +927,23 @@ void UVulkanRenderDevice::BlitSceneToPostprocess()
 	auto buffers = Textures->Scene.get();
 	auto cmdbuffer = Commands->GetDrawCommands();
 
-	PipelineBarrier barrier0;
-	barrier0.addImage(
-		buffers->colorBuffer.get(),
-		VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-		VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-		VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-		VK_ACCESS_TRANSFER_READ_BIT);
-	barrier0.addImage(
-		buffers->ppImage.get(),
-		VK_IMAGE_LAYOUT_UNDEFINED,
-		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-		VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-		VK_ACCESS_TRANSFER_WRITE_BIT);
-	barrier0.execute(Commands->GetDrawCommands(), VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+	PipelineBarrier()
+		.AddImage(
+			buffers->colorBuffer.get(),
+			VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+			VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+			VK_ACCESS_TRANSFER_READ_BIT)
+		.AddImage(
+			buffers->ppImage.get(),
+			VK_IMAGE_LAYOUT_UNDEFINED,
+			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+			VK_ACCESS_TRANSFER_WRITE_BIT)
+		.Execute(
+			Commands->GetDrawCommands(),
+			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+			VK_PIPELINE_STAGE_TRANSFER_BIT);
 
 	if (buffers->sceneSamples != VK_SAMPLE_COUNT_1_BIT)
 	{
@@ -965,14 +976,17 @@ void UVulkanRenderDevice::BlitSceneToPostprocess()
 			1, &blit, VK_FILTER_NEAREST);
 	}
 
-	PipelineBarrier barrier1;
-	barrier1.addImage(
-		buffers->ppImage.get(),
-		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-		VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-		VK_ACCESS_TRANSFER_WRITE_BIT,
-		VK_ACCESS_SHADER_READ_BIT);
-	barrier1.execute(Commands->GetDrawCommands(), VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+	PipelineBarrier()
+		.AddImage(
+			buffers->ppImage.get(),
+			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			VK_ACCESS_TRANSFER_WRITE_BIT,
+			VK_ACCESS_SHADER_READ_BIT)
+		.Execute(
+			Commands->GetDrawCommands(),
+			VK_PIPELINE_STAGE_TRANSFER_BIT,
+			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
 }
 
 void UVulkanRenderDevice::DrawPresentTexture(int x, int y, int width, int height)

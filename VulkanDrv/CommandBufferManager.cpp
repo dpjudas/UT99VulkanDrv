@@ -36,10 +36,10 @@ void CommandBufferManager::SubmitCommands(bool present, int presentWidth, int pr
 	{
 		TransferCommands->end();
 
-		QueueSubmit submit;
-		submit.addCommandBuffer(TransferCommands.get());
-		submit.addSignal(TransferSemaphore.get());
-		submit.execute(renderer->Device, renderer->Device->graphicsQueue);
+		QueueSubmit()
+			.AddCommandBuffer(TransferCommands.get())
+			.AddSignal(TransferSemaphore.get())
+			.Execute(renderer->Device, renderer->Device->graphicsQueue);
 	}
 
 	if (DrawCommands)
@@ -48,18 +48,18 @@ void CommandBufferManager::SubmitCommands(bool present, int presentWidth, int pr
 	QueueSubmit submit;
 	if (DrawCommands)
 	{
-		submit.addCommandBuffer(DrawCommands.get());
+		submit.AddCommandBuffer(DrawCommands.get());
 	}
 	if (TransferCommands)
 	{
-		submit.addWait(VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, TransferSemaphore.get());
+		submit.AddWait(VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, TransferSemaphore.get());
 	}
 	if (present && PresentImageIndex != 0xffffffff)
 	{
-		submit.addWait(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, ImageAvailableSemaphore.get());
-		submit.addSignal(RenderFinishedSemaphore.get());
+		submit.AddWait(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, ImageAvailableSemaphore.get());
+		submit.AddSignal(RenderFinishedSemaphore.get());
 	}
-	submit.execute(renderer->Device, renderer->Device->graphicsQueue, RenderFinishedFence.get());
+	submit.Execute(renderer->Device, renderer->Device->graphicsQueue, RenderFinishedFence.get());
 
 	if (present && PresentImageIndex != 0xffffffff)
 	{

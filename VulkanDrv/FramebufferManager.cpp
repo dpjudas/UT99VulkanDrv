@@ -11,12 +11,13 @@ FramebufferManager::FramebufferManager(UVulkanRenderDevice* renderer) : renderer
 
 void FramebufferManager::CreateSceneFramebuffer()
 {
-	FramebufferBuilder builder;
-	builder.setRenderPass(renderer->RenderPasses->SceneRenderPass.get());
-	builder.setSize(renderer->Textures->Scene->width, renderer->Textures->Scene->height);
-	builder.addAttachment(renderer->Textures->Scene->colorBufferView.get());
-	builder.addAttachment(renderer->Textures->Scene->depthBufferView.get());
-	sceneFramebuffer = builder.create(renderer->Device);
+	sceneFramebuffer = FramebufferBuilder()
+		.RenderPass(renderer->RenderPasses->SceneRenderPass.get())
+		.Size(renderer->Textures->Scene->width, renderer->Textures->Scene->height)
+		.AddAttachment(renderer->Textures->Scene->colorBufferView.get())
+		.AddAttachment(renderer->Textures->Scene->depthBufferView.get())
+		.DebugName("SceneFramebuffer")
+		.Create(renderer->Device);
 }
 
 void FramebufferManager::DestroySceneFramebuffer()
@@ -28,10 +29,11 @@ VulkanFramebuffer* FramebufferManager::GetSwapChainFramebuffer()
 {
 	swapChainFramebuffer.reset();
 
-	FramebufferBuilder builder;
-	builder.setRenderPass(renderer->RenderPasses->PresentRenderPass.get());
-	builder.setSize(renderer->Textures->Scene->width, renderer->Textures->Scene->height);
-	builder.addAttachment(renderer->Commands->SwapChain->swapChainImageViews[renderer->Commands->PresentImageIndex]);
-	swapChainFramebuffer = builder.create(renderer->Device);
+	swapChainFramebuffer = FramebufferBuilder()
+		.RenderPass(renderer->RenderPasses->PresentRenderPass.get())
+		.Size(renderer->Textures->Scene->width, renderer->Textures->Scene->height)
+		.AddAttachment(renderer->Commands->SwapChain->swapChainImageViews[renderer->Commands->PresentImageIndex])
+		.DebugName("SwapChainFramebuffer")
+		.Create(renderer->Device);
 	return swapChainFramebuffer.get();
 }

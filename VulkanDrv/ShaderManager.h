@@ -42,10 +42,7 @@ public:
 	std::unique_ptr<VulkanShader> ppVertexShader;
 	std::unique_ptr<VulkanShader> ppFragmentPresentShader;
 
-	static std::unique_ptr<VulkanShader> CreateVertexShader(VulkanDevice* device, const std::string& name, const std::string& defines = {});
-	static std::unique_ptr<VulkanShader> CreateFragmentShader(VulkanDevice* device, const std::string& name, const std::string& defines = {});
-	static std::unique_ptr<VulkanShader> CreateComputeShader(VulkanDevice* device, const std::string& name, const std::string& defines = {});
-	static std::string LoadShaderCode(const std::string& filename, const std::string& defines);
+	static std::string LoadShaderCode(const std::string& filename, const std::string& defines = {});
 
 private:
 	UVulkanRenderDevice* renderer = nullptr;

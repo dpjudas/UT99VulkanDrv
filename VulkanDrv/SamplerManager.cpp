@@ -9,46 +9,51 @@ SamplerManager::SamplerManager(UVulkanRenderDevice* renderer) : renderer(rendere
 	for (int i = 0; i < 4; i++)
 	{
 		SamplerBuilder builder;
-		builder.setAnisotropy(8.0);
-		builder.setMipLodBias(-0.5);
+		builder.Anisotropy(8.0f);
+		builder.MipLodBias(-0.5f);
 
 		if (i & 1)
 		{
-			builder.setMinFilter(VK_FILTER_NEAREST);
-			builder.setMagFilter(VK_FILTER_NEAREST);
-			builder.setMipmapMode(VK_SAMPLER_MIPMAP_MODE_NEAREST);
+			builder.MinFilter(VK_FILTER_NEAREST);
+			builder.MagFilter(VK_FILTER_NEAREST);
+			builder.MipmapMode(VK_SAMPLER_MIPMAP_MODE_NEAREST);
 		}
 		else
 		{
-			builder.setMinFilter(VK_FILTER_LINEAR);
-			builder.setMagFilter(VK_FILTER_LINEAR);
-			builder.setMipmapMode(VK_SAMPLER_MIPMAP_MODE_LINEAR);
+			builder.MinFilter(VK_FILTER_LINEAR);
+			builder.MagFilter(VK_FILTER_LINEAR);
+			builder.MipmapMode(VK_SAMPLER_MIPMAP_MODE_LINEAR);
 		}
 
 		if (i & 2)
 		{
-			builder.setAddressMode(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
+			builder.AddressMode(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
 		}
 		else
 		{
-			builder.setAddressMode(VK_SAMPLER_ADDRESS_MODE_REPEAT);
+			builder.AddressMode(VK_SAMPLER_ADDRESS_MODE_REPEAT);
 		}
 
-		samplers[i] = builder.create(renderer->Device);
+		builder.DebugName("SceneSampler");
+
+		samplers[i] = builder.Create(renderer->Device);
 	}
 
 	// To do: detail texture needs a zbias of 15
 
-	SamplerBuilder builder;
-	builder.setMinFilter(VK_FILTER_NEAREST);
-	builder.setMagFilter(VK_FILTER_NEAREST);
-	builder.setMipmapMode(VK_SAMPLER_MIPMAP_MODE_NEAREST);
-	builder.setAddressMode(VK_SAMPLER_ADDRESS_MODE_REPEAT);
-	ppNearestRepeat = builder.create(renderer->Device);
+	ppNearestRepeat = SamplerBuilder()
+		.MinFilter(VK_FILTER_NEAREST)
+		.MagFilter(VK_FILTER_NEAREST)
+		.MipmapMode(VK_SAMPLER_MIPMAP_MODE_NEAREST)
+		.AddressMode(VK_SAMPLER_ADDRESS_MODE_REPEAT)
+		.DebugName("ppNearestRepeat")
+		.Create(renderer->Device);
 
-	builder.setMinFilter(VK_FILTER_LINEAR);
-	builder.setMagFilter(VK_FILTER_LINEAR);
-	builder.setMipmapMode(VK_SAMPLER_MIPMAP_MODE_LINEAR);
-	builder.setAddressMode(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
-	ppLinearClamp = builder.create(renderer->Device);
+	ppLinearClamp = SamplerBuilder()
+		.MinFilter(VK_FILTER_LINEAR)
+		.MagFilter(VK_FILTER_LINEAR)
+		.MipmapMode(VK_SAMPLER_MIPMAP_MODE_LINEAR)
+		.AddressMode(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE)
+		.DebugName("ppLinearClamp")
+		.Create(renderer->Device);
 }

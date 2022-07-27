@@ -33,6 +33,5 @@ public:
 	int height = 0;
 
 private:
-	static void createImage(std::unique_ptr<VulkanImage> &image, std::unique_ptr<VulkanImageView> &view, VulkanDevice *device, int width, int height, VkSampleCountFlagBits samples, VkFormat format, VkImageUsageFlags usage, VkImageAspectFlags aspect);
-	static VkSampleCountFlagBits getBestSampleCount(VulkanDevice* device, int multisample);
+	static VkSampleCountFlagBits GetBestSampleCount(VulkanDevice* device, int multisample);
 };

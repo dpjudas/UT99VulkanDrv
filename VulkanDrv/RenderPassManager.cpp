@@ -17,18 +17,20 @@ RenderPassManager::~RenderPassManager()
 
 void RenderPassManager::CreateScenePipelineLayout()
 {
-	PipelineLayoutBuilder builder;
-	builder.addSetLayout(renderer->DescriptorSets->SceneDescriptorSetLayout.get());
-	builder.addPushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ScenePushConstants));
-	ScenePipelineLayout = builder.create(renderer->Device);
+	ScenePipelineLayout = PipelineLayoutBuilder()
+		.AddSetLayout(renderer->DescriptorSets->SceneDescriptorSetLayout.get())
+		.AddPushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ScenePushConstants))
+		.DebugName("ScenePipelineLayout")
+		.Create(renderer->Device);
 }
 
 void RenderPassManager::CreatePresentPipelineLayout()
 {
-	PipelineLayoutBuilder builder;
-	builder.addSetLayout(renderer->DescriptorSets->PresentDescriptorSetLayout.get());
-	builder.addPushConstantRange(VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PresentPushConstants));
-	PresentPipelineLayout = builder.create(renderer->Device);
+	PresentPipelineLayout = PipelineLayoutBuilder()
+		.AddSetLayout(renderer->DescriptorSets->PresentDescriptorSetLayout.get())
+		.AddPushConstantRange(VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PresentPushConstants))
+		.DebugName("PresentPipelineLayout")
+		.Create(renderer->Device);
 }
 
 void RenderPassManager::BeginScene(VulkanCommandBuffer* cmdbuffer)
@@ -114,121 +116,135 @@ void RenderPassManager::CreatePipelines()
 	for (int i = 0; i < 32; i++)
 	{
 		GraphicsPipelineBuilder builder;
-		builder.addVertexShader(renderer->Shaders->vertexShader.get());
-		builder.setViewport(0.0f, 0.0f, (float)renderer->Textures->Scene->width, (float)renderer->Textures->Scene->height);
-		builder.setScissor(0, 0, renderer->Textures->Scene->width, renderer->Textures->Scene->height);
-		builder.setTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-		builder.setCull(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
-		builder.addVertexBufferBinding(0, sizeof(SceneVertex));
-		builder.addVertexAttribute(0, 0, VK_FORMAT_R32_UINT, offsetof(SceneVertex, flags));
-		builder.addVertexAttribute(1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(SceneVertex, x));
-		builder.addVertexAttribute(2, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, u));
-		builder.addVertexAttribute(3, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, u2));
-		builder.addVertexAttribute(4, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, u3));
-		builder.addVertexAttribute(5, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, u4));
-		builder.addVertexAttribute(6, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(SceneVertex, r));
-		builder.addDynamicState(VK_DYNAMIC_STATE_VIEWPORT);
-		builder.setLayout(ScenePipelineLayout.get());
-		builder.setRenderPass(SceneRenderPass.get());
+		builder.AddVertexShader(renderer->Shaders->vertexShader.get());
+		builder.Viewport(0.0f, 0.0f, (float)renderer->Textures->Scene->width, (float)renderer->Textures->Scene->height);
+		builder.Scissor(0, 0, renderer->Textures->Scene->width, renderer->Textures->Scene->height);
+		builder.Topology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+		builder.Cull(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+		builder.AddVertexBufferBinding(0, sizeof(SceneVertex));
+		builder.AddVertexAttribute(0, 0, VK_FORMAT_R32_UINT, offsetof(SceneVertex, flags));
+		builder.AddVertexAttribute(1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(SceneVertex, x));
+		builder.AddVertexAttribute(2, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, u));
+		builder.AddVertexAttribute(3, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, u2));
+		builder.AddVertexAttribute(4, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, u3));
+		builder.AddVertexAttribute(5, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, u4));
+		builder.AddVertexAttribute(6, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(SceneVertex, r));
+		builder.AddDynamicState(VK_DYNAMIC_STATE_VIEWPORT);
+		builder.Layout(ScenePipelineLayout.get());
+		builder.RenderPass(SceneRenderPass.get());
 
 		// Avoid clipping the weapon. The UE1 engine clips the geometry anyway.
-		if (renderer->Device->enabledDeviceFeatures.depthClamp)
-			builder.setDepthClampEnable(true);
+		if (renderer->Device->UsedDeviceFeatures.depthClamp)
+			builder.DepthClampEnable(true);
 
 		switch (i & 3)
 		{
 		case 0: // PF_Translucent
-			builder.setBlendMode(VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR);
+			builder.BlendMode(VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR);
 			break;
 		case 1: // PF_Modulated
-			builder.setBlendMode(VK_BLEND_OP_ADD, VK_BLEND_FACTOR_DST_COLOR, VK_BLEND_FACTOR_SRC_COLOR);
+			builder.BlendMode(VK_BLEND_OP_ADD, VK_BLEND_FACTOR_DST_COLOR, VK_BLEND_FACTOR_SRC_COLOR);
 			break;
 		case 2: // PF_Highlighted
-			builder.setBlendMode(VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA);
+			builder.BlendMode(VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA);
 			break;
 		case 3:
-			builder.setBlendMode(VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ZERO); // Hmm, is it faster to keep the blend mode enabled or to toggle it?
+			builder.BlendMode(VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ZERO); // Hmm, is it faster to keep the blend mode enabled or to toggle it?
 			break;
 		}
 
 		if (i & 4) // PF_Invisible
 		{
-			builder.setColorWriteMask(0);
+			builder.ColorWriteMask(0);
 		}
 
 		if (i & 8) // PF_Occlude
 		{
-			builder.setDepthStencilEnable(true, true, false);
+			builder.DepthStencilEnable(true, true, false);
 		}
 		else
 		{
-			builder.setDepthStencilEnable(true, false, false);
+			builder.DepthStencilEnable(true, false, false);
 		}
 
 		if (i & 16) // PF_Masked
-			builder.addFragmentShader(renderer->Shaders->fragmentShaderAlphaTest.get());
+			builder.AddFragmentShader(renderer->Shaders->fragmentShaderAlphaTest.get());
 		else
-			builder.addFragmentShader(renderer->Shaders->fragmentShader.get());
+			builder.AddFragmentShader(renderer->Shaders->fragmentShader.get());
 
-		builder.setSubpassColorAttachmentCount(1);
-		builder.setRasterizationSamples(renderer->Textures->Scene->sceneSamples);
+		builder.SubpassColorAttachmentCount(1);
+		builder.RasterizationSamples(renderer->Textures->Scene->sceneSamples);
+		builder.DebugName("ScenePipeline");
 
-		pipeline[i] = builder.create(renderer->Device);
+		pipeline[i] = builder.Create(renderer->Device);
 	}
 }
 
 void RenderPassManager::CreateRenderPass()
 {
-	RenderPassBuilder builder;
-
-	builder.addAttachment(VK_FORMAT_R16G16B16A16_SFLOAT, renderer->Textures->Scene->sceneSamples, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-	builder.addDepthStencilAttachment(VK_FORMAT_D32_SFLOAT, renderer->Textures->Scene->sceneSamples, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-
-	builder.addExternalSubpassDependency(
-		VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-		VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-		VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-		VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
-
-	builder.addSubpass();
-	builder.addSubpassColorAttachmentRef(0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-	builder.addSubpassDepthStencilAttachmentRef(1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-
-	SceneRenderPass = builder.create(renderer->Device);
+	SceneRenderPass = RenderPassBuilder()
+		.AddAttachment(
+			VK_FORMAT_R16G16B16A16_SFLOAT,
+			renderer->Textures->Scene->sceneSamples,
+			VK_ATTACHMENT_LOAD_OP_CLEAR,
+			VK_ATTACHMENT_STORE_OP_STORE,
+			VK_IMAGE_LAYOUT_UNDEFINED,
+			VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+		.AddDepthStencilAttachment(
+			VK_FORMAT_D32_SFLOAT,
+			renderer->Textures->Scene->sceneSamples,
+			VK_ATTACHMENT_LOAD_OP_CLEAR,
+			VK_ATTACHMENT_STORE_OP_STORE,
+			VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+			VK_ATTACHMENT_STORE_OP_DONT_CARE,
+			VK_IMAGE_LAYOUT_UNDEFINED,
+			VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+		.AddExternalSubpassDependency(
+			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT)
+		.AddSubpass()
+		.AddSubpassColorAttachmentRef(0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+		.AddSubpassDepthStencilAttachmentRef(1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+		.DebugName("SceneRenderPass")
+		.Create(renderer->Device);
 }
 
 void RenderPassManager::CreatePresentRenderPass()
 {
-	RenderPassBuilder builder;
-
-	builder.addAttachment(renderer->Commands->SwapChain->swapChainFormat.format, VK_SAMPLE_COUNT_1_BIT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
-
-	builder.addExternalSubpassDependency(
-		VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-		VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-		VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-		VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
-
-	builder.addSubpass();
-	builder.addSubpassColorAttachmentRef(0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-
-	PresentRenderPass = builder.create(renderer->Device);
+	PresentRenderPass = RenderPassBuilder()
+		.AddAttachment(
+			renderer->Commands->SwapChain->swapChainFormat.format,
+			VK_SAMPLE_COUNT_1_BIT,
+			VK_ATTACHMENT_LOAD_OP_CLEAR,
+			VK_ATTACHMENT_STORE_OP_STORE,
+			VK_IMAGE_LAYOUT_UNDEFINED,
+			VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
+		.AddExternalSubpassDependency(
+			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT)
+		.AddSubpass()
+		.AddSubpassColorAttachmentRef(0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+		.DebugName("PresentRenderPass")
+		.Create(renderer->Device);
 }
 
 void RenderPassManager::CreatePresentPipeline()
 {
-	GraphicsPipelineBuilder builder;
-	builder.addVertexShader(renderer->Shaders->ppVertexShader.get());
-	builder.addFragmentShader(renderer->Shaders->ppFragmentPresentShader.get());
-
-	builder.addDynamicState(VK_DYNAMIC_STATE_VIEWPORT);
-	builder.addDynamicState(VK_DYNAMIC_STATE_SCISSOR);
-	// Note: the actual values are ignored since we use dynamic viewport+scissor states
-	builder.setViewport(0.0f, 0.0f, 320.0f, 200.0f);
-	builder.setScissor(0.0f, 0.0f, 320.0f, 200.0f);
-	builder.setTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-	builder.setRasterizationSamples(VK_SAMPLE_COUNT_1_BIT);
-	builder.setLayout(PresentPipelineLayout.get());
-	builder.setRenderPass(PresentRenderPass.get());
-	PresentPipeline = builder.create(renderer->Device);
+	PresentPipeline = GraphicsPipelineBuilder()
+		.AddVertexShader(renderer->Shaders->ppVertexShader.get())
+		.AddFragmentShader(renderer->Shaders->ppFragmentPresentShader.get())
+		.AddDynamicState(VK_DYNAMIC_STATE_VIEWPORT)
+		.AddDynamicState(VK_DYNAMIC_STATE_SCISSOR)
+		.Viewport(0.0f, 0.0f, 0.0f, 0.0f) // Note: the actual values are ignored since we use dynamic viewport+scissor states
+		.Scissor(0.0f, 0.0f, 0.0f, 0.0f)
+		.Topology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
+		.RasterizationSamples(VK_SAMPLE_COUNT_1_BIT)
+		.Layout(PresentPipelineLayout.get())
+		.RenderPass(PresentRenderPass.get())
+		.DebugName("PresentPipeline")
+		.Create(renderer->Device);
 }
