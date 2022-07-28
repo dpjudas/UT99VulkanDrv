@@ -225,7 +225,7 @@ void VulkanDevice::CreateDevice()
 		*next = &rayQueryFeatures;
 		next = &rayQueryFeatures.pNext;
 	}
-	if (SupportsDeviceExtension(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME) && PhysicalDevice.DescriptorIndexingFeatures.descriptorBindingPartiallyBound && PhysicalDevice.DescriptorIndexingFeatures.runtimeDescriptorArray)
+	if (SupportsDeviceExtension(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME) && PhysicalDevice.DescriptorIndexingFeatures.descriptorBindingPartiallyBound && PhysicalDevice.DescriptorIndexingFeatures.runtimeDescriptorArray && PhysicalDevice.DescriptorIndexingFeatures.shaderSampledImageArrayNonUniformIndexing)
 	{
 		*next = &descriptorIndexingFeatures;
 		next = &descriptorIndexingFeatures.pNext;

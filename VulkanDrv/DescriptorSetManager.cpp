@@ -43,7 +43,7 @@ VulkanDescriptorSet* DescriptorSetManager::GetTextureDescriptorSet(DWORD PolyFla
 		int i = 0;
 		for (VulkanTexture* texture : { tex, lightmap, macrotex, detailtex })
 		{
-			VulkanSampler* sampler = (i == 0) ? renderer->Samplers->samplers[samplermode].get() : renderer->Samplers->samplers[0].get();
+			VulkanSampler* sampler = (i == 0) ? renderer->Samplers->Samplers[samplermode].get() : renderer->Samplers->Samplers[0].get();
 
 			if (texture)
 				writes.AddCombinedImageSampler(descriptorSet.get(), i++, texture->imageView.get(), sampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
@@ -82,7 +82,7 @@ int DescriptorSetManager::GetTextureArrayIndex(DWORD PolyFlags, VulkanTexture* t
 
 	index = NextBindlessIndex++;
 
-	VulkanSampler* sampler = renderer->Samplers->samplers[samplermode].get();
+	VulkanSampler* sampler = renderer->Samplers->Samplers[samplermode].get();
 	WriteBindless.AddCombinedImageSampler(SceneBindlessDescriptorSet.get(), 0, index, tex->imageView.get(), sampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
 	tex->BindlessIndex[samplermode] = index;
@@ -96,7 +96,7 @@ void DescriptorSetManager::UpdateBindlessDescriptorSet()
 
 void DescriptorSetManager::CreateBindlessSceneDescriptorSet()
 {
-	if (!renderer->Device->SupportsDeviceExtension(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME))
+	if (!renderer->SupportsBindless)
 		return;
 
 	SceneBindlessDescriptorPool = DescriptorPoolBuilder()

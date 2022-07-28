@@ -35,9 +35,12 @@ public:
 	ShaderManager(UVulkanRenderDevice* renderer);
 	~ShaderManager();
 
-	std::unique_ptr<VulkanShader> vertexShader;
-	std::unique_ptr<VulkanShader> fragmentShader;
-	std::unique_ptr<VulkanShader> fragmentShaderAlphaTest;
+	struct SceneShaders
+	{
+		std::unique_ptr<VulkanShader> VertexShader;
+		std::unique_ptr<VulkanShader> FragmentShader;
+		std::unique_ptr<VulkanShader> FragmentShaderAlphaTest;
+	} Scene, SceneBindless;
 
 	std::unique_ptr<VulkanShader> ppVertexShader;
 	std::unique_ptr<VulkanShader> ppFragmentPresentShader;

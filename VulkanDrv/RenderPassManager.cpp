@@ -116,7 +116,7 @@ void RenderPassManager::CreatePipelines()
 	for (int i = 0; i < 32; i++)
 	{
 		GraphicsPipelineBuilder builder;
-		builder.AddVertexShader(renderer->Shaders->vertexShader.get());
+		builder.AddVertexShader(renderer->Shaders->Scene.VertexShader.get());
 		builder.Viewport(0.0f, 0.0f, (float)renderer->Textures->Scene->width, (float)renderer->Textures->Scene->height);
 		builder.Scissor(0, 0, renderer->Textures->Scene->width, renderer->Textures->Scene->height);
 		builder.Topology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
@@ -168,12 +168,12 @@ void RenderPassManager::CreatePipelines()
 		}
 
 		if (i & 16) // PF_Masked
-			builder.AddFragmentShader(renderer->Shaders->fragmentShaderAlphaTest.get());
+			builder.AddFragmentShader(renderer->Shaders->Scene.FragmentShaderAlphaTest.get());
 		else
-			builder.AddFragmentShader(renderer->Shaders->fragmentShader.get());
+			builder.AddFragmentShader(renderer->Shaders->Scene.FragmentShader.get());
 
 		builder.SubpassColorAttachmentCount(1);
-		builder.RasterizationSamples(renderer->Textures->Scene->sceneSamples);
+		builder.RasterizationSamples(renderer->Textures->Scene->SceneSamples);
 		builder.DebugName("ScenePipeline");
 
 		pipeline[i] = builder.Create(renderer->Device);
@@ -185,14 +185,14 @@ void RenderPassManager::CreateRenderPass()
 	SceneRenderPass = RenderPassBuilder()
 		.AddAttachment(
 			VK_FORMAT_R16G16B16A16_SFLOAT,
-			renderer->Textures->Scene->sceneSamples,
+			renderer->Textures->Scene->SceneSamples,
 			VK_ATTACHMENT_LOAD_OP_CLEAR,
 			VK_ATTACHMENT_STORE_OP_STORE,
 			VK_IMAGE_LAYOUT_UNDEFINED,
 			VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
 		.AddDepthStencilAttachment(
 			VK_FORMAT_D32_SFLOAT,
-			renderer->Textures->Scene->sceneSamples,
+			renderer->Textures->Scene->SceneSamples,
 			VK_ATTACHMENT_LOAD_OP_CLEAR,
 			VK_ATTACHMENT_STORE_OP_STORE,
 			VK_ATTACHMENT_LOAD_OP_DONT_CARE,

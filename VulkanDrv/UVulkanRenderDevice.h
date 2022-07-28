@@ -66,6 +66,8 @@ public:
 	std::unique_ptr<RenderPassManager> RenderPasses;
 	std::unique_ptr<FramebufferManager> Framebuffers;
 
+	bool SupportsBindless = false;
+
 	// Configuration.
 	BITFIELD UseVSync;
 	INT VkDeviceIndex;
@@ -91,6 +93,7 @@ private:
 	bool StatMemory = false;
 	bool StatResources = false;
 	bool StatDraw = false;
+
 
 	size_t SceneVertexPos = 0;
 	size_t SceneIndexPos = 0;

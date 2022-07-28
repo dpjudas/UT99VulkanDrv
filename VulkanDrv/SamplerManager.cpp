@@ -36,12 +36,12 @@ SamplerManager::SamplerManager(UVulkanRenderDevice* renderer) : renderer(rendere
 
 		builder.DebugName("SceneSampler");
 
-		samplers[i] = builder.Create(renderer->Device);
+		Samplers[i] = builder.Create(renderer->Device);
 	}
 
 	// To do: detail texture needs a zbias of 15
 
-	ppNearestRepeat = SamplerBuilder()
+	PPNearestRepeat = SamplerBuilder()
 		.MinFilter(VK_FILTER_NEAREST)
 		.MagFilter(VK_FILTER_NEAREST)
 		.MipmapMode(VK_SAMPLER_MIPMAP_MODE_NEAREST)
@@ -49,7 +49,7 @@ SamplerManager::SamplerManager(UVulkanRenderDevice* renderer) : renderer(rendere
 		.DebugName("ppNearestRepeat")
 		.Create(renderer->Device);
 
-	ppLinearClamp = SamplerBuilder()
+	PPLinearClamp = SamplerBuilder()
 		.MinFilter(VK_FILTER_LINEAR)
 		.MagFilter(VK_FILTER_LINEAR)
 		.MipmapMode(VK_SAMPLER_MIPMAP_MODE_LINEAR)

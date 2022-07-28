@@ -9,10 +9,10 @@ class SamplerManager
 public:
 	SamplerManager(UVulkanRenderDevice* renderer);
 
-	std::unique_ptr<VulkanSampler> samplers[4];
+	std::unique_ptr<VulkanSampler> Samplers[4];
 
-	std::unique_ptr<VulkanSampler> ppNearestRepeat;
-	std::unique_ptr<VulkanSampler> ppLinearClamp;
+	std::unique_ptr<VulkanSampler> PPNearestRepeat;
+	std::unique_ptr<VulkanSampler> PPLinearClamp;
 
 private:
 	UVulkanRenderDevice* renderer = nullptr;

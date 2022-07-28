@@ -57,6 +57,10 @@ UBOOL UVulkanRenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT N
 	try
 	{
 		Device = new VulkanDevice((HWND)Viewport->GetWindow(), VkDeviceIndex, VkDebug, printLog);
+		SupportsBindless =
+			Device->PhysicalDevice.DescriptorIndexingFeatures.descriptorBindingPartiallyBound &&
+			Device->PhysicalDevice.DescriptorIndexingFeatures.runtimeDescriptorArray &&
+			Device->PhysicalDevice.DescriptorIndexingFeatures.shaderSampledImageArrayNonUniformIndexing;
 		Commands.reset(new CommandBufferManager(this));
 		Samplers.reset(new SamplerManager(this));
 		Textures.reset(new TextureManager(this));
@@ -338,14 +342,14 @@ void UVulkanRenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane Sc
 
 			auto descriptors = DescriptorSets->GetPresentDescriptorSet();
 			WriteDescriptors()
-				.AddCombinedImageSampler(descriptors, 0, Textures->Scene->ppImageView.get(), Samplers->ppLinearClamp.get(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-				.AddCombinedImageSampler(descriptors, 1, Textures->DitherImageView.get(), Samplers->ppNearestRepeat.get(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+				.AddCombinedImageSampler(descriptors, 0, Textures->Scene->PPImageView.get(), Samplers->PPLinearClamp.get(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+				.AddCombinedImageSampler(descriptors, 1, Textures->DitherImageView.get(), Samplers->PPNearestRepeat.get(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
 				.Execute(Device);
 		}
 
 		PipelineBarrier()
 			.AddImage(
-				Textures->Scene->colorBuffer.get(),
+				Textures->Scene->ColorBuffer.get(),
 				VK_IMAGE_LAYOUT_UNDEFINED,
 				VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 				VK_ACCESS_SHADER_READ_BIT,
@@ -880,7 +884,7 @@ void UVulkanRenderDevice::ReadPixels(FColor* Pixels)
 		.Create(Device);
 
 	// Convert from rgba16f to bgra8 using the GPU:
-	auto srcimage = Textures->Scene->ppImage.get();
+	auto srcimage = Textures->Scene->PPImage.get();
 	auto cmdbuffer = Commands->GetDrawCommands();
 
 	PipelineBarrier()
@@ -1058,13 +1062,13 @@ void UVulkanRenderDevice::BlitSceneToPostprocess()
 
 	PipelineBarrier()
 		.AddImage(
-			buffers->colorBuffer.get(),
+			buffers->ColorBuffer.get(),
 			VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 			VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
 			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
 			VK_ACCESS_TRANSFER_READ_BIT)
 		.AddImage(
-			buffers->ppImage.get(),
+			buffers->PPImage.get(),
 			VK_IMAGE_LAYOUT_UNDEFINED,
 			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 			VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
@@ -1074,22 +1078,22 @@ void UVulkanRenderDevice::BlitSceneToPostprocess()
 			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
 			VK_PIPELINE_STAGE_TRANSFER_BIT);
 
-	if (buffers->sceneSamples != VK_SAMPLE_COUNT_1_BIT)
+	if (buffers->SceneSamples != VK_SAMPLE_COUNT_1_BIT)
 	{
 		VkImageResolve resolve = {};
 		resolve.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 		resolve.srcSubresource.layerCount = 1;
 		resolve.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 		resolve.dstSubresource.layerCount = 1;
-		resolve.extent = { (uint32_t)buffers->colorBuffer->width, (uint32_t)buffers->colorBuffer->height, 1 };
+		resolve.extent = { (uint32_t)buffers->ColorBuffer->width, (uint32_t)buffers->ColorBuffer->height, 1 };
 		cmdbuffer->resolveImage(
-			buffers->colorBuffer->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-			buffers->ppImage->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			buffers->ColorBuffer->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+			buffers->PPImage->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 			1, &resolve);
 	}
 	else
 	{
-		auto colorBuffer = buffers->colorBuffer.get();
+		auto colorBuffer = buffers->ColorBuffer.get();
 		VkImageBlit blit = {};
 		blit.srcOffsets[0] = { 0, 0, 0 };
 		blit.srcOffsets[1] = { colorBuffer->width, colorBuffer->height, 1 };
@@ -1101,13 +1105,13 @@ void UVulkanRenderDevice::BlitSceneToPostprocess()
 		blit.dstSubresource.layerCount = 1;
 		cmdbuffer->blitImage(
 			colorBuffer->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-			buffers->ppImage->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			buffers->PPImage->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 			1, &blit, VK_FILTER_NEAREST);
 	}
 
 	PipelineBarrier()
 		.AddImage(
-			buffers->ppImage.get(),
+			buffers->PPImage.get(),
 			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 			VK_ACCESS_TRANSFER_WRITE_BIT,
