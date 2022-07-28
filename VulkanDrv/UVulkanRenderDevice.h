@@ -88,8 +88,15 @@ private:
 	float RFY2;
 
 	bool IsLocked = false;
+	bool StatMemory = false;
+	bool StatResources = false;
+	bool StatDraw = false;
 
 	size_t SceneVertexPos = 0;
 	size_t SceneIndexPos = 0;
 	VulkanPipeline* LastPipeline = nullptr;
+	int complexsurfaces = 0;
+	int gouraudpolygons = 0;
+	int tiles = 0;
+	int drawcalls = 0;
 };

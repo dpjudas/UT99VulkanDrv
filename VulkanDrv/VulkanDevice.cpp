@@ -47,7 +47,7 @@ bool VulkanDevice::CheckRequiredFeatures(const VkPhysicalDeviceFeatures &f)
 
 void VulkanDevice::SelectPhysicalDevice()
 {
-	AvailableDevices = GetPhysicalDevices(instance);
+	AvailableDevices = GetPhysicalDevices(instance, ApiVersion);
 	if (AvailableDevices.empty())
 		VulkanError("No Vulkan devices found. Either the graphics card has no vulkan support or the driver is too old.");
 
@@ -455,7 +455,7 @@ std::vector<VkExtensionProperties> VulkanDevice::GetExtensions()
 	return extensions;
 }
 
-std::vector<VulkanPhysicalDevice> VulkanDevice::GetPhysicalDevices(VkInstance instance)
+std::vector<VulkanPhysicalDevice> VulkanDevice::GetPhysicalDevices(VkInstance instance, uint32_t apiVersion)
 {
 	uint32_t deviceCount = 0;
 	VkResult result = vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
@@ -498,7 +498,7 @@ std::vector<VulkanPhysicalDevice> VulkanDevice::GetPhysicalDevices(VkInstance in
 			return false;
 		};
 
-		if (checkForExtension(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME))
+		if (apiVersion != VK_API_VERSION_1_0)
 		{
 			VkPhysicalDeviceFeatures2 deviceFeatures2 = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
 

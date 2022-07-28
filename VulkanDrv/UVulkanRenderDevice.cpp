@@ -213,16 +213,58 @@ UBOOL UVulkanRenderDevice::Exec(const TCHAR* Cmd, FOutputDevice& Ar)
 		{
 			int X;
 			int Y;
+
+			// For sorting highest resolution first
+			bool operator<(const Resolution& other) const { if (X != other.X) return X > other.X; else return Y > other.Y; }
 		};
 
-		std::vector<Resolution> resolutions;
+		std::set<Resolution> resolutions;
 
 #ifdef WIN32
+		// Always include what the monitor is currently using
 		HDC screenDC = GetDC(0);
-		resolutions.push_back({ GetDeviceCaps(screenDC, HORZRES), GetDeviceCaps(screenDC, VERTRES) });
+		int screenWidth = GetDeviceCaps(screenDC, HORZRES);
+		int screenHeight = GetDeviceCaps(screenDC, VERTRES);
+		resolutions.insert({ screenWidth, screenHeight });
 		ReleaseDC(0, screenDC);
+
+		// Get what else is available according to Windows
+		DEVMODE devmode = {};
+		devmode.dmSize = sizeof(DEVMODE);
+		int i = 0;
+		while (EnumDisplaySettingsEx(nullptr, i++, &devmode, 0) != 0)
+		{
+			if ((devmode.dmFields & (DM_BITSPERPEL | DM_PELSWIDTH | DM_PELSHEIGHT)) == (DM_BITSPERPEL | DM_PELSWIDTH | DM_PELSHEIGHT) && devmode.dmBitsPerPel >= 24)
+			{
+				resolutions.insert({ (int)devmode.dmPelsWidth, (int)devmode.dmPelsHeight });
+			}
+
+			devmode = {};
+			devmode.dmSize = sizeof(DEVMODE);
+		}
+
+		// Add a letterboxed 4:3 mode for widescreen monitors
+		resolutions.insert({ (screenHeight * 4 + 2) / 3, screenHeight });
+
+		// Include a few classics from the era
+		resolutions.insert({ 640, 480 });
+		resolutions.insert({ 800, 600 });
+		resolutions.insert({ 1024, 768 });
+		resolutions.insert({ 1600, 1200 });
 #else
-		resolutions.push_back({ 1920, 1080 });
+		resolutions.insert({ 640, 480 });
+		resolutions.insert({ 800, 600 });
+		resolutions.insert({ 1280, 720 });
+		resolutions.insert({ 1024, 768 });
+		resolutions.insert({ 1280, 768 });
+		resolutions.insert({ 1152, 864 });
+		resolutions.insert({ 1280, 900 });
+		resolutions.insert({ 1280, 1024 });
+		resolutions.insert({ 1400, 1024 });
+		resolutions.insert({ 1920, 1080 });
+		resolutions.insert({ 2560, 1440 });
+		resolutions.insert({ 2560, 1600 });
+		resolutions.insert({ 3840, 2160 });
 #endif
 
 		FString Str;
@@ -232,6 +274,25 @@ UBOOL UVulkanRenderDevice::Exec(const TCHAR* Cmd, FOutputDevice& Ar)
 		}
 		Ar.Log(*Str.LeftChop(1));
 		return 1;
+	}
+	else if (ParseCommand(&Cmd, TEXT("VSTAT")))
+	{
+		if (ParseCommand(&Cmd, TEXT("Memory")))
+		{
+			StatMemory = !StatMemory;
+			return 1;
+		}
+		else if (ParseCommand(&Cmd, TEXT("Resources")))
+		{
+			StatResources = !StatResources;
+			return 1;
+		}
+		else if (ParseCommand(&Cmd, TEXT("Draw")))
+		{
+			StatDraw = !StatDraw;
+			return 1;
+		}
+		return 0;
 	}
 	else if (ParseCommand(&Cmd, TEXT("GetVkDevices")))
 	{
@@ -316,16 +377,73 @@ void UVulkanRenderDevice::Unlock(UBOOL Blit)
 {
 	guard(UVulkanRenderDevice::Unlock);
 
-	RenderPasses->EndScene(Commands->GetDrawCommands());
-	LastPipeline = nullptr;
+	try
+	{
+		if (Blit && (StatMemory || StatResources || StatDraw))
+		{
+			UCanvas* canvas = Viewport->Canvas;
+			canvas->CurX = 16;
+			canvas->CurY = 94;
+			canvas->WrappedPrintf(canvas->SmallFont, 0, TEXT("Vulkan Statistics"));
 
-	BlitSceneToPostprocess();
+			int y = 110;
 
-	Commands->SubmitCommands(Blit ? true : false, Viewport->SizeX, Viewport->SizeY);
-	SceneVertexPos = 0;
-	SceneIndexPos = 0;
+			if (StatMemory)
+			{
+				VmaStats stats = {};
+				vmaCalculateStats(Device->allocator, &stats);
+				canvas->CurX = 16;
+				canvas->CurY = y;
+				canvas->WrappedPrintf(canvas->SmallFont, 0, TEXT("Allocated objects: %d, used bytes: %d MB\r\n"), (int)stats.total.allocationCount, (int)stats.total.usedBytes / (1024 * 1024));
+				y += 8;
+			}
 
-	IsLocked = false;
+			if (StatResources)
+			{
+				VmaStats stats = {};
+				vmaCalculateStats(Device->allocator, &stats);
+				canvas->CurX = 16;
+				canvas->CurY = y;
+				canvas->WrappedPrintf(canvas->SmallFont, 0, TEXT("Textures in cache: %d\r\n"), Textures->GetTexturesInCache());
+				y += 8;
+			}
+
+			if (StatDraw)
+			{
+				VmaStats stats = {};
+				vmaCalculateStats(Device->allocator, &stats);
+				canvas->CurX = 16;
+				canvas->CurY = y;
+				canvas->WrappedPrintf(canvas->SmallFont, 0, TEXT("Draw calls: %d, Complex surfaces: %d, Gouraud polygons: %d, Tiles: %d\r\n"), drawcalls, complexsurfaces, gouraudpolygons, tiles);
+				y += 8;
+			}
+		}
+
+		if (Blit)
+		{
+			drawcalls = 0;
+			complexsurfaces = 0;
+			gouraudpolygons = 0;
+			tiles = 0;
+		}
+
+		RenderPasses->EndScene(Commands->GetDrawCommands());
+		LastPipeline = nullptr;
+
+		BlitSceneToPostprocess();
+
+		Commands->SubmitCommands(Blit ? true : false, Viewport->SizeX, Viewport->SizeY);
+		SceneVertexPos = 0;
+		SceneIndexPos = 0;
+
+		IsLocked = false;
+	}
+	catch (std::exception& e)
+	{
+		static std::wstring err;
+		err = to_utf16(e.what());
+		appUnwindf(TEXT("%s"), err.c_str());
+	}
 
 	unguard;
 }
@@ -443,6 +561,7 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 	{
 		auto pts = Poly->Pts;
 		uint32_t vcount = Poly->NumPts;
+		if (vcount < 3) continue;
 
 		for (uint32_t i = 0; i < vcount; i++)
 		{
@@ -480,7 +599,10 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 		icount += (vcount - 2) * 3;
 	}
 
-	cmdbuffer->drawIndexed(icount, 1, istart, 0, 0);
+	if (icount > 0)
+		cmdbuffer->drawIndexed(icount, 1, istart, 0, 0);
+	drawcalls++;
+	complexsurfaces++;
 
 	SceneVertexPos = vpos;
 	SceneIndexPos = ipos + icount;
@@ -491,6 +613,8 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 void UVulkanRenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& Info, FTransTexture** Pts, int NumPts, DWORD PolyFlags, FSpanBuffer* Span)
 {
 	guard(UVulkanRenderDevice::DrawGouraudPolygon);
+
+	if (NumPts < 3) return; // This can apparently happen!!
 
 	auto cmdbuffer = Commands->GetDrawCommands();
 
@@ -560,6 +684,8 @@ void UVulkanRenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& In
 	SceneIndexPos += icount;
 
 	cmdbuffer->drawIndexed(icount, 1, istart, 0, 0);
+	drawcalls++;
+	gouraudpolygons++;
 
 	unguard;
 }
@@ -626,6 +752,8 @@ void UVulkanRenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT 
 	SceneIndexPos += icount;
 
 	cmdbuffer->drawIndexed(icount, 1, istart, 0, 0);
+	drawcalls++;
+	tiles++;
 
 	unguard;
 }
@@ -872,6 +1000,7 @@ void UVulkanRenderDevice::EndFlash()
 		SceneIndexPos += icount;
 
 		cmdbuffer->drawIndexed(icount, 1, istart, 0, 0);
+		drawcalls++;
 
 		if (CurrentFrame)
 			SetSceneNode(CurrentFrame);

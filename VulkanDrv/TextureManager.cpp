@@ -17,7 +17,7 @@ TextureManager::~TextureManager()
 
 void TextureManager::UpdateTextureRect(FTextureInfo* texture, int x, int y, int w, int h)
 {
-	VulkanTexture*& tex = TextureCache[0][texture->CacheID];
+	std::unique_ptr<VulkanTexture>& tex = TextureCache[0][texture->CacheID];
 	if (tex)
 		tex->UpdateRect(renderer, *texture, x, y, w, h);
 }
@@ -27,25 +27,23 @@ VulkanTexture* TextureManager::GetTexture(FTextureInfo* texture, bool masked)
 	if (!texture)
 		return nullptr;
 
-	VulkanTexture*& tex = TextureCache[(int)masked][texture->CacheID];
+	std::unique_ptr<VulkanTexture>& tex = TextureCache[(int)masked][texture->CacheID];
 	if (!tex)
 	{
-		tex = new VulkanTexture(renderer, *texture, masked);
+		tex.reset(new VulkanTexture(renderer, *texture, masked));
 	}
 	else if (texture->bRealtimeChanged)
 	{
 		texture->bRealtimeChanged = 0;
 		tex->Update(renderer, *texture, masked);
 	}
-	return tex;
+	return tex.get();
 }
 
 void TextureManager::ClearCache()
 {
 	for (auto& cache : TextureCache)
 	{
-		for (auto it : cache)
-			delete it.second;
 		cache.clear();
 	}
 }
@@ -117,7 +115,7 @@ void TextureManager::CreateDitherTexture()
 		.Create(renderer->Device);
 
 	DitherImageView = ImageViewBuilder()
-		.Image(DitherImage.get(), VK_FORMAT_R8G8B8A8_UNORM)
+		.Image(DitherImage.get(), VK_FORMAT_R32_SFLOAT)
 		.DebugName("DitherImageView")
 		.Create(renderer->Device);
 

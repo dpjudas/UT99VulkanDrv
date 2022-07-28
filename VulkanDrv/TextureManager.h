@@ -26,10 +26,12 @@ public:
 
 	std::unique_ptr<SceneTextures> Scene;
 
+	int GetTexturesInCache() { return TextureCache[0].size() + TextureCache[1].size(); }
+
 private:
 	void CreateNullTexture();
 	void CreateDitherTexture();
 
 	UVulkanRenderDevice* renderer = nullptr;
-	std::map<QWORD, VulkanTexture*> TextureCache[2];
+	std::map<QWORD, std::unique_ptr<VulkanTexture>> TextureCache[2];
 };

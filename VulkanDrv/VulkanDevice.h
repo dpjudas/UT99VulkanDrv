@@ -122,7 +122,7 @@ private:
 	static std::vector<VkLayerProperties> GetAvailableLayers();
 	static std::vector<VkExtensionProperties> GetExtensions();
 	static std::vector<const char *> GetPlatformExtensions();
-	static std::vector<VulkanPhysicalDevice> GetPhysicalDevices(VkInstance instance);
+	static std::vector<VulkanPhysicalDevice> GetPhysicalDevices(VkInstance instance, uint32_t apiVersion);
 };
 
 std::string VkResultToString(VkResult result);
