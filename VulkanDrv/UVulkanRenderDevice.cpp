@@ -70,6 +70,8 @@ UBOOL UVulkanRenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT N
 		RenderPasses.reset(new RenderPassManager(this));
 		Framebuffers.reset(new FramebufferManager(this));
 
+		UsesBindless = SupportsBindless;
+
 		if (VkDebug)
 		{
 			const auto& props = Device->PhysicalDevice.Properties;
@@ -157,15 +159,30 @@ void UVulkanRenderDevice::Exit()
 	unguard;
 }
 
+void UVulkanRenderDevice::SubmitAndWait(bool present, int presentWidth, int presentHeight)
+{
+	if (UsesBindless)
+		DescriptorSets->UpdateBindlessDescriptorSet();
+
+	Commands->SubmitCommands(present, presentWidth, presentHeight);
+
+	Batch.Pipeline = nullptr;
+	Batch.DescriptorSet = nullptr;
+	Batch.SceneIndexStart = 0;
+	SceneVertexPos = 0;
+	SceneIndexPos = 0;
+}
+
 void UVulkanRenderDevice::Flush(UBOOL AllowPrecache)
 {
 	guard(UVulkanRenderDevice::Flush);
 
 	if (IsLocked)
 	{
+		DrawBatch(Commands->GetDrawCommands());
 		RenderPasses->EndScene(Commands->GetDrawCommands());
-		LastPipeline = nullptr;
-		Commands->SubmitCommands(false, 0, 0);
+		SubmitAndWait(false, 0, 0);
+
 		ClearTextureCache();
 
 		auto cmdbuffer = Commands->GetDrawCommands();
@@ -431,14 +448,11 @@ void UVulkanRenderDevice::Unlock(UBOOL Blit)
 			tiles = 0;
 		}
 
+		DrawBatch(Commands->GetDrawCommands());
 		RenderPasses->EndScene(Commands->GetDrawCommands());
-		LastPipeline = nullptr;
 
 		BlitSceneToPostprocess();
-
-		Commands->SubmitCommands(Blit ? true : false, Viewport->SizeX, Viewport->SizeY);
-		SceneVertexPos = 0;
-		SceneIndexPos = 0;
+		SubmitAndWait(Blit ? true : false, Viewport->SizeX, Viewport->SizeY);
 
 		IsLocked = false;
 	}
@@ -494,6 +508,40 @@ void UVulkanRenderDevice::UpdateTextureRect(FTextureInfo& Info, INT U, INT V, IN
 static float GetUMult(const FTextureInfo& Info) { return 1.0f / (Info.UScale * Info.USize); }
 static float GetVMult(const FTextureInfo& Info) { return 1.0f / (Info.VScale * Info.VSize); }
 
+void UVulkanRenderDevice::SetPipeline(VulkanCommandBuffer* cmdbuffer, VulkanPipeline* pipeline)
+{
+	if (pipeline != Batch.Pipeline)
+	{
+		DrawBatch(cmdbuffer);
+		Batch.Pipeline = pipeline;
+	}
+}
+
+void UVulkanRenderDevice::SetDescriptorSet(VulkanCommandBuffer* cmdbuffer, VulkanDescriptorSet* descriptorSet, bool bindless)
+{
+	if (descriptorSet != Batch.DescriptorSet)
+	{
+		DrawBatch(cmdbuffer);
+		Batch.DescriptorSet = descriptorSet;
+		Batch.Bindless = bindless;
+	}
+}
+
+void UVulkanRenderDevice::DrawBatch(VulkanCommandBuffer* cmdbuffer)
+{
+	size_t icount = SceneIndexPos - Batch.SceneIndexStart;
+	if (icount > 0)
+	{
+		auto layout = Batch.Bindless ? RenderPasses->SceneBindlessPipelineLayout.get() : RenderPasses->ScenePipelineLayout.get();
+		cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, Batch.Pipeline);
+		cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, layout, 0, Batch.DescriptorSet);
+		cmdbuffer->pushConstants(layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ScenePushConstants), &pushconstants);
+		cmdbuffer->drawIndexed(icount, 1, Batch.SceneIndexStart, 0, 0);
+		Batch.SceneIndexStart = SceneIndexPos;
+		drawcalls++;
+	}
+}
+
 void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Surface, FSurfaceFacet& Facet)
 {
 	guard(UVulkanRenderDevice::DrawComplexSurface);
@@ -543,14 +591,27 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 		DetailVMult = GetVMult(*Surface.FogMap);
 	}
 
-	VulkanPipeline* pipeline = RenderPasses->getPipeline(Surface.PolyFlags);
-	if (pipeline != LastPipeline)
-	{
-		LastPipeline = pipeline;
-		cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-	}
+	SetPipeline(cmdbuffer, RenderPasses->getPipeline(Surface.PolyFlags, UsesBindless));
 
-	cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, RenderPasses->ScenePipelineLayout.get(), 0, DescriptorSets->GetTextureDescriptorSet(Surface.PolyFlags, tex, lightmap, macrotex, detailtex));
+	ivec4 textureBinds;
+	if (UsesBindless)
+	{
+		textureBinds.x = DescriptorSets->GetTextureArrayIndex(Surface.PolyFlags, tex);
+		textureBinds.y = DescriptorSets->GetTextureArrayIndex(0, macrotex);
+		textureBinds.z = DescriptorSets->GetTextureArrayIndex(0, detailtex);
+		textureBinds.w = DescriptorSets->GetTextureArrayIndex(0, lightmap);
+
+		SetDescriptorSet(cmdbuffer, DescriptorSets->GetBindlessDescriptorSet(), true);
+	}
+	else
+	{
+		textureBinds.x = 0.0f;
+		textureBinds.y = 0.0f;
+		textureBinds.z = 0.0f;
+		textureBinds.w = 0.0f;
+
+		SetDescriptorSet(cmdbuffer, DescriptorSets->GetTextureDescriptorSet(Surface.PolyFlags, tex, lightmap, macrotex, detailtex), false);
+	}
 
 	uint32_t vpos = SceneVertexPos;
 	uint32_t ipos = SceneIndexPos;
@@ -589,6 +650,7 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 			vptr->Color.g = 1.0f;
 			vptr->Color.b = 1.0f;
 			vptr->Color.a = 1.0f;
+			vptr->TextureBinds = textureBinds;
 			vptr++;
 		}
 
@@ -603,9 +665,6 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 		icount += (vcount - 2) * 3;
 	}
 
-	if (icount > 0)
-		cmdbuffer->drawIndexed(icount, 1, istart, 0, 0);
-	drawcalls++;
 	complexsurfaces++;
 
 	SceneVertexPos = vpos;
@@ -622,15 +681,10 @@ void UVulkanRenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& In
 
 	auto cmdbuffer = Commands->GetDrawCommands();
 
-	VulkanPipeline* pipeline = RenderPasses->getPipeline(PolyFlags);
-	if (pipeline != LastPipeline)
-	{
-		LastPipeline = pipeline;
-		cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-	}
-
 	VulkanTexture* tex = Textures->GetTexture(&Info, !!(PolyFlags & PF_Masked));
-	cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, RenderPasses->ScenePipelineLayout.get(), 0, DescriptorSets->GetTextureDescriptorSet(PolyFlags, tex));
+
+	SetPipeline(cmdbuffer, RenderPasses->getPipeline(PolyFlags, false));
+	SetDescriptorSet(cmdbuffer, DescriptorSets->GetTextureDescriptorSet(PolyFlags, tex), false);
 
 	float UMult = tex ? GetUMult(Info) : 0.0f;
 	float VMult = tex ? GetVMult(Info) : 0.0f;
@@ -687,8 +741,6 @@ void UVulkanRenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& In
 	SceneVertexPos += vcount;
 	SceneIndexPos += icount;
 
-	cmdbuffer->drawIndexed(icount, 1, istart, 0, 0);
-	drawcalls++;
 	gouraudpolygons++;
 
 	unguard;
@@ -705,14 +757,8 @@ void UVulkanRenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT 
 
 	VulkanTexture* tex = Textures->GetTexture(&Info, !!(PolyFlags & PF_Masked));
 
-	VulkanPipeline* pipeline = RenderPasses->getPipeline(PolyFlags);
-	if (pipeline != LastPipeline)
-	{
-		LastPipeline = pipeline;
-		cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-	}
-
-	cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, RenderPasses->ScenePipelineLayout.get(), 0, DescriptorSets->GetTextureDescriptorSet(PolyFlags, tex, nullptr, nullptr, nullptr, true));
+	SetPipeline(cmdbuffer, RenderPasses->getPipeline(PolyFlags, false));
+	SetDescriptorSet(cmdbuffer, DescriptorSets->GetTextureDescriptorSet(PolyFlags, tex, nullptr, nullptr, nullptr, true), false);
 
 	float UMult = tex ? GetUMult(Info) : 0.0f;
 	float VMult = tex ? GetVMult(Info) : 0.0f;
@@ -755,8 +801,6 @@ void UVulkanRenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT 
 	SceneVertexPos += vcount;
 	SceneIndexPos += icount;
 
-	cmdbuffer->drawIndexed(icount, 1, istart, 0, 0);
-	drawcalls++;
 	tiles++;
 
 	unguard;
@@ -837,6 +881,9 @@ void UVulkanRenderDevice::Draw2DPoint(FSceneNode* Frame, FPlane Color, DWORD Lin
 void UVulkanRenderDevice::ClearZ(FSceneNode* Frame)
 {
 	guard(UVulkanRenderDevice::ClearZ);
+
+	DrawBatch(Commands->GetDrawCommands());
+
 	VkClearAttachment attachment = {};
 	VkClearRect rect = {};
 	attachment.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
@@ -887,6 +934,8 @@ void UVulkanRenderDevice::ReadPixels(FColor* Pixels)
 	auto srcimage = Textures->Scene->PPImage.get();
 	auto cmdbuffer = Commands->GetDrawCommands();
 
+	DrawBatch(cmdbuffer);
+
 	PipelineBarrier()
 		.AddImage(srcimage, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_READ_BIT)
 		.AddImage(dstimage.get(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, VK_ACCESS_TRANSFER_WRITE_BIT)
@@ -932,7 +981,7 @@ void UVulkanRenderDevice::ReadPixels(FColor* Pixels)
 	cmdbuffer->copyImageToBuffer(dstimage->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, staging->buffer, 1, &region);
 
 	// Submit command buffers and wait for device to finish the work
-	Commands->SubmitCommands(false, 0, 0);
+	SubmitAndWait(false, 0, 0);
 
 	uint8_t* pixels = (uint8_t*)staging->Map(0, w * h * 4);
 	if (gamma != 1.0f)
@@ -972,12 +1021,11 @@ void UVulkanRenderDevice::EndFlash()
 
 		auto cmdbuffer = Commands->GetDrawCommands();
 
-		ScenePushConstants pushconstants;
+		DrawBatch(cmdbuffer);
 		pushconstants.objectToProjection = mat4::identity();
-		cmdbuffer->pushConstants(RenderPasses->ScenePipelineLayout.get(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ScenePushConstants), &pushconstants);
 
-		cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, RenderPasses->getEndFlashPipeline());
-		cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, RenderPasses->ScenePipelineLayout.get(), 0, DescriptorSets->GetTextureDescriptorSet(0, nullptr));
+		SetPipeline(cmdbuffer, RenderPasses->getEndFlashPipeline());
+		SetDescriptorSet(cmdbuffer, DescriptorSets->GetTextureDescriptorSet(0, nullptr), false);
 
 		SceneVertex* v = &Buffers->SceneVertices[SceneVertexPos];
 
@@ -1002,9 +1050,6 @@ void UVulkanRenderDevice::EndFlash()
 		SceneVertexPos += vcount;
 		SceneIndexPos += icount;
 
-		cmdbuffer->drawIndexed(icount, 1, istart, 0, 0);
-		drawcalls++;
-
 		if (CurrentFrame)
 			SetSceneNode(CurrentFrame);
 	}
@@ -1015,13 +1060,14 @@ void UVulkanRenderDevice::SetSceneNode(FSceneNode* Frame)
 {
 	guard(UVulkanRenderDevice::SetSceneNode);
 
+	auto commands = Commands->GetDrawCommands();
+	DrawBatch(commands);
+
 	CurrentFrame = Frame;
 	Aspect = Frame->FY / Frame->FX;
 	RProjZ = (float)appTan(radians(Viewport->Actor->FovAngle) * 0.5);
 	RFX2 = 2.0f * RProjZ / Frame->FX;
 	RFY2 = 2.0f * RProjZ * Aspect / Frame->FY;
-
-	auto commands = Commands->GetDrawCommands();
 
 	VkViewport viewportdesc = {};
 	viewportdesc.x = Frame->XB;
@@ -1032,11 +1078,7 @@ void UVulkanRenderDevice::SetSceneNode(FSceneNode* Frame)
 	viewportdesc.maxDepth = 1.0f;
 	commands->setViewport(0, 1, &viewportdesc);
 
-	mat4 projection = mat4::frustum(-RProjZ, RProjZ, -Aspect * RProjZ, Aspect * RProjZ, 1.0f, 32768.0f, handedness::left, clipzrange::zero_positive_w);
-
-	ScenePushConstants pushconstants;
-	pushconstants.objectToProjection = projection;
-	commands->pushConstants(RenderPasses->ScenePipelineLayout.get(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ScenePushConstants), &pushconstants);
+	pushconstants.objectToProjection = mat4::frustum(-RProjZ, RProjZ, -Aspect * RProjZ, Aspect * RProjZ, 1.0f, 32768.0f, handedness::left, clipzrange::zero_positive_w);
 
 	unguard;
 }

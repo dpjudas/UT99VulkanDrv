@@ -77,7 +77,7 @@ void RenderPassManager::EndPresent(VulkanCommandBuffer* cmdbuffer)
 	cmdbuffer->endRenderPass();
 }
 
-VulkanPipeline* RenderPassManager::getPipeline(DWORD PolyFlags)
+VulkanPipeline* RenderPassManager::getPipeline(DWORD PolyFlags, bool bindless)
 {
 	// Adjust PolyFlags according to Unreal's precedence rules.
 	if (!(PolyFlags & (PF_Translucent | PF_Modulated)))
@@ -116,12 +116,12 @@ VulkanPipeline* RenderPassManager::getPipeline(DWORD PolyFlags)
 		index |= 16;
 	}
 
-	return pipeline[renderer->UsesBindless ? 1 : 0][index].get();
+	return pipeline[bindless ? 1 : 0][index].get();
 }
 
 VulkanPipeline* RenderPassManager::getEndFlashPipeline()
 {
-	return pipeline[renderer->UsesBindless ? 1 : 0][2].get();
+	return pipeline[0][2].get();
 }
 
 void RenderPassManager::CreatePipelines()
@@ -129,6 +129,9 @@ void RenderPassManager::CreatePipelines()
 	VulkanShader* vertShader[2] = { renderer->Shaders->Scene.VertexShader.get(), renderer->Shaders->SceneBindless.VertexShader.get() };
 	VulkanShader* fragShader[2] = { renderer->Shaders->Scene.FragmentShader.get(), renderer->Shaders->SceneBindless.FragmentShader.get() };
 	VulkanShader* fragShaderAlphaTest[2] = { renderer->Shaders->Scene.FragmentShaderAlphaTest.get(), renderer->Shaders->SceneBindless.FragmentShaderAlphaTest.get() };
+	VulkanPipelineLayout* layout[2] = { ScenePipelineLayout.get(), SceneBindlessPipelineLayout.get() };
+	static const char* debugName[2] = { "ScenePipeline", "SceneBindlessPipeline" };
+
 	for (int type = 0; type < 2; type++)
 	{
 		if (type == 1 && !renderer->SupportsBindless)
@@ -153,7 +156,7 @@ void RenderPassManager::CreatePipelines()
 			if (type == 1)
 				builder.AddVertexAttribute(7, 0, VK_FORMAT_R32G32B32A32_SINT, offsetof(SceneVertex, TextureBinds));
 			builder.AddDynamicState(VK_DYNAMIC_STATE_VIEWPORT);
-			builder.Layout(ScenePipelineLayout.get());
+			builder.Layout(layout[type]);
 			builder.RenderPass(SceneRenderPass.get());
 
 			// Avoid clipping the weapon. The UE1 engine clips the geometry anyway.
@@ -197,7 +200,7 @@ void RenderPassManager::CreatePipelines()
 
 			builder.SubpassColorAttachmentCount(1);
 			builder.RasterizationSamples(renderer->Textures->Scene->SceneSamples);
-			builder.DebugName("ScenePipeline");
+			builder.DebugName(debugName[type]);
 
 			pipeline[type][i] = builder.Create(renderer->Device);
 		}

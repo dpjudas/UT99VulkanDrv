@@ -66,15 +66,14 @@ void DescriptorSetManager::ClearCache()
 	NextBindlessIndex = 0;
 }
 
-int DescriptorSetManager::GetTextureArrayIndex(DWORD PolyFlags, VulkanTexture* tex, bool clamp, bool baseTexture)
+int DescriptorSetManager::GetTextureArrayIndex(DWORD PolyFlags, VulkanTexture* tex, bool clamp)
 {
+	if (!tex)
+		return 0;
+
 	uint32_t samplermode = 0;
-	// To do: remove baseTexture - lightmap,macrotex,detailtex can just pass in 0 for PolyFlags
-	if (baseTexture)
-	{
-		if (PolyFlags & PF_NoSmooth) samplermode |= 1;
-		if (clamp) samplermode |= 2;
-	}
+	if (PolyFlags & PF_NoSmooth) samplermode |= 1;
+	if (clamp) samplermode |= 2;
 
 	int index = tex->BindlessIndex[samplermode];
 	if (index != -1)
@@ -92,6 +91,7 @@ int DescriptorSetManager::GetTextureArrayIndex(DWORD PolyFlags, VulkanTexture* t
 void DescriptorSetManager::UpdateBindlessDescriptorSet()
 {
 	WriteBindless.Execute(renderer->Device);
+	WriteBindless = WriteDescriptors();
 }
 
 void DescriptorSetManager::CreateBindlessSceneDescriptorSet()

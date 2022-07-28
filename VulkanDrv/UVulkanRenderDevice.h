@@ -95,10 +95,24 @@ private:
 	bool StatResources = false;
 	bool StatDraw = false;
 
+	void SetPipeline(VulkanCommandBuffer* cmdbuffer, VulkanPipeline* pipeline);
+	void SetDescriptorSet(VulkanCommandBuffer* cmdbuffer, VulkanDescriptorSet* descriptorSet, bool bindless);
+	void DrawBatch(VulkanCommandBuffer* cmdbuffer);
+	void SubmitAndWait(bool present, int presentWidth, int presentHeight);
+
+	struct
+	{
+		size_t SceneIndexStart = 0;
+		VulkanPipeline* Pipeline = nullptr;
+		VulkanDescriptorSet* DescriptorSet = nullptr;
+		bool Bindless = false;
+	} Batch;
+
+	ScenePushConstants pushconstants;
 
 	size_t SceneVertexPos = 0;
 	size_t SceneIndexPos = 0;
-	VulkanPipeline* LastPipeline = nullptr;
+
 	int complexsurfaces = 0;
 	int gouraudpolygons = 0;
 	int tiles = 0;

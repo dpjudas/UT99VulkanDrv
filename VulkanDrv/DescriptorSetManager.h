@@ -53,7 +53,7 @@ public:
 	VulkanDescriptorSet* GetTextureDescriptorSet(DWORD PolyFlags, VulkanTexture* tex, VulkanTexture* lightmap = nullptr, VulkanTexture* macrotex = nullptr, VulkanTexture* detailtex = nullptr, bool clamp = false);
 	void ClearCache();
 
-	int GetTextureArrayIndex(DWORD PolyFlags, VulkanTexture* tex, bool clamp, bool baseTexture);
+	int GetTextureArrayIndex(DWORD PolyFlags, VulkanTexture* tex, bool clamp = false);
 	VulkanDescriptorSet* GetBindlessDescriptorSet() { return SceneBindlessDescriptorSet.get(); }
 	void UpdateBindlessDescriptorSet();
 

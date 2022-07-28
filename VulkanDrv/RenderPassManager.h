@@ -26,7 +26,7 @@ public:
 	void BeginPresent(VulkanCommandBuffer* cmdbuffer);
 	void EndPresent(VulkanCommandBuffer* cmdbuffer);
 
-	VulkanPipeline* getPipeline(DWORD polyflags);
+	VulkanPipeline* getPipeline(DWORD polyflags, bool bindless);
 	VulkanPipeline* getEndFlashPipeline();
 
 	std::unique_ptr<VulkanRenderPass> SceneRenderPass;
