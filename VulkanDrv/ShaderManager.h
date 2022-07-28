@@ -7,13 +7,14 @@ class UVulkanRenderDevice;
 
 struct SceneVertex
 {
-	uint32_t flags;
-	float x, y, z;
-	float u, v;
-	float u2, v2;
-	float u3, v3;
-	float u4, v4;
-	float r, g, b, a;
+	uint32_t Flags;
+	vec3 Position;
+	vec2 TexCoord;
+	vec2 TexCoord2;
+	vec2 TexCoord3;
+	vec2 TexCoord4;
+	vec4 Color;
+	ivec4 TextureBinds;
 };
 
 struct ScenePushConstants

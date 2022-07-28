@@ -102,7 +102,7 @@ void DescriptorSetManager::CreateBindlessSceneDescriptorSet()
 	SceneBindlessDescriptorPool = DescriptorPoolBuilder()
 		.AddPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, MaxBindlessTextures)
 		.MaxSets(MaxBindlessTextures)
-		.DebugName("SceneDescriptorPool")
+		.DebugName("SceneBindlessDescriptorPool")
 		.Create(renderer->Device);
 
 	SceneBindlessDescriptorSetLayout = DescriptorSetLayoutBuilder()
@@ -111,7 +111,7 @@ void DescriptorSetManager::CreateBindlessSceneDescriptorSet()
 			MaxBindlessTextures,
 			VK_SHADER_STAGE_FRAGMENT_BIT,
 			VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT | VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT_EXT | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT_EXT)
-		.DebugName("SceneDescriptorSetLayout")
+		.DebugName("SceneBindlessDescriptorSetLayout")
 		.Create(renderer->Device);
 
 	SceneBindlessDescriptorSet = SceneBindlessDescriptorPool->allocate(SceneBindlessDescriptorSetLayout.get(), MaxBindlessTextures);

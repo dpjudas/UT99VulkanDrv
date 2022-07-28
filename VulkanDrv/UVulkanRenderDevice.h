@@ -67,6 +67,7 @@ public:
 	std::unique_ptr<FramebufferManager> Framebuffers;
 
 	bool SupportsBindless = false;
+	bool UsesBindless = false;
 
 	// Configuration.
 	BITFIELD UseVSync;

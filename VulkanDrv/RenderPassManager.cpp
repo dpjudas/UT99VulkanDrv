@@ -8,6 +8,7 @@
 RenderPassManager::RenderPassManager(UVulkanRenderDevice* renderer) : renderer(renderer)
 {
 	CreateScenePipelineLayout();
+	CreateSceneBindlessPipelineLayout();
 	CreatePresentPipelineLayout();
 }
 
@@ -21,6 +22,18 @@ void RenderPassManager::CreateScenePipelineLayout()
 		.AddSetLayout(renderer->DescriptorSets->SceneDescriptorSetLayout.get())
 		.AddPushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ScenePushConstants))
 		.DebugName("ScenePipelineLayout")
+		.Create(renderer->Device);
+}
+
+void RenderPassManager::CreateSceneBindlessPipelineLayout()
+{
+	if (!renderer->SupportsBindless)
+		return;
+
+	SceneBindlessPipelineLayout = PipelineLayoutBuilder()
+		.AddSetLayout(renderer->DescriptorSets->SceneBindlessDescriptorSetLayout.get())
+		.AddPushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ScenePushConstants))
+		.DebugName("SceneBindlessPipelineLayout")
 		.Create(renderer->Device);
 }
 
@@ -103,80 +116,91 @@ VulkanPipeline* RenderPassManager::getPipeline(DWORD PolyFlags)
 		index |= 16;
 	}
 
-	return pipeline[index].get();
+	return pipeline[renderer->UsesBindless ? 1 : 0][index].get();
 }
 
 VulkanPipeline* RenderPassManager::getEndFlashPipeline()
 {
-	return pipeline[2].get();
+	return pipeline[renderer->UsesBindless ? 1 : 0][2].get();
 }
 
 void RenderPassManager::CreatePipelines()
 {
-	for (int i = 0; i < 32; i++)
+	VulkanShader* vertShader[2] = { renderer->Shaders->Scene.VertexShader.get(), renderer->Shaders->SceneBindless.VertexShader.get() };
+	VulkanShader* fragShader[2] = { renderer->Shaders->Scene.FragmentShader.get(), renderer->Shaders->SceneBindless.FragmentShader.get() };
+	VulkanShader* fragShaderAlphaTest[2] = { renderer->Shaders->Scene.FragmentShaderAlphaTest.get(), renderer->Shaders->SceneBindless.FragmentShaderAlphaTest.get() };
+	for (int type = 0; type < 2; type++)
 	{
-		GraphicsPipelineBuilder builder;
-		builder.AddVertexShader(renderer->Shaders->Scene.VertexShader.get());
-		builder.Viewport(0.0f, 0.0f, (float)renderer->Textures->Scene->width, (float)renderer->Textures->Scene->height);
-		builder.Scissor(0, 0, renderer->Textures->Scene->width, renderer->Textures->Scene->height);
-		builder.Topology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-		builder.Cull(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
-		builder.AddVertexBufferBinding(0, sizeof(SceneVertex));
-		builder.AddVertexAttribute(0, 0, VK_FORMAT_R32_UINT, offsetof(SceneVertex, flags));
-		builder.AddVertexAttribute(1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(SceneVertex, x));
-		builder.AddVertexAttribute(2, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, u));
-		builder.AddVertexAttribute(3, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, u2));
-		builder.AddVertexAttribute(4, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, u3));
-		builder.AddVertexAttribute(5, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, u4));
-		builder.AddVertexAttribute(6, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(SceneVertex, r));
-		builder.AddDynamicState(VK_DYNAMIC_STATE_VIEWPORT);
-		builder.Layout(ScenePipelineLayout.get());
-		builder.RenderPass(SceneRenderPass.get());
-
-		// Avoid clipping the weapon. The UE1 engine clips the geometry anyway.
-		if (renderer->Device->UsedDeviceFeatures.depthClamp)
-			builder.DepthClampEnable(true);
-
-		switch (i & 3)
-		{
-		case 0: // PF_Translucent
-			builder.BlendMode(VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR);
+		if (type == 1 && !renderer->SupportsBindless)
 			break;
-		case 1: // PF_Modulated
-			builder.BlendMode(VK_BLEND_OP_ADD, VK_BLEND_FACTOR_DST_COLOR, VK_BLEND_FACTOR_SRC_COLOR);
-			break;
-		case 2: // PF_Highlighted
-			builder.BlendMode(VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA);
-			break;
-		case 3:
-			builder.BlendMode(VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ZERO); // Hmm, is it faster to keep the blend mode enabled or to toggle it?
-			break;
-		}
 
-		if (i & 4) // PF_Invisible
+		for (int i = 0; i < 32; i++)
 		{
-			builder.ColorWriteMask(0);
+			GraphicsPipelineBuilder builder;
+			builder.AddVertexShader(vertShader[type]);
+			builder.Viewport(0.0f, 0.0f, (float)renderer->Textures->Scene->width, (float)renderer->Textures->Scene->height);
+			builder.Scissor(0, 0, renderer->Textures->Scene->width, renderer->Textures->Scene->height);
+			builder.Topology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+			builder.Cull(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+			builder.AddVertexBufferBinding(0, sizeof(SceneVertex));
+			builder.AddVertexAttribute(0, 0, VK_FORMAT_R32_UINT, offsetof(SceneVertex, Flags));
+			builder.AddVertexAttribute(1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(SceneVertex, Position));
+			builder.AddVertexAttribute(2, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, TexCoord));
+			builder.AddVertexAttribute(3, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, TexCoord2));
+			builder.AddVertexAttribute(4, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, TexCoord3));
+			builder.AddVertexAttribute(5, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, TexCoord4));
+			builder.AddVertexAttribute(6, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(SceneVertex, Color));
+			if (type == 1)
+				builder.AddVertexAttribute(7, 0, VK_FORMAT_R32G32B32A32_SINT, offsetof(SceneVertex, TextureBinds));
+			builder.AddDynamicState(VK_DYNAMIC_STATE_VIEWPORT);
+			builder.Layout(ScenePipelineLayout.get());
+			builder.RenderPass(SceneRenderPass.get());
+
+			// Avoid clipping the weapon. The UE1 engine clips the geometry anyway.
+			if (renderer->Device->UsedDeviceFeatures.depthClamp)
+				builder.DepthClampEnable(true);
+
+			switch (i & 3)
+			{
+			case 0: // PF_Translucent
+				builder.BlendMode(VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR);
+				break;
+			case 1: // PF_Modulated
+				builder.BlendMode(VK_BLEND_OP_ADD, VK_BLEND_FACTOR_DST_COLOR, VK_BLEND_FACTOR_SRC_COLOR);
+				break;
+			case 2: // PF_Highlighted
+				builder.BlendMode(VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA);
+				break;
+			case 3:
+				builder.BlendMode(VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ZERO); // Hmm, is it faster to keep the blend mode enabled or to toggle it?
+				break;
+			}
+
+			if (i & 4) // PF_Invisible
+			{
+				builder.ColorWriteMask(0);
+			}
+
+			if (i & 8) // PF_Occlude
+			{
+				builder.DepthStencilEnable(true, true, false);
+			}
+			else
+			{
+				builder.DepthStencilEnable(true, false, false);
+			}
+
+			if (i & 16) // PF_Masked
+				builder.AddFragmentShader(fragShaderAlphaTest[type]);
+			else
+				builder.AddFragmentShader(fragShader[type]);
+
+			builder.SubpassColorAttachmentCount(1);
+			builder.RasterizationSamples(renderer->Textures->Scene->SceneSamples);
+			builder.DebugName("ScenePipeline");
+
+			pipeline[type][i] = builder.Create(renderer->Device);
 		}
-
-		if (i & 8) // PF_Occlude
-		{
-			builder.DepthStencilEnable(true, true, false);
-		}
-		else
-		{
-			builder.DepthStencilEnable(true, false, false);
-		}
-
-		if (i & 16) // PF_Masked
-			builder.AddFragmentShader(renderer->Shaders->Scene.FragmentShaderAlphaTest.get());
-		else
-			builder.AddFragmentShader(renderer->Shaders->Scene.FragmentShader.get());
-
-		builder.SubpassColorAttachmentCount(1);
-		builder.RasterizationSamples(renderer->Textures->Scene->SceneSamples);
-		builder.DebugName("ScenePipeline");
-
-		pipeline[i] = builder.Create(renderer->Device);
 	}
 }
 

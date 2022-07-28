@@ -11,6 +11,7 @@ public:
 	~RenderPassManager();
 
 	std::unique_ptr<VulkanPipelineLayout> ScenePipelineLayout;
+	std::unique_ptr<VulkanPipelineLayout> SceneBindlessPipelineLayout;
 	std::unique_ptr<VulkanPipelineLayout> PresentPipelineLayout;
 
 	void CreateRenderPass();
@@ -35,8 +36,9 @@ public:
 
 private:
 	void CreateScenePipelineLayout();
+	void CreateSceneBindlessPipelineLayout();
 	void CreatePresentPipelineLayout();
 
 	UVulkanRenderDevice* renderer = nullptr;
-	std::unique_ptr<VulkanPipeline> pipeline[32];
+	std::unique_ptr<VulkanPipeline> pipeline[2][32];
 };

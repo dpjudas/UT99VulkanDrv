@@ -573,22 +573,22 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 			FLOAT u = Facet.MapCoords.XAxis | point;
 			FLOAT v = Facet.MapCoords.YAxis | point;
 
-			vptr->flags = flags;
-			vptr->x = point.X;
-			vptr->y = point.Y;
-			vptr->z = point.Z;
-			vptr->u = (u - UPan) * UMult;
-			vptr->v = (v - VPan) * VMult;
-			vptr->u2 = (u - LMUPan) * LMUMult;
-			vptr->v2 = (v - LMVPan) * LMVMult;
-			vptr->u3 = (u - MacroUPan) * MacroUMult;
-			vptr->v3 = (v - MacroVPan) * MacroVMult;
-			vptr->u4 = (u - DetailUPan) * DetailUMult;
-			vptr->v4 = (v - DetailVPan) * DetailVMult;
-			vptr->r = 1.0f;
-			vptr->g = 1.0f;
-			vptr->b = 1.0f;
-			vptr->a = 1.0f;
+			vptr->Flags = flags;
+			vptr->Position.x = point.X;
+			vptr->Position.y = point.Y;
+			vptr->Position.z = point.Z;
+			vptr->TexCoord.s = (u - UPan) * UMult;
+			vptr->TexCoord.t = (v - VPan) * VMult;
+			vptr->TexCoord2.s = (u - LMUPan) * LMUMult;
+			vptr->TexCoord2.t = (v - LMVPan) * LMVMult;
+			vptr->TexCoord3.s = (u - MacroUPan) * MacroUMult;
+			vptr->TexCoord3.t = (v - MacroVPan) * MacroVMult;
+			vptr->TexCoord4.s = (u - DetailUPan) * DetailUMult;
+			vptr->TexCoord4.t = (v - DetailVPan) * DetailVMult;
+			vptr->Color.r = 1.0f;
+			vptr->Color.g = 1.0f;
+			vptr->Color.b = 1.0f;
+			vptr->Color.a = 1.0f;
 			vptr++;
 		}
 
@@ -643,31 +643,31 @@ void UVulkanRenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& In
 	{
 		FTransTexture* P = Pts[i];
 		SceneVertex& v = vertexdata[i];
-		v.flags = flags;
-		v.x = P->Point.X;
-		v.y = P->Point.Y;
-		v.z = P->Point.Z;
-		v.u = P->U * UMult;
-		v.v = P->V * VMult;
-		v.u2 = P->Fog.X;
-		v.v2 = P->Fog.Y;
-		v.u3 = P->Fog.Z;
-		v.v3 = P->Fog.W;
-		v.u4 = 0.0f;
-		v.v4 = 0.0f;
+		v.Flags = flags;
+		v.Position.x = P->Point.X;
+		v.Position.y = P->Point.Y;
+		v.Position.z = P->Point.Z;
+		v.TexCoord.s = P->U * UMult;
+		v.TexCoord.t = P->V * VMult;
+		v.TexCoord2.s = P->Fog.X;
+		v.TexCoord2.t = P->Fog.Y;
+		v.TexCoord3.s = P->Fog.Z;
+		v.TexCoord3.t = P->Fog.W;
+		v.TexCoord4.s = 0.0f;
+		v.TexCoord4.t = 0.0f;
 		if (PolyFlags & PF_Modulated)
 		{
-			v.r = 1.0f;
-			v.g = 1.0f;
-			v.b = 1.0f;
-			v.a = 1.0f;
+			v.Color.r = 1.0f;
+			v.Color.g = 1.0f;
+			v.Color.b = 1.0f;
+			v.Color.a = 1.0f;
 		}
 		else
 		{
-			v.r = P->Light.X;
-			v.g = P->Light.Y;
-			v.b = P->Light.Z;
-			v.a = 1.0f;
+			v.Color.r = P->Light.X;
+			v.Color.g = P->Light.Y;
+			v.Color.b = P->Light.Z;
+			v.Color.a = 1.0f;
 		}
 	}
 
@@ -734,10 +734,10 @@ void UVulkanRenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT 
 	}
 	a = 1.0f;
 
-	v[0] = { 0, RFX2 * Z * (X - Frame->FX2),      RFY2 * Z * (Y - Frame->FY2),      Z, U * UMult,        V * VMult,        0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, r, g, b, a };
-	v[1] = { 0, RFX2 * Z * (X + XL - Frame->FX2), RFY2 * Z * (Y - Frame->FY2),      Z, (U + UL) * UMult, V * VMult,        0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, r, g, b, a };
-	v[2] = { 0, RFX2 * Z * (X + XL - Frame->FX2), RFY2 * Z * (Y + YL - Frame->FY2), Z, (U + UL) * UMult, (V + VL) * VMult, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, r, g, b, a };
-	v[3] = { 0, RFX2 * Z * (X - Frame->FX2),      RFY2 * Z * (Y + YL - Frame->FY2), Z, U * UMult,        (V + VL) * VMult, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, r, g, b, a };
+	v[0] = { 0, vec3(RFX2 * Z * (X - Frame->FX2),      RFY2 * Z * (Y - Frame->FY2),      Z), vec2(U * UMult,        V * VMult),        vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec4(r, g, b, a) };
+	v[1] = { 0, vec3(RFX2 * Z * (X + XL - Frame->FX2), RFY2 * Z * (Y - Frame->FY2),      Z), vec2((U + UL) * UMult, V * VMult),        vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec4(r, g, b, a) };
+	v[2] = { 0, vec3(RFX2 * Z * (X + XL - Frame->FX2), RFY2 * Z * (Y + YL - Frame->FY2), Z), vec2((U + UL) * UMult, (V + VL) * VMult), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec4(r, g, b, a) };
+	v[3] = { 0, vec3(RFX2 * Z * (X - Frame->FX2),      RFY2 * Z * (Y + YL - Frame->FY2), Z), vec2(U * UMult,        (V + VL) * VMult), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec4(r, g, b, a) };
 
 	size_t vstart = SceneVertexPos;
 	size_t vcount = 4;
@@ -966,10 +966,9 @@ void UVulkanRenderDevice::EndFlash()
 	guard(UVulkanRenderDevice::EndFlash);
 	if (FlashScale != FPlane(0.5f, 0.5f, 0.5f, 0.0f) || FlashFog != FPlane(0.0f, 0.0f, 0.0f, 0.0f))
 	{
-		float r = FlashFog.X;
-		float g = FlashFog.Y;
-		float b = FlashFog.Z;
-		float a = 1.0f - Min(FlashScale.X * 2.0f, 1.0f);
+		vec4 color(FlashFog.X, FlashFog.Y, FlashFog.Z, 1.0f - Min(FlashScale.X * 2.0f, 1.0f));
+		vec2 zero2(0.0f);
+		ivec4 zero4(0);
 
 		auto cmdbuffer = Commands->GetDrawCommands();
 
@@ -982,10 +981,10 @@ void UVulkanRenderDevice::EndFlash()
 
 		SceneVertex* v = &Buffers->SceneVertices[SceneVertexPos];
 
-		v[0] = { 0, -1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, r, g, b, a };
-		v[1] = { 0,  1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, r, g, b, a };
-		v[2] = { 0,  1.0f,  1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, r, g, b, a };
-		v[3] = { 0, -1.0f,  1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, r, g, b, a };
+		v[0] = { 0, vec3(-1.0f, -1.0f, 0.0f), zero2, zero2, zero2, zero2, color, zero4 };
+		v[1] = { 0, vec3( 1.0f, -1.0f, 0.0f), zero2, zero2, zero2, zero2, color, zero4 };
+		v[2] = { 0, vec3( 1.0f,  1.0f, 0.0f), zero2, zero2, zero2, zero2, color, zero4 };
+		v[3] = { 0, vec3(-1.0f,  1.0f, 0.0f), zero2, zero2, zero2, zero2, color, zero4 };
 
 		size_t vstart = SceneVertexPos;
 		size_t vcount = 4;
