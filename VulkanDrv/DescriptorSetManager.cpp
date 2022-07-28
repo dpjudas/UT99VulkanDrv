@@ -7,6 +7,7 @@
 
 DescriptorSetManager::DescriptorSetManager(UVulkanRenderDevice* renderer) : renderer(renderer)
 {
+	CreateBindlessSceneDescriptorSet();
 	CreateSceneDescriptorSetLayout();
 	CreatePresentDescriptorSetLayout();
 	CreatePresentDescriptorSet();
@@ -60,6 +61,60 @@ void DescriptorSetManager::ClearCache()
 
 	SceneDescriptorPool.clear();
 	SceneDescriptorPoolSetsLeft = 0;
+
+	WriteBindless = WriteDescriptors();
+	NextBindlessIndex = 0;
+}
+
+int DescriptorSetManager::GetTextureArrayIndex(DWORD PolyFlags, VulkanTexture* tex, bool clamp, bool baseTexture)
+{
+	uint32_t samplermode = 0;
+	// To do: remove baseTexture - lightmap,macrotex,detailtex can just pass in 0 for PolyFlags
+	if (baseTexture)
+	{
+		if (PolyFlags & PF_NoSmooth) samplermode |= 1;
+		if (clamp) samplermode |= 2;
+	}
+
+	int index = tex->BindlessIndex[samplermode];
+	if (index != -1)
+		return index;
+
+	index = NextBindlessIndex++;
+
+	VulkanSampler* sampler = renderer->Samplers->samplers[samplermode].get();
+	WriteBindless.AddCombinedImageSampler(SceneBindlessDescriptorSet.get(), 0, index, tex->imageView.get(), sampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+	tex->BindlessIndex[samplermode] = index;
+	return index;
+}
+
+void DescriptorSetManager::UpdateBindlessDescriptorSet()
+{
+	WriteBindless.Execute(renderer->Device);
+}
+
+void DescriptorSetManager::CreateBindlessSceneDescriptorSet()
+{
+	if (!renderer->Device->SupportsDeviceExtension(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME))
+		return;
+
+	SceneBindlessDescriptorPool = DescriptorPoolBuilder()
+		.AddPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, MaxBindlessTextures)
+		.MaxSets(MaxBindlessTextures)
+		.DebugName("SceneDescriptorPool")
+		.Create(renderer->Device);
+
+	SceneBindlessDescriptorSetLayout = DescriptorSetLayoutBuilder()
+		.AddBinding(
+			0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+			MaxBindlessTextures,
+			VK_SHADER_STAGE_FRAGMENT_BIT,
+			VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT | VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT_EXT | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT_EXT)
+		.DebugName("SceneDescriptorSetLayout")
+		.Create(renderer->Device);
+
+	SceneBindlessDescriptorSet = SceneBindlessDescriptorPool->allocate(SceneBindlessDescriptorSetLayout.get(), MaxBindlessTextures);
 }
 
 void DescriptorSetManager::CreateSceneDescriptorSetLayout()

@@ -567,10 +567,9 @@ std::unique_ptr<VulkanPipeline> ComputePipelineBuilder::Create(VulkanDevice* dev
 
 DescriptorSetLayoutBuilder::DescriptorSetLayoutBuilder()
 {
-	layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
 }
 
-DescriptorSetLayoutBuilder& DescriptorSetLayoutBuilder::AddBinding(int index, VkDescriptorType type, int arrayCount, VkShaderStageFlags stageFlags)
+DescriptorSetLayoutBuilder& DescriptorSetLayoutBuilder::AddBinding(int index, VkDescriptorType type, int arrayCount, VkShaderStageFlags stageFlags, VkDescriptorBindingFlags flags)
 {
 	VkDescriptorSetLayoutBinding binding = { };
 	binding.binding = index;
@@ -579,9 +578,17 @@ DescriptorSetLayoutBuilder& DescriptorSetLayoutBuilder::AddBinding(int index, Vk
 	binding.stageFlags = stageFlags;
 	binding.pImmutableSamplers = nullptr;
 	bindings.push_back(binding);
+	bindingFlags.push_back(flags);
 
 	layoutInfo.bindingCount = (uint32_t)bindings.size();
-	layoutInfo.pBindings = &bindings[0];
+	layoutInfo.pBindings = bindings.data();
+
+	bindingFlagsInfo.bindingCount = (uint32_t)bindings.size();
+	bindingFlagsInfo.pBindingFlags = bindingFlags.data();
+
+	if (flags != 0)
+		layoutInfo.pNext = &bindingFlagsInfo;
+
 	return *this;
 }
 
@@ -1361,6 +1368,11 @@ WriteDescriptors& WriteDescriptors::AddStorageImage(VulkanDescriptorSet* descrip
 
 WriteDescriptors& WriteDescriptors::AddCombinedImageSampler(VulkanDescriptorSet* descriptorSet, int binding, VulkanImageView* view, VulkanSampler* sampler, VkImageLayout imageLayout)
 {
+	return AddCombinedImageSampler(descriptorSet, binding, 0, view, sampler, imageLayout);
+}
+
+WriteDescriptors& WriteDescriptors::AddCombinedImageSampler(VulkanDescriptorSet* descriptorSet, int binding, int arrayIndex, VulkanImageView* view, VulkanSampler* sampler, VkImageLayout imageLayout)
+{
 	VkDescriptorImageInfo imageInfo = {};
 	imageInfo.imageView = view->view;
 	imageInfo.sampler = sampler->sampler;
@@ -1373,7 +1385,7 @@ WriteDescriptors& WriteDescriptors::AddCombinedImageSampler(VulkanDescriptorSet*
 	descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 	descriptorWrite.dstSet = descriptorSet->set;
 	descriptorWrite.dstBinding = binding;
-	descriptorWrite.dstArrayElement = 0;
+	descriptorWrite.dstArrayElement = arrayIndex;
 	descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 	descriptorWrite.descriptorCount = 1;
 	descriptorWrite.pImageInfo = &extra->imageInfo;

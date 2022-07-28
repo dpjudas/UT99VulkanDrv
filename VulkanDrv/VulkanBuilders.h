@@ -142,14 +142,16 @@ class DescriptorSetLayoutBuilder
 public:
 	DescriptorSetLayoutBuilder();
 
-	DescriptorSetLayoutBuilder& AddBinding(int binding, VkDescriptorType type, int arrayCount, VkShaderStageFlags stageFlags);
+	DescriptorSetLayoutBuilder& AddBinding(int binding, VkDescriptorType type, int arrayCount, VkShaderStageFlags stageFlags, VkDescriptorBindingFlags flags = 0);
 	DescriptorSetLayoutBuilder& DebugName(const char* name) { debugName = name; return *this; }
 
 	std::unique_ptr<VulkanDescriptorSetLayout> Create(VulkanDevice *device);
 
 private:
-	VkDescriptorSetLayoutCreateInfo layoutInfo = {};
+	VkDescriptorSetLayoutCreateInfo layoutInfo = { VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
+	VkDescriptorSetLayoutBindingFlagsCreateInfoEXT bindingFlagsInfo = { VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT };
 	std::vector<VkDescriptorSetLayoutBinding> bindings;
+	std::vector<VkDescriptorBindingFlags> bindingFlags;
 	const char* debugName = nullptr;
 };
 
@@ -364,6 +366,7 @@ public:
 	WriteDescriptors& AddBuffer(VulkanDescriptorSet *descriptorSet, int binding, VkDescriptorType type, VulkanBuffer *buffer, size_t offset, size_t range);
 	WriteDescriptors& AddStorageImage(VulkanDescriptorSet *descriptorSet, int binding, VulkanImageView *view, VkImageLayout imageLayout);
 	WriteDescriptors& AddCombinedImageSampler(VulkanDescriptorSet *descriptorSet, int binding, VulkanImageView *view, VulkanSampler *sampler, VkImageLayout imageLayout);
+	WriteDescriptors& AddCombinedImageSampler(VulkanDescriptorSet* descriptorSet, int binding, int arrayIndex, VulkanImageView* view, VulkanSampler* sampler, VkImageLayout imageLayout);
 	WriteDescriptors& AddAccelerationStructure(VulkanDescriptorSet* descriptorSet, int binding, VulkanAccelerationStructure* accelStruct);
 	void Execute(VulkanDevice *device);
 

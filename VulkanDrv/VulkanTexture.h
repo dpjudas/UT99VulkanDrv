@@ -24,11 +24,10 @@ public:
 	void Update(UVulkanRenderDevice* renderer, const FTextureInfo& Info, bool masked);
 	void UpdateRect(UVulkanRenderDevice* renderer, FTextureInfo& Info, int x, int y, int w, int h);
 
-	//float UMult = 1.0f;
-	//float VMult = 1.0f;
-
 	std::unique_ptr<VulkanImage> image;
 	std::unique_ptr<VulkanImageView> imageView;
+
+	int BindlessIndex[4] = { -1, -1, -1, -1 };
 
 private:
 	UploadedData UploadData(UVulkanRenderDevice* renderer, const FTextureInfo& Info, bool masked, VkFormat imageFormat, std::function<int(FMipmapBase* mip)> calcMipSize, std::function<void(FMipmapBase* mip, void* dst)> copyMip = {});

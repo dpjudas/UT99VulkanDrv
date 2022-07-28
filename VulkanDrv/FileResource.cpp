@@ -44,6 +44,10 @@ std::string FileResource::readAllText(const std::string& filename)
 	else if (filename == "shaders/Scene.frag")
 	{
 		return R"(
+// #extension GL_EXT_nonuniform_qualifier : enable
+// layout (binding = 0) uniform sampler2D textures[];
+// vec4 color = texture(textures[albedo_id], final_uv.xy);
+
 			layout(binding = 0) uniform sampler2D tex;
 			layout(binding = 1) uniform sampler2D texLightmap;
 			layout(binding = 2) uniform sampler2D texMacro;

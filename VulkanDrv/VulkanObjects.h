@@ -215,12 +215,18 @@ public:
 #endif
 
 	std::unique_ptr<VulkanDescriptorSet> tryAllocate(VulkanDescriptorSetLayout *layout);
+	std::unique_ptr<VulkanDescriptorSet> tryAllocate(VulkanDescriptorSetLayout* layout, uint32_t bindlessCount);
 	std::unique_ptr<VulkanDescriptorSet> allocate(VulkanDescriptorSetLayout *layout);
+	std::unique_ptr<VulkanDescriptorSet> allocate(VulkanDescriptorSetLayout* layout, uint32_t bindlessCount);
 
 	VulkanDevice *device;
 	VkDescriptorPool pool;
 
 private:
+	enum class AllocType { Try, Always };
+	std::unique_ptr<VulkanDescriptorSet> allocate(VulkanDescriptorSetLayout* layout, AllocType allocType);
+	std::unique_ptr<VulkanDescriptorSet> allocate(VulkanDescriptorSetLayout* layout, uint32_t bindlessCount, AllocType allocType);
+
 	VulkanDescriptorPool(const VulkanDescriptorPool &) = delete;
 	VulkanDescriptorPool &operator=(const VulkanDescriptorPool &) = delete;
 };
@@ -991,35 +997,60 @@ inline VulkanDescriptorPool::~VulkanDescriptorPool()
 	vkDestroyDescriptorPool(device->device, pool, nullptr);
 }
 
-inline std::unique_ptr<VulkanDescriptorSet> VulkanDescriptorPool::tryAllocate(VulkanDescriptorSetLayout *layout)
+inline std::unique_ptr<VulkanDescriptorSet> VulkanDescriptorPool::allocate(VulkanDescriptorSetLayout* layout, AllocType allocType)
 {
-	VkDescriptorSetAllocateInfo allocInfo = {};
-	allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+	VkDescriptorSetAllocateInfo allocInfo = { VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO };
 	allocInfo.descriptorPool = pool;
 	allocInfo.descriptorSetCount = 1;
 	allocInfo.pSetLayouts = &layout->layout;
 
 	VkDescriptorSet descriptorSet;
 	VkResult result = vkAllocateDescriptorSets(device->device, &allocInfo, &descriptorSet);
-	if (result != VK_SUCCESS)
+	if (allocType == AllocType::Try && result != VK_SUCCESS)
 		return nullptr;
-
+	else
+		CheckVulkanError(result, "Could not allocate descriptor sets");
 	return std::make_unique<VulkanDescriptorSet>(device, this, descriptorSet);
+}
+
+inline std::unique_ptr<VulkanDescriptorSet> VulkanDescriptorPool::allocate(VulkanDescriptorSetLayout* layout, uint32_t bindlessCount, AllocType allocType)
+{
+	VkDescriptorSetAllocateInfo allocInfo = { VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO };
+	VkDescriptorSetVariableDescriptorCountAllocateInfoEXT countInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO_EXT };
+	allocInfo.descriptorPool = pool;
+	allocInfo.descriptorSetCount = 1;
+	allocInfo.pSetLayouts = &layout->layout;
+	allocInfo.pNext = &countInfo;
+	countInfo.descriptorSetCount = 1;
+	countInfo.pDescriptorCounts = &bindlessCount;
+
+	VkDescriptorSet descriptorSet;
+	VkResult result = vkAllocateDescriptorSets(device->device, &allocInfo, &descriptorSet);
+	if (allocType == AllocType::Try && result != VK_SUCCESS)
+		return nullptr;
+	else
+		CheckVulkanError(result, "Could not allocate descriptor sets");
+	return std::make_unique<VulkanDescriptorSet>(device, this, descriptorSet);
+}
+
+inline std::unique_ptr<VulkanDescriptorSet> VulkanDescriptorPool::tryAllocate(VulkanDescriptorSetLayout *layout)
+{
+	return allocate(layout, AllocType::Try);
 }
 
 inline std::unique_ptr<VulkanDescriptorSet> VulkanDescriptorPool::allocate(VulkanDescriptorSetLayout *layout)
 {
-	VkDescriptorSetAllocateInfo allocInfo = {};
-	allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-	allocInfo.descriptorPool = pool;
-	allocInfo.descriptorSetCount = 1;
-	allocInfo.pSetLayouts = &layout->layout;
+	return allocate(layout, AllocType::Always);
+}
 
-	VkDescriptorSet descriptorSet;
-	VkResult result = vkAllocateDescriptorSets(device->device, &allocInfo, &descriptorSet);
-	CheckVulkanError(result, "Could not allocate descriptor sets");
+inline std::unique_ptr<VulkanDescriptorSet> VulkanDescriptorPool::tryAllocate(VulkanDescriptorSetLayout* layout, uint32_t bindlessCount)
+{
+	return allocate(layout, bindlessCount, AllocType::Try);
+}
 
-	return std::make_unique<VulkanDescriptorSet>(device, this, descriptorSet);
+inline std::unique_ptr<VulkanDescriptorSet> VulkanDescriptorPool::allocate(VulkanDescriptorSetLayout* layout, uint32_t bindlessCount)
+{
+	return allocate(layout, bindlessCount, AllocType::Always);
 }
 
 /////////////////////////////////////////////////////////////////////////////

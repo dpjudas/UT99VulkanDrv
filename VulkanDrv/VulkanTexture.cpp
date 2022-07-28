@@ -94,9 +94,6 @@ void VulkanTexture::UpdateRect(UVulkanRenderDevice* renderer, FTextureInfo& Info
 
 void VulkanTexture::Update(UVulkanRenderDevice* renderer, const FTextureInfo& Info, bool masked)
 {
-	//UMult = 1.0f / (Info.UScale * Info.USize);
-	//VMult = 1.0f / (Info.VScale * Info.VSize);
-
 	UploadedData data;
 	if ((uint32_t)Info.USize > renderer->Device->PhysicalDevice.Properties.limits.maxImageDimension2D || (uint32_t)Info.VSize > renderer->Device->PhysicalDevice.Properties.limits.maxImageDimension2D)
 	{

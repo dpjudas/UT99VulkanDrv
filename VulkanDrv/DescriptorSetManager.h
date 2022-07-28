@@ -1,6 +1,7 @@
 #pragma once
 
 #include "VulkanObjects.h"
+#include "VulkanBuilders.h"
 
 class UVulkanRenderDevice;
 class VulkanTexture;
@@ -14,17 +15,30 @@ public:
 	VulkanDescriptorSet* GetTextureDescriptorSet(DWORD PolyFlags, VulkanTexture* tex, VulkanTexture* lightmap = nullptr, VulkanTexture* macrotex = nullptr, VulkanTexture* detailtex = nullptr, bool clamp = false);
 	void ClearCache();
 
+	int GetTextureArrayIndex(DWORD PolyFlags, VulkanTexture* tex, bool clamp, bool baseTexture);
+	VulkanDescriptorSet* GetBindlessDescriptorSet() { return SceneBindlessDescriptorSet.get(); }
+	void UpdateBindlessDescriptorSet();
+
 	VulkanDescriptorSet* GetPresentDescriptorSet() { return PresentDescriptorSet.get(); }
 
+	static const int MaxBindlessTextures = 16536;
+
+	std::unique_ptr<VulkanDescriptorSetLayout> SceneBindlessDescriptorSetLayout;
 	std::unique_ptr<VulkanDescriptorSetLayout> SceneDescriptorSetLayout;
 	std::unique_ptr<VulkanDescriptorSetLayout> PresentDescriptorSetLayout;
 
 private:
+	void CreateBindlessSceneDescriptorSet();
 	void CreateSceneDescriptorSetLayout();
 	void CreatePresentDescriptorSetLayout();
 	void CreatePresentDescriptorSet();
 
 	UVulkanRenderDevice* renderer = nullptr;
+
+	std::unique_ptr<VulkanDescriptorPool> SceneBindlessDescriptorPool;
+	std::unique_ptr<VulkanDescriptorSet> SceneBindlessDescriptorSet;
+	WriteDescriptors WriteBindless;
+	int NextBindlessIndex = 0;
 
 	std::vector<std::unique_ptr<VulkanDescriptorPool>> SceneDescriptorPool;
 	int SceneDescriptorPoolSetsLeft = 0;
