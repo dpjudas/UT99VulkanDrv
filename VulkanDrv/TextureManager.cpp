@@ -32,8 +32,10 @@ VulkanTexture* TextureManager::GetTexture(FTextureInfo* texture, bool masked)
 	{
 		tex.reset(new VulkanTexture(renderer, *texture, masked));
 	}
-	else if (texture->bRealtimeChanged)
+	else if (texture->bRealtimeChanged && (!texture->Texture || texture->Texture->RealtimeChangeCount != tex->RealtimeChangeCount))
 	{
+		if (texture->Texture)
+			texture->Texture->RealtimeChangeCount = tex->RealtimeChangeCount;
 		texture->bRealtimeChanged = 0;
 		tex->Update(renderer, *texture, masked);
 	}

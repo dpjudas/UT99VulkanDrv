@@ -28,6 +28,7 @@ public:
 	std::unique_ptr<VulkanImageView> imageView;
 
 	int BindlessIndex[4] = { -1, -1, -1, -1 };
+	int RealtimeChangeCount = 0;
 
 private:
 	UploadedData UploadData(UVulkanRenderDevice* renderer, const FTextureInfo& Info, bool masked, VkFormat imageFormat, std::function<int(FMipmapBase* mip)> calcMipSize, std::function<void(FMipmapBase* mip, void* dst)> copyMip = {});
