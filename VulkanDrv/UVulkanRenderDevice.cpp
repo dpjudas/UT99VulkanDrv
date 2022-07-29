@@ -683,8 +683,27 @@ void UVulkanRenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& In
 
 	VulkanTexture* tex = Textures->GetTexture(&Info, !!(PolyFlags & PF_Masked));
 
-	SetPipeline(cmdbuffer, RenderPasses->getPipeline(PolyFlags, false));
-	SetDescriptorSet(cmdbuffer, DescriptorSets->GetTextureDescriptorSet(PolyFlags, tex), false);
+	SetPipeline(cmdbuffer, RenderPasses->getPipeline(PolyFlags, UsesBindless));
+
+	ivec4 textureBinds;
+	if (UsesBindless)
+	{
+		textureBinds.x = DescriptorSets->GetTextureArrayIndex(PolyFlags, tex);
+		textureBinds.y = 0.0f;
+		textureBinds.z = 0.0f;
+		textureBinds.w = 0.0f;
+
+		SetDescriptorSet(cmdbuffer, DescriptorSets->GetBindlessDescriptorSet(), true);
+	}
+	else
+	{
+		textureBinds.x = 0.0f;
+		textureBinds.y = 0.0f;
+		textureBinds.z = 0.0f;
+		textureBinds.w = 0.0f;
+
+		SetDescriptorSet(cmdbuffer, DescriptorSets->GetTextureDescriptorSet(PolyFlags, tex), false);
+	}
 
 	float UMult = tex ? GetUMult(Info) : 0.0f;
 	float VMult = tex ? GetVMult(Info) : 0.0f;
@@ -723,6 +742,7 @@ void UVulkanRenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& In
 			v.Color.b = P->Light.Z;
 			v.Color.a = 1.0f;
 		}
+		v.TextureBinds = textureBinds;
 	}
 
 	size_t vstart = SceneVertexPos;
@@ -757,8 +777,27 @@ void UVulkanRenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT 
 
 	VulkanTexture* tex = Textures->GetTexture(&Info, !!(PolyFlags & PF_Masked));
 
-	SetPipeline(cmdbuffer, RenderPasses->getPipeline(PolyFlags, false));
-	SetDescriptorSet(cmdbuffer, DescriptorSets->GetTextureDescriptorSet(PolyFlags, tex, nullptr, nullptr, nullptr, true), false);
+	SetPipeline(cmdbuffer, RenderPasses->getPipeline(PolyFlags, UsesBindless));
+
+	ivec4 textureBinds;
+	if (UsesBindless)
+	{
+		textureBinds.x = DescriptorSets->GetTextureArrayIndex(PolyFlags, tex, true);
+		textureBinds.y = 0.0f;
+		textureBinds.z = 0.0f;
+		textureBinds.w = 0.0f;
+
+		SetDescriptorSet(cmdbuffer, DescriptorSets->GetBindlessDescriptorSet(), true);
+	}
+	else
+	{
+		textureBinds.x = 0.0f;
+		textureBinds.y = 0.0f;
+		textureBinds.z = 0.0f;
+		textureBinds.w = 0.0f;
+
+		SetDescriptorSet(cmdbuffer, DescriptorSets->GetTextureDescriptorSet(PolyFlags, tex, nullptr, nullptr, nullptr, true), false);
+	}
 
 	float UMult = tex ? GetUMult(Info) : 0.0f;
 	float VMult = tex ? GetVMult(Info) : 0.0f;
@@ -780,10 +819,10 @@ void UVulkanRenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT 
 	}
 	a = 1.0f;
 
-	v[0] = { 0, vec3(RFX2 * Z * (X - Frame->FX2),      RFY2 * Z * (Y - Frame->FY2),      Z), vec2(U * UMult,        V * VMult),        vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec4(r, g, b, a) };
-	v[1] = { 0, vec3(RFX2 * Z * (X + XL - Frame->FX2), RFY2 * Z * (Y - Frame->FY2),      Z), vec2((U + UL) * UMult, V * VMult),        vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec4(r, g, b, a) };
-	v[2] = { 0, vec3(RFX2 * Z * (X + XL - Frame->FX2), RFY2 * Z * (Y + YL - Frame->FY2), Z), vec2((U + UL) * UMult, (V + VL) * VMult), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec4(r, g, b, a) };
-	v[3] = { 0, vec3(RFX2 * Z * (X - Frame->FX2),      RFY2 * Z * (Y + YL - Frame->FY2), Z), vec2(U * UMult,        (V + VL) * VMult), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec4(r, g, b, a) };
+	v[0] = { 0, vec3(RFX2 * Z * (X - Frame->FX2),      RFY2 * Z * (Y - Frame->FY2),      Z), vec2(U * UMult,        V * VMult),        vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec4(r, g, b, a), textureBinds };
+	v[1] = { 0, vec3(RFX2 * Z * (X + XL - Frame->FX2), RFY2 * Z * (Y - Frame->FY2),      Z), vec2((U + UL) * UMult, V * VMult),        vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec4(r, g, b, a), textureBinds };
+	v[2] = { 0, vec3(RFX2 * Z * (X + XL - Frame->FX2), RFY2 * Z * (Y + YL - Frame->FY2), Z), vec2((U + UL) * UMult, (V + VL) * VMult), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec4(r, g, b, a), textureBinds };
+	v[3] = { 0, vec3(RFX2 * Z * (X - Frame->FX2),      RFY2 * Z * (Y + YL - Frame->FY2), Z), vec2(U * UMult,        (V + VL) * VMult), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec4(r, g, b, a), textureBinds };
 
 	size_t vstart = SceneVertexPos;
 	size_t vcount = 4;
