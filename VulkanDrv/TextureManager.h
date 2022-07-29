@@ -5,7 +5,7 @@
 
 struct FTextureInfo;
 class UVulkanRenderDevice;
-class VulkanTexture;
+class CachedTexture;
 
 class TextureManager
 {
@@ -13,8 +13,8 @@ public:
 	TextureManager(UVulkanRenderDevice* renderer);
 	~TextureManager();
 
-	void UpdateTextureRect(FTextureInfo* texture, int x, int y, int w, int h);
-	VulkanTexture* GetTexture(FTextureInfo* texture, bool masked);
+	void UpdateTextureRect(FTextureInfo* info, int x, int y, int w, int h);
+	CachedTexture* GetTexture(FTextureInfo* info, bool masked);
 
 	void ClearCache();
 
@@ -33,5 +33,5 @@ private:
 	void CreateDitherTexture();
 
 	UVulkanRenderDevice* renderer = nullptr;
-	std::map<QWORD, std::unique_ptr<VulkanTexture>> TextureCache[2];
+	std::map<QWORD, std::unique_ptr<CachedTexture>> TextureCache[2];
 };

@@ -2,7 +2,7 @@
 #include "Precomp.h"
 #include "TextureManager.h"
 #include "UVulkanRenderDevice.h"
-#include "VulkanTexture.h"
+#include "CachedTexture.h"
 #include "VulkanBuilders.h"
 
 TextureManager::TextureManager(UVulkanRenderDevice* renderer) : renderer(renderer)
@@ -15,29 +15,33 @@ TextureManager::~TextureManager()
 {
 }
 
-void TextureManager::UpdateTextureRect(FTextureInfo* texture, int x, int y, int w, int h)
+void TextureManager::UpdateTextureRect(FTextureInfo* info, int x, int y, int w, int h)
 {
-	std::unique_ptr<VulkanTexture>& tex = TextureCache[0][texture->CacheID];
+	std::unique_ptr<CachedTexture>& tex = TextureCache[0][info->CacheID];
 	if (tex)
-		tex->UpdateRect(renderer, *texture, x, y, w, h);
+	{
+		renderer->Uploads->UploadTextureRect(tex.get(), *info, x, y, w, h);
+		info->bRealtimeChanged = 0;
+	}
 }
 
-VulkanTexture* TextureManager::GetTexture(FTextureInfo* texture, bool masked)
+CachedTexture* TextureManager::GetTexture(FTextureInfo* info, bool masked)
 {
-	if (!texture)
+	if (!info)
 		return nullptr;
 
-	std::unique_ptr<VulkanTexture>& tex = TextureCache[(int)masked][texture->CacheID];
+	std::unique_ptr<CachedTexture>& tex = TextureCache[(int)masked][info->CacheID];
 	if (!tex)
 	{
-		tex.reset(new VulkanTexture(renderer, *texture, masked));
+		tex.reset(new CachedTexture());
+		renderer->Uploads->UploadTexture(tex.get(), *info, masked);
 	}
-	else if (texture->bRealtimeChanged && (!texture->Texture || texture->Texture->RealtimeChangeCount != tex->RealtimeChangeCount))
+	else if (info->bRealtimeChanged && (!info->Texture || info->Texture->RealtimeChangeCount != tex->RealtimeChangeCount))
 	{
-		if (texture->Texture)
-			texture->Texture->RealtimeChangeCount = tex->RealtimeChangeCount;
-		texture->bRealtimeChanged = 0;
-		tex->Update(renderer, *texture, masked);
+		if (info->Texture)
+			info->Texture->RealtimeChangeCount = tex->RealtimeChangeCount;
+		info->bRealtimeChanged = 0;
+		renderer->Uploads->UploadTexture(tex.get(), *info, masked);
 	}
 	return tex.get();
 }

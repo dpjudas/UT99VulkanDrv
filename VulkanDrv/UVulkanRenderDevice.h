@@ -9,10 +9,11 @@
 #include "SamplerManager.h"
 #include "ShaderManager.h"
 #include "TextureManager.h"
+#include "UploadManager.h"
 #include "vec.h"
 #include "mat.h"
 
-class VulkanTexture;
+class CachedTexture;
 
 class UVulkanRenderDevice : public URenderDeviceOldUnreal469
 {
@@ -61,6 +62,7 @@ public:
 	std::unique_ptr<TextureManager> Textures;
 	std::unique_ptr<BufferManager> Buffers;
 	std::unique_ptr<ShaderManager> Shaders;
+	std::unique_ptr<UploadManager> Uploads;
 
 	std::unique_ptr<DescriptorSetManager> DescriptorSets;
 	std::unique_ptr<RenderPassManager> RenderPasses;

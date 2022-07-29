@@ -13,7 +13,7 @@
     <ClInclude Include="quaternion.h" />
     <ClInclude Include="vec.h" />
     <ClInclude Include="FileResource.h" />
-    <ClInclude Include="VulkanTexture.h" />
+    <ClInclude Include="CachedTexture.h" />
     <ClInclude Include="..\Thirdparty\volk\volk.h">
       <Filter>Thirdparty</Filter>
     </ClInclude>
@@ -26,6 +26,8 @@
     <ClInclude Include="FramebufferManager.h" />
     <ClInclude Include="CommandBufferManager.h" />
     <ClInclude Include="UTF16.h" />
+    <ClInclude Include="UploadManager.h" />
+    <ClInclude Include="TextureUploader.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="VulkanDrv.cpp" />
@@ -38,7 +40,6 @@
     <ClCompile Include="halffloat.cpp" />
     <ClCompile Include="mat.cpp" />
     <ClCompile Include="FileResource.cpp" />
-    <ClCompile Include="VulkanTexture.cpp" />
     <ClCompile Include="..\Thirdparty\volk\volk.c">
       <Filter>Thirdparty</Filter>
     </ClCompile>
@@ -54,6 +55,8 @@
     <ClCompile Include="FramebufferManager.cpp" />
     <ClCompile Include="CommandBufferManager.cpp" />
     <ClCompile Include="UTF16.cpp" />
+    <ClCompile Include="UploadManager.cpp" />
+    <ClCompile Include="TextureUploader.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\VulkanDrv.int" />

@@ -1,7 +1,7 @@
 
 #include "Precomp.h"
 #include "UVulkanRenderDevice.h"
-#include "VulkanTexture.h"
+#include "CachedTexture.h"
 #include "VulkanBuilders.h"
 #include "VulkanSwapChain.h"
 #include "UTF16.h"
@@ -66,6 +66,7 @@ UBOOL UVulkanRenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT N
 		Textures.reset(new TextureManager(this));
 		Buffers.reset(new BufferManager(this));
 		Shaders.reset(new ShaderManager(this));
+		Uploads.reset(new UploadManager(this));
 		DescriptorSets.reset(new DescriptorSetManager(this));
 		RenderPasses.reset(new RenderPassManager(this));
 		Framebuffers.reset(new FramebufferManager(this));
@@ -148,6 +149,7 @@ void UVulkanRenderDevice::Exit()
 	Framebuffers.reset();
 	RenderPasses.reset();
 	DescriptorSets.reset();
+	Uploads.reset();
 	Shaders.reset();
 	Buffers.reset();
 	Textures.reset();
@@ -470,28 +472,7 @@ UBOOL UVulkanRenderDevice::SupportsTextureFormat(ETextureFormat Format)
 {
 	guard(UVulkanRenderDevice::SupportsTextureFormat);
 
-	static const ETextureFormat knownFormats[] =
-	{
-		TEXF_P8,
-		TEXF_RGBA7,
-		TEXF_R5G6B5,
-		TEXF_DXT1,
-		TEXF_RGB8,
-		TEXF_BGRA8,
-		TEXF_BC2,
-		TEXF_BC3,
-		TEXF_BC1_PA,
-		TEXF_BC7,
-		TEXF_BC6H_S,
-		TEXF_BC6H
-	};
-
-	for (ETextureFormat known : knownFormats)
-	{
-		if (known == Format)
-			return TRUE;
-	}
-	return FALSE;
+	return Uploads->SupportsTextureFormat(Format) ? TRUE : FALSE;
 
 	unguard;
 }
@@ -548,11 +529,11 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 
 	VulkanCommandBuffer* cmdbuffer = Commands->GetDrawCommands();
 
-	VulkanTexture* tex = Textures->GetTexture(Surface.Texture, !!(Surface.PolyFlags & PF_Masked));
-	VulkanTexture* lightmap = Textures->GetTexture(Surface.LightMap, false);
-	VulkanTexture* macrotex = Textures->GetTexture(Surface.MacroTexture, false);
-	VulkanTexture* detailtex = Textures->GetTexture(Surface.DetailTexture, false);
-	VulkanTexture* fogmap = Textures->GetTexture(Surface.FogMap, false);
+	CachedTexture* tex = Textures->GetTexture(Surface.Texture, !!(Surface.PolyFlags & PF_Masked));
+	CachedTexture* lightmap = Textures->GetTexture(Surface.LightMap, false);
+	CachedTexture* macrotex = Textures->GetTexture(Surface.MacroTexture, false);
+	CachedTexture* detailtex = Textures->GetTexture(Surface.DetailTexture, false);
+	CachedTexture* fogmap = Textures->GetTexture(Surface.FogMap, false);
 
 	if ((Surface.DetailTexture && Surface.FogMap) || (!DetailTextures)) detailtex = nullptr;
 
@@ -681,7 +662,7 @@ void UVulkanRenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& In
 
 	auto cmdbuffer = Commands->GetDrawCommands();
 
-	VulkanTexture* tex = Textures->GetTexture(&Info, !!(PolyFlags & PF_Masked));
+	CachedTexture* tex = Textures->GetTexture(&Info, !!(PolyFlags & PF_Masked));
 
 	SetPipeline(cmdbuffer, RenderPasses->getPipeline(PolyFlags, UsesBindless));
 
@@ -775,7 +756,7 @@ void UVulkanRenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT 
 
 	auto cmdbuffer = Commands->GetDrawCommands();
 
-	VulkanTexture* tex = Textures->GetTexture(&Info, !!(PolyFlags & PF_Masked));
+	CachedTexture* tex = Textures->GetTexture(&Info, !!(PolyFlags & PF_Masked));
 
 	SetPipeline(cmdbuffer, RenderPasses->getPipeline(PolyFlags, UsesBindless));
 

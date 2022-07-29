@@ -3,7 +3,7 @@
 #include "DescriptorSetManager.h"
 #include "UVulkanRenderDevice.h"
 #include "VulkanBuilders.h"
-#include "VulkanTexture.h"
+#include "CachedTexture.h"
 
 DescriptorSetManager::DescriptorSetManager(UVulkanRenderDevice* renderer) : renderer(renderer)
 {
@@ -17,7 +17,7 @@ DescriptorSetManager::~DescriptorSetManager()
 {
 }
 
-VulkanDescriptorSet* DescriptorSetManager::GetTextureDescriptorSet(DWORD PolyFlags, VulkanTexture* tex, VulkanTexture* lightmap, VulkanTexture* macrotex, VulkanTexture* detailtex, bool clamp)
+VulkanDescriptorSet* DescriptorSetManager::GetTextureDescriptorSet(DWORD PolyFlags, CachedTexture* tex, CachedTexture* lightmap, CachedTexture* macrotex, CachedTexture* detailtex, bool clamp)
 {
 	uint32_t samplermode = 0;
 	if (PolyFlags & PF_NoSmooth) samplermode |= 1;
@@ -41,7 +41,7 @@ VulkanDescriptorSet* DescriptorSetManager::GetTextureDescriptorSet(DWORD PolyFla
 
 		WriteDescriptors writes;
 		int i = 0;
-		for (VulkanTexture* texture : { tex, lightmap, macrotex, detailtex })
+		for (CachedTexture* texture : { tex, lightmap, macrotex, detailtex })
 		{
 			VulkanSampler* sampler = (i == 0) ? renderer->Samplers->Samplers[samplermode].get() : renderer->Samplers->Samplers[0].get();
 
@@ -66,7 +66,7 @@ void DescriptorSetManager::ClearCache()
 	NextBindlessIndex = 0;
 }
 
-int DescriptorSetManager::GetTextureArrayIndex(DWORD PolyFlags, VulkanTexture* tex, bool clamp)
+int DescriptorSetManager::GetTextureArrayIndex(DWORD PolyFlags, CachedTexture* tex, bool clamp)
 {
 	if (!tex)
 		return 0;

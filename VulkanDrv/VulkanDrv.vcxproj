@@ -114,6 +114,8 @@
     <ClInclude Include="SceneTextures.h" />
     <ClInclude Include="ShaderManager.h" />
     <ClInclude Include="TextureManager.h" />
+    <ClInclude Include="TextureUploader.h" />
+    <ClInclude Include="UploadManager.h" />
     <ClInclude Include="UTF16.h" />
     <ClInclude Include="UVulkanRenderDevice.h" />
     <ClInclude Include="vec.h" />
@@ -121,7 +123,7 @@
     <ClInclude Include="VulkanDevice.h" />
     <ClInclude Include="VulkanObjects.h" />
     <ClInclude Include="VulkanSwapChain.h" />
-    <ClInclude Include="VulkanTexture.h" />
+    <ClInclude Include="CachedTexture.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\Thirdparty\vk_mem_alloc\vk_mem_alloc.cpp">
@@ -148,13 +150,14 @@
     <ClCompile Include="SceneTextures.cpp" />
     <ClCompile Include="ShaderManager.cpp" />
     <ClCompile Include="TextureManager.cpp" />
+    <ClCompile Include="TextureUploader.cpp" />
+    <ClCompile Include="UploadManager.cpp" />
     <ClCompile Include="UTF16.cpp" />
     <ClCompile Include="UVulkanRenderDevice.cpp" />
     <ClCompile Include="VulkanBuilders.cpp" />
     <ClCompile Include="VulkanDevice.cpp" />
     <ClCompile Include="VulkanDrv.cpp" />
     <ClCompile Include="VulkanSwapChain.cpp" />
-    <ClCompile Include="VulkanTexture.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\VulkanDrv.int" />
