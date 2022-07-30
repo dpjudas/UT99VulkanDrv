@@ -10,6 +10,7 @@ public:
 	CommandBufferManager(UVulkanRenderDevice* renderer);
 	~CommandBufferManager();
 
+	void WaitForTransfer();
 	void SubmitCommands(bool present, int presentWidth, int presentHeight);
 	VulkanCommandBuffer* GetTransferCommands();
 	VulkanCommandBuffer* GetDrawCommands();

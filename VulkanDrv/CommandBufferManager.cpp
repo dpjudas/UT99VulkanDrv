@@ -21,8 +21,34 @@ CommandBufferManager::~CommandBufferManager()
 	DeleteFrameObjects();
 }
 
+void CommandBufferManager::WaitForTransfer()
+{
+	renderer->Uploads->SubmitUploads();
+
+	if (TransferCommands)
+	{
+		TransferCommands->end();
+
+		QueueSubmit()
+			.AddCommandBuffer(TransferCommands.get())
+			.AddSignal(TransferSemaphore.get())
+			.Execute(renderer->Device, renderer->Device->graphicsQueue);
+
+		QueueSubmit submit;
+		submit.AddWait(VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, TransferSemaphore.get());
+		submit.Execute(renderer->Device, renderer->Device->graphicsQueue, RenderFinishedFence.get());
+
+		vkWaitForFences(renderer->Device->device, 1, &RenderFinishedFence->fence, VK_TRUE, std::numeric_limits<uint64_t>::max());
+		vkResetFences(renderer->Device->device, 1, &RenderFinishedFence->fence);
+
+		TransferCommands.reset();
+	}
+}
+
 void CommandBufferManager::SubmitCommands(bool present, int presentWidth, int presentHeight)
 {
+	renderer->Uploads->SubmitUploads();
+
 	if (present)
 	{
 		PresentImageIndex = SwapChain->acquireImage(presentWidth, presentHeight, ImageAvailableSemaphore.get());

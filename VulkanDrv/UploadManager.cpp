@@ -20,69 +20,43 @@ bool UploadManager::SupportsTextureFormat(ETextureFormat Format) const
 
 void UploadManager::UploadTexture(CachedTexture* tex, const FTextureInfo& Info, bool masked)
 {
-	UploadedData data;
-	if ((uint32_t)Info.USize > renderer->Device->PhysicalDevice.Properties.limits.maxImageDimension2D || (uint32_t)Info.VSize > renderer->Device->PhysicalDevice.Properties.limits.maxImageDimension2D)
+	int width = Info.USize;
+	int height = Info.VSize;
+	int mipcount = Info.NumMips;
+
+	TextureUploader* uploader = TextureUploader::GetUploader(Info.Format);
+
+	if ((uint32_t)Info.USize > renderer->Device->PhysicalDevice.Properties.limits.maxImageDimension2D ||
+		(uint32_t)Info.VSize > renderer->Device->PhysicalDevice.Properties.limits.maxImageDimension2D ||
+		!uploader)
 	{
-		// To do: texture is too big. find the first mipmap level that fits and use that as the base size
-		data = UploadWhite();
+		width = 1;
+		height = 1;
+		mipcount = 1;
+		uploader = nullptr;
 	}
-	else
-	{
-		TextureUploader* uploader = TextureUploader::GetUploader(Info.Format);
-		if (uploader)
-			data = UploadData(Info, masked, uploader);
-		else
-			data = UploadWhite();
-	}
+
+	VkFormat format = uploader ? uploader->GetVkFormat() : VK_FORMAT_R8G8B8A8_UNORM;
 
 	if (!tex->image)
 	{
 		tex->image = ImageBuilder()
-			.Format(data.imageFormat)
-			.Size(data.width, data.height, data.miplevels.size())
+			.Format(format)
+			.Size(width, height, mipcount)
 			.Usage(VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
 			.DebugName("CachedTexture.Image")
 			.Create(renderer->Device);
 
 		tex->imageView = ImageViewBuilder()
-			.Image(tex->image.get(), data.imageFormat)
+			.Image(tex->image.get(), format)
 			.DebugName("CachedTexture.ImageView")
 			.Create(renderer->Device);
 	}
 
-	auto cmdbuffer = renderer->Commands->GetTransferCommands();
-
-	PipelineBarrier()
-		.AddImage(
-			tex->image.get(),
-			VK_IMAGE_LAYOUT_UNDEFINED,
-			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-			0,
-			VK_ACCESS_TRANSFER_WRITE_BIT,
-			VK_IMAGE_ASPECT_COLOR_BIT,
-			0, data.miplevels.size())
-		.Execute(
-			cmdbuffer,
-			VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-			VK_PIPELINE_STAGE_TRANSFER_BIT);
-
-	cmdbuffer->copyBufferToImage(data.stagingbuffer->buffer, tex->image->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, data.miplevels.size(), data.miplevels.data());
-
-	PipelineBarrier()
-		.AddImage(
-			tex->image.get(),
-			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-			VK_ACCESS_TRANSFER_WRITE_BIT,
-			VK_ACCESS_SHADER_READ_BIT,
-			VK_IMAGE_ASPECT_COLOR_BIT,
-			0, data.miplevels.size())
-		.Execute(
-			cmdbuffer,
-			VK_PIPELINE_STAGE_TRANSFER_BIT,
-			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
-
-	renderer->Commands->FrameDeleteList->buffers.push_back(std::move(data.stagingbuffer));
+	if (uploader)
+		UploadData(tex->image->image, Info, masked, uploader);
+	else
+		UploadWhite(tex->image->image);
 }
 
 void UploadManager::UploadTextureRect(CachedTexture* tex, const FTextureInfo& Info, int xx, int yy, int w, int h)
@@ -93,17 +67,11 @@ void UploadManager::UploadTextureRect(CachedTexture* tex, const FTextureInfo& In
 	size_t pixelsSize = w * h * 4;
 	pixelsSize = (pixelsSize + 15) / 16 * 16; // memory alignment
 
-	auto stagingbuffer = BufferBuilder()
-		.Usage(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY)
-		.Size(pixelsSize)
-		.DebugName("UpdateRectStaging")
-		.Create(renderer->Device);
+	WaitIfUploadBufferIsFull(pixelsSize);
 
 	FMipmapBase* Mip = Info.Mips[0];
 
-	auto data = (BYTE*)stagingbuffer->Map(0, pixelsSize);
-
-	auto Ptr = (FColor*)data;
+	auto Ptr = (FColor*)(renderer->Buffers->UploadData + UploadBufferPos);
 	for (int y = yy; y < yy + h; y++)
 	{
 		FColor* line = (FColor*)Mip->DataPtr + y * Mip->USize;
@@ -118,57 +86,21 @@ void UploadManager::UploadTextureRect(CachedTexture* tex, const FTextureInfo& In
 		}
 	}
 
-	stagingbuffer->Unmap();
-
-	auto cmdbuffer = renderer->Commands->GetTransferCommands();
-
-	PipelineBarrier()
-		.AddImage(
-			tex->image.get(),
-			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-			VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT,
-			VK_ACCESS_TRANSFER_WRITE_BIT,
-			VK_IMAGE_ASPECT_COLOR_BIT,
-			0, 1)
-		.Execute(
-			cmdbuffer,
-			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
-			VK_PIPELINE_STAGE_TRANSFER_BIT);
-
 	VkBufferImageCopy region = {};
+	region.bufferOffset = UploadBufferPos;
 	region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 	region.imageSubresource.mipLevel = 0;
 	region.imageSubresource.layerCount = 1;
 	region.imageOffset = { (int32_t)xx, (int32_t)yy, 0 };
 	region.imageExtent = { (uint32_t)w, (uint32_t)h, 1 };
-	cmdbuffer->copyBufferToImage(stagingbuffer->buffer, tex->image->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+	RectUploads[tex->image->image].push_back(region);
 
-	PipelineBarrier()
-		.AddImage(
-			tex->image.get(),
-			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-			VK_ACCESS_TRANSFER_WRITE_BIT,
-			VK_ACCESS_SHADER_READ_BIT,
-			VK_IMAGE_ASPECT_COLOR_BIT,
-			0, 1)
-		.Execute(
-			cmdbuffer,
-			VK_PIPELINE_STAGE_TRANSFER_BIT,
-			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
-
-	renderer->Commands->FrameDeleteList->buffers.push_back(std::move(stagingbuffer));
+	UploadBufferPos += pixelsSize;
 }
 
-UploadManager::UploadedData UploadManager::UploadData(const FTextureInfo& Info, bool masked, TextureUploader* uploader)
+void UploadManager::UploadData(VkImage image, const FTextureInfo& Info, bool masked, TextureUploader* uploader)
 {
 	uploader->Begin(Info, masked);
-
-	UploadedData result;
-	result.imageFormat = uploader->GetVkFormat();
-	result.width = Info.USize;
-	result.height = Info.VSize;
 
 	size_t pixelsSize = 0;
 	for (INT level = 0; level < Info.NumMips; level++)
@@ -182,14 +114,16 @@ UploadManager::UploadedData UploadManager::UploadData(const FTextureInfo& Info, 
 		}
 	}
 
-	result.stagingbuffer = BufferBuilder()
-		.Usage(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY)
-		.Size(pixelsSize)
-		.DebugName("CachedTexture.UploadDataStaging")
-		.Create(renderer->Device);
+	WaitIfUploadBufferIsFull(pixelsSize);
 
-	auto data = (BYTE*)result.stagingbuffer->Map(0, pixelsSize);
-	auto Ptr = data;
+	UploadedTexture upload;
+	upload.Image = image;
+	upload.Index = (int)ImageCopies.size();
+	upload.Count = Info.NumMips;
+	Uploads.push_back(upload);
+
+	uint8_t* data = renderer->Buffers->UploadData;
+	uint8_t* Ptr = data + UploadBufferPos;
 
 	for (INT level = 0; level < Info.NumMips; level++)
 	{
@@ -200,7 +134,7 @@ UploadManager::UploadedData UploadManager::UploadData(const FTextureInfo& Info, 
 			uint32_t mipheight = Mip->VSize;
 
 			VkBufferImageCopy region = {};
-			region.bufferOffset = (VkDeviceSize)((uint8_t*)Ptr - (uint8_t*)data);
+			region.bufferOffset = (VkDeviceSize)(Ptr - data);
 			region.bufferRowLength = 0;
 			region.bufferImageHeight = 0;
 			region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -209,7 +143,7 @@ UploadManager::UploadedData UploadManager::UploadData(const FTextureInfo& Info, 
 			region.imageSubresource.layerCount = 1;
 			region.imageOffset = { 0, 0, 0 };
 			region.imageExtent = { mipwidth, mipheight, 1 };
-			result.miplevels.push_back(region);
+			ImageCopies.push_back(region);
 
 			INT mipsize = uploader->GetMipSize(Mip);
 			uploader->UploadMip(Mip, Ptr);
@@ -218,33 +152,103 @@ UploadManager::UploadedData UploadManager::UploadData(const FTextureInfo& Info, 
 		}
 	}
 
-	result.stagingbuffer->Unmap();
+	UploadBufferPos += pixelsSize;
+
 	uploader->End();
-	return result;
 }
 
-UploadManager::UploadedData UploadManager::UploadWhite()
+void UploadManager::UploadWhite(VkImage image)
 {
-	UploadedData result;
-	result.imageFormat = VK_FORMAT_R8G8B8A8_UNORM;
-	result.width = 1;
-	result.height = 1;
+	WaitIfUploadBufferIsFull(16);
 
-	result.stagingbuffer = BufferBuilder()
-		.Usage(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY)
-		.Size(4)
-		.DebugName("CachedTexture.UploadWhite")
-		.Create(renderer->Device);
+	UploadedTexture upload;
+	upload.Image = image;
+	upload.Index = (int)ImageCopies.size();
+	upload.Count = 1;
 
-	auto data = (uint32_t*)result.stagingbuffer->Map(0, 4);
+	auto data = (uint32_t*)(renderer->Buffers->UploadData + UploadBufferPos);
 	data[0] = 0xffffffff;
-	result.stagingbuffer->Unmap();
 
 	VkBufferImageCopy region = {};
+	region.bufferOffset = UploadBufferPos;
 	region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 	region.imageSubresource.layerCount = 1;
 	region.imageExtent = { 1, 1, 1 };
-	result.miplevels.push_back(region);
 
-	return result;
+	Uploads.push_back(upload);
+	ImageCopies.push_back(region);
+	UploadBufferPos += 16; // 16-byte aligned
+}
+
+void UploadManager::WaitIfUploadBufferIsFull(int bytes)
+{
+	if (UploadBufferPos + bytes > BufferManager::UploadBufferSize)
+	{
+		renderer->Commands->WaitForTransfer();
+	}
+}
+
+void UploadManager::SubmitUploads()
+{
+	if (Uploads.empty() && RectUploads.empty())
+		return;
+
+	// Group all rect uploads for each texture into one combined vkCopyBufferToImage call
+	bool partialUpdates = !RectUploads.empty();
+	for (auto& it : RectUploads)
+	{
+		UploadedTexture upload;
+		upload.Image = it.first;
+		upload.Index = (int)Uploads.size();
+		upload.Count = (int)it.second.size();
+		upload.PartialUpdate = true;
+		ImageCopies.insert(ImageCopies.end(), it.second.begin(), it.second.end());
+	}
+	RectUploads.clear();
+
+	auto cmdbuffer = renderer->Commands->GetTransferCommands();
+
+	// Transition images for upload
+	PipelineBarrier beforeBarrier;
+	for (const UploadedTexture& upload : Uploads)
+	{
+		beforeBarrier.AddImage(
+			upload.Image,
+			upload.PartialUpdate ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED,
+			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			upload.PartialUpdate ? VK_ACCESS_SHADER_READ_BIT : 0,
+			VK_ACCESS_TRANSFER_WRITE_BIT,
+			VK_IMAGE_ASPECT_COLOR_BIT,
+			0, upload.Count);
+	}
+	VkPipelineStageFlags srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+	if (partialUpdates)
+		srcStage |= VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+	beforeBarrier.Execute(cmdbuffer, srcStage , VK_PIPELINE_STAGE_TRANSFER_BIT);
+
+	// Copy from buffer to images
+	VkBuffer buffer = renderer->Buffers->UploadBuffer->buffer;
+	for (const UploadedTexture& upload : Uploads)
+	{
+		cmdbuffer->copyBufferToImage(buffer, upload.Image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, upload.Count, ImageCopies.data() + upload.Index);
+	}
+
+	// Transition images for texture sampling
+	PipelineBarrier afterBarrier;
+	for (const UploadedTexture& upload : Uploads)
+	{
+		afterBarrier.AddImage(
+			upload.Image,
+			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			VK_ACCESS_TRANSFER_WRITE_BIT,
+			VK_ACCESS_SHADER_READ_BIT,
+			VK_IMAGE_ASPECT_COLOR_BIT,
+			0, upload.Count);
+	}
+	afterBarrier.Execute(cmdbuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+
+	UploadBufferPos = 0;
+	Uploads.clear();
+	ImageCopies.clear();
 }
