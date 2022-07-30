@@ -204,8 +204,11 @@ void UploadManager::SubmitUploads()
 		upload.PartialUpdate = true;
 		Uploads.push_back(upload);
 		ImageCopies.insert(ImageCopies.end(), it.second.begin(), it.second.end());
+		renderer->Stats.RectUploads += it.second.size();
 	}
 	RectUploads.clear();
+
+	renderer->Stats.Uploads += Uploads.size();
 
 	auto cmdbuffer = renderer->Commands->GetTransferCommands();
 

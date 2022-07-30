@@ -79,6 +79,17 @@ public:
 
 	void DrawPresentTexture(int x, int y, int width, int height);
 
+	struct
+	{
+		int ComplexSurfaces = 0;
+		int GouraudPolygons = 0;
+		int Tiles = 0;
+		int DrawCalls = 0;
+		int Uploads = 0;
+		int RectUploads = 0;
+	} Stats;
+
+
 private:
 	void ClearTextureCache();
 	void BlitSceneToPostprocess();
@@ -114,9 +125,4 @@ private:
 
 	size_t SceneVertexPos = 0;
 	size_t SceneIndexPos = 0;
-
-	int complexsurfaces = 0;
-	int gouraudpolygons = 0;
-	int tiles = 0;
-	int drawcalls = 0;
 };

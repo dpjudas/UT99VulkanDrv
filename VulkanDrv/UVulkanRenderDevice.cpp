@@ -437,17 +437,19 @@ void UVulkanRenderDevice::Unlock(UBOOL Blit)
 				vmaCalculateStats(Device->allocator, &stats);
 				canvas->CurX = 16;
 				canvas->CurY = y;
-				canvas->WrappedPrintf(canvas->SmallFont, 0, TEXT("Draw calls: %d, Complex surfaces: %d, Gouraud polygons: %d, Tiles: %d\r\n"), drawcalls, complexsurfaces, gouraudpolygons, tiles);
+				canvas->WrappedPrintf(canvas->SmallFont, 0, TEXT("Draw calls: %d, Complex surfaces: %d, Gouraud polygons: %d, Tiles: %d; Uploads: %d, Rect Uploads: %d\r\n"), Stats.DrawCalls, Stats.ComplexSurfaces, Stats.GouraudPolygons, Stats.Tiles, Stats.Uploads, Stats.RectUploads);
 				y += 8;
 			}
 		}
 
 		if (Blit)
 		{
-			drawcalls = 0;
-			complexsurfaces = 0;
-			gouraudpolygons = 0;
-			tiles = 0;
+			Stats.DrawCalls = 0;
+			Stats.ComplexSurfaces = 0;
+			Stats.GouraudPolygons = 0;
+			Stats.Tiles = 0;
+			Stats.Uploads = 0;
+			Stats.RectUploads = 0;
 		}
 
 		DrawBatch(Commands->GetDrawCommands());
@@ -519,7 +521,7 @@ void UVulkanRenderDevice::DrawBatch(VulkanCommandBuffer* cmdbuffer)
 		cmdbuffer->pushConstants(layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ScenePushConstants), &pushconstants);
 		cmdbuffer->drawIndexed(icount, 1, Batch.SceneIndexStart, 0, 0);
 		Batch.SceneIndexStart = SceneIndexPos;
-		drawcalls++;
+		Stats.DrawCalls++;
 	}
 }
 
@@ -646,7 +648,7 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 		icount += (vcount - 2) * 3;
 	}
 
-	complexsurfaces++;
+	Stats.ComplexSurfaces++;
 
 	SceneVertexPos = vpos;
 	SceneIndexPos = ipos + icount;
@@ -742,7 +744,7 @@ void UVulkanRenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& In
 	SceneVertexPos += vcount;
 	SceneIndexPos += icount;
 
-	gouraudpolygons++;
+	Stats.GouraudPolygons++;
 
 	unguard;
 }
@@ -821,7 +823,7 @@ void UVulkanRenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT 
 	SceneVertexPos += vcount;
 	SceneIndexPos += icount;
 
-	tiles++;
+	Stats.Tiles++;
 
 	unguard;
 }
