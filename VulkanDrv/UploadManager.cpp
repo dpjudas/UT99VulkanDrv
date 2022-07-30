@@ -199,9 +199,10 @@ void UploadManager::SubmitUploads()
 	{
 		UploadedTexture upload;
 		upload.Image = it.first;
-		upload.Index = (int)Uploads.size();
+		upload.Index = (int)ImageCopies.size();
 		upload.Count = (int)it.second.size();
 		upload.PartialUpdate = true;
+		Uploads.push_back(upload);
 		ImageCopies.insert(ImageCopies.end(), it.second.begin(), it.second.end());
 	}
 	RectUploads.clear();
