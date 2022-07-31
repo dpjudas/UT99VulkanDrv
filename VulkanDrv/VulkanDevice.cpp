@@ -198,6 +198,8 @@ void VulkanDevice::CreateDevice()
 	deviceAccelFeatures.accelerationStructure = true;
 	rayQueryFeatures.rayQuery = true;
 	descriptorIndexingFeatures.descriptorBindingPartiallyBound = true;
+	descriptorIndexingFeatures.descriptorBindingSampledImageUpdateAfterBind = true;
+	descriptorIndexingFeatures.descriptorBindingVariableDescriptorCount = true;
 	descriptorIndexingFeatures.runtimeDescriptorArray = true;
 
 	void** next = const_cast<void**>(&deviceCreateInfo.pNext);
@@ -225,7 +227,12 @@ void VulkanDevice::CreateDevice()
 		*next = &rayQueryFeatures;
 		next = &rayQueryFeatures.pNext;
 	}
-	if (SupportsDeviceExtension(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME) && PhysicalDevice.DescriptorIndexingFeatures.descriptorBindingPartiallyBound && PhysicalDevice.DescriptorIndexingFeatures.runtimeDescriptorArray && PhysicalDevice.DescriptorIndexingFeatures.shaderSampledImageArrayNonUniformIndexing)
+	if (SupportsDeviceExtension(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME) &&
+		PhysicalDevice.DescriptorIndexingFeatures.descriptorBindingPartiallyBound &&
+		PhysicalDevice.DescriptorIndexingFeatures.runtimeDescriptorArray &&
+		PhysicalDevice.DescriptorIndexingFeatures.shaderSampledImageArrayNonUniformIndexing &&
+		PhysicalDevice.DescriptorIndexingFeatures.descriptorBindingSampledImageUpdateAfterBind &&
+		PhysicalDevice.DescriptorIndexingFeatures.descriptorBindingVariableDescriptorCount)
 	{
 		*next = &descriptorIndexingFeatures;
 		next = &descriptorIndexingFeatures.pNext;

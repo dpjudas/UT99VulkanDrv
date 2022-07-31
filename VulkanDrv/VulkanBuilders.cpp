@@ -569,6 +569,12 @@ DescriptorSetLayoutBuilder::DescriptorSetLayoutBuilder()
 {
 }
 
+DescriptorSetLayoutBuilder& DescriptorSetLayoutBuilder::Flags(VkDescriptorSetLayoutCreateFlags flags)
+{
+	layoutInfo.flags = flags;
+	return *this;
+}
+
 DescriptorSetLayoutBuilder& DescriptorSetLayoutBuilder::AddBinding(int index, VkDescriptorType type, int arrayCount, VkShaderStageFlags stageFlags, VkDescriptorBindingFlags flags)
 {
 	VkDescriptorSetLayoutBinding binding = { };
@@ -610,6 +616,12 @@ DescriptorPoolBuilder::DescriptorPoolBuilder()
 	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 	poolInfo.maxSets = 1;
 	poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+}
+
+DescriptorPoolBuilder& DescriptorPoolBuilder::Flags(VkDescriptorPoolCreateFlags flags)
+{
+	poolInfo.flags = flags | VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+	return *this;
 }
 
 DescriptorPoolBuilder& DescriptorPoolBuilder::MaxSets(int value)

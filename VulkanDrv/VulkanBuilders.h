@@ -142,6 +142,7 @@ class DescriptorSetLayoutBuilder
 public:
 	DescriptorSetLayoutBuilder();
 
+	DescriptorSetLayoutBuilder& Flags(VkDescriptorSetLayoutCreateFlags flags);
 	DescriptorSetLayoutBuilder& AddBinding(int binding, VkDescriptorType type, int arrayCount, VkShaderStageFlags stageFlags, VkDescriptorBindingFlags flags = 0);
 	DescriptorSetLayoutBuilder& DebugName(const char* name) { debugName = name; return *this; }
 
@@ -160,6 +161,7 @@ class DescriptorPoolBuilder
 public:
 	DescriptorPoolBuilder();
 
+	DescriptorPoolBuilder& Flags(VkDescriptorPoolCreateFlags flags);
 	DescriptorPoolBuilder& MaxSets(int value);
 	DescriptorPoolBuilder& AddPoolSize(VkDescriptorType type, int count);
 	DescriptorPoolBuilder& DebugName(const char* name) { debugName = name; return *this; }
