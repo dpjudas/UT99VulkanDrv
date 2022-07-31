@@ -105,11 +105,7 @@ void UploadManager::UploadData(VkImage image, const FTextureInfo& Info, bool mas
 	UploadedTexture upload;
 	upload.Image = image;
 	upload.Index = (int)ImageCopies.size();
-	upload.Count = Info.NumMips;
-	Uploads.push_back(upload);
-
-	uint8_t* data = renderer->Buffers->UploadData;
-	uint8_t* Ptr = data + UploadBufferPos;
+	upload.Count = 0;
 
 	for (INT level = 0; level < Info.NumMips; level++)
 	{
@@ -120,22 +116,24 @@ void UploadManager::UploadData(VkImage image, const FTextureInfo& Info, bool mas
 			uint32_t mipheight = Mip->VSize;
 
 			VkBufferImageCopy region = {};
-			region.bufferOffset = (VkDeviceSize)(Ptr - data);
+			region.bufferOffset = UploadBufferPos;
 			region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 			region.imageSubresource.mipLevel = level;
 			region.imageSubresource.layerCount = 1;
 			region.imageOffset = { 0, 0, 0 };
 			region.imageExtent = { mipwidth, mipheight, 1 };
 			ImageCopies.push_back(region);
+			upload.Count++;
+
+			uploader->UploadRect(renderer->Buffers->UploadData + UploadBufferPos, Mip, 0, 0, Mip->USize, Mip->VSize, Info.Palette, masked);
 
 			INT mipsize = uploader->GetUploadSize(0, 0, Mip->USize, Mip->VSize);
-			uploader->UploadRect(Ptr, Mip, 0, 0, Mip->USize, Mip->VSize, Info.Palette, masked);
 			mipsize = (mipsize + 15) / 16 * 16; // memory alignment
-			Ptr += mipsize;
+			UploadBufferPos += mipsize;
 		}
 	}
 
-	UploadBufferPos += pixelsSize;
+	Uploads.push_back(upload);
 }
 
 void UploadManager::UploadWhite(VkImage image)
@@ -187,7 +185,6 @@ void UploadManager::SubmitUploads()
 		ImageCopies.insert(ImageCopies.end(), it.second.begin(), it.second.end());
 		renderer->Stats.RectUploads += it.second.size();
 	}
-	RectUploads.clear();
 
 	renderer->Stats.Uploads += Uploads.size();
 
@@ -236,4 +233,5 @@ void UploadManager::SubmitUploads()
 	UploadBufferPos = 0;
 	Uploads.clear();
 	ImageCopies.clear();
+	RectUploads.clear();
 }

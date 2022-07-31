@@ -31,12 +31,7 @@ void CommandBufferManager::WaitForTransfer()
 
 		QueueSubmit()
 			.AddCommandBuffer(TransferCommands.get())
-			.AddSignal(TransferSemaphore.get())
-			.Execute(renderer->Device, renderer->Device->graphicsQueue);
-
-		QueueSubmit submit;
-		submit.AddWait(VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, TransferSemaphore.get());
-		submit.Execute(renderer->Device, renderer->Device->graphicsQueue, RenderFinishedFence.get());
+			.Execute(renderer->Device, renderer->Device->graphicsQueue, RenderFinishedFence.get());
 
 		vkWaitForFences(renderer->Device->device, 1, &RenderFinishedFence->fence, VK_TRUE, std::numeric_limits<uint64_t>::max());
 		vkResetFences(renderer->Device->device, 1, &RenderFinishedFence->fence);

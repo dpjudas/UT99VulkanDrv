@@ -91,3 +91,17 @@ public:
 private:
 	int BytesPerBlock;
 };
+
+class TextureUploader_2DBlock : public TextureUploader
+{
+public:
+	TextureUploader_2DBlock(VkFormat format, int blockX, int blockY, int bytesPerBlock) : TextureUploader(format), BlockX(blockX), BlockY(blockY), BytesPerBlock(bytesPerBlock) { }
+
+	int GetUploadSize(int x, int y, int w, int h) override;
+	void UploadRect(void* dst, FMipmapBase* mip, int x, int y, int w, int h, FColor* palette, bool masked) override;
+
+private:
+	int BlockX;
+	int BlockY;
+	int BytesPerBlock;
+};
