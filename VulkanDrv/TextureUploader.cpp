@@ -92,80 +92,107 @@ TextureUploader* TextureUploader::GetUploader(ETextureFormat format)
 
 /////////////////////////////////////////////////////////////////////////////
 
-void TextureUploader::UploadMip(FMipmapBase* mip, void* dst)
+int TextureUploader_P8::GetUploadSize(int x, int y, int w, int h)
 {
-	memcpy(dst, mip->DataPtr, GetMipSize(mip));
+	return w * h * 4;
 }
 
-/////////////////////////////////////////////////////////////////////////////
-
-void TextureUploader_P8::Begin(const FTextureInfo& Info, bool masked)
+void TextureUploader_P8::UploadRect(void* d, FMipmapBase* mip, int x, int y, int w, int h, FColor* palette, bool masked)
 {
-	for (INT i = 0; i < 256; i++)
+	FColor black(0, 0, 0, 0);
+	int pitch = mip->USize;
+	BYTE* src = mip->DataPtr + x + y * pitch;
+	FColor* Ptr = (FColor*)d;
+	for (int i = 0; i < h; i++)
 	{
-		FColor& Src = Info.Palette[i];
-		NewPal[i].R = Src.R;
-		NewPal[i].G = Src.G;
-		NewPal[i].B = Src.B;
-		NewPal[i].A = Src.A;
-	}
-	if (masked)
-		NewPal[0] = FColor(0, 0, 0, 0);
-}
-
-VkFormat TextureUploader_P8::GetVkFormat()
-{
-	return VK_FORMAT_R8G8B8A8_UNORM;
-}
-
-int TextureUploader_P8::GetMipSize(FMipmapBase* mip)
-{
-	return mip->USize * mip->VSize * 4;
-}
-
-void TextureUploader_P8::UploadMip(FMipmapBase* mip, void* dst)
-{
-	auto Ptr = (FColor*)dst;
-	uint32_t mipwidth = mip->USize;
-	uint32_t mipheight = mip->VSize;
-	for (uint32_t y = 0; y < mipheight; y++)
-	{
-		BYTE* line = (BYTE*)mip->DataPtr + y * mip->USize;
-		for (uint32_t x = 0; x < mipwidth; x++)
+		for (int x = 0; x < w; x++)
 		{
-			*Ptr++ = NewPal[line[x]];
-		}
-	}
-}
-
-/////////////////////////////////////////////////////////////////////////////
-
-VkFormat TextureUploader_BGRA8_LM::GetVkFormat()
-{
-	return VK_FORMAT_R8G8B8A8_UNORM;
-}
-
-int TextureUploader_BGRA8_LM::GetMipSize(FMipmapBase* mip)
-{
-	return mip->USize * mip->VSize * 4;
-}
-
-void TextureUploader_BGRA8_LM::UploadMip(FMipmapBase* mip, void* dst)
-{
-	auto Ptr = (FColor*)dst;
-	uint32_t mipwidth = mip->USize;
-	uint32_t mipheight = mip->VSize;
-	for (uint32_t y = 0; y < mipheight; y++)
-	{
-		FColor* line = (FColor*)mip->DataPtr + y * mip->USize;
-		for (uint32_t x = 0; x < mipwidth; x++)
-		{
-			const FColor& Src = line[x];
-			Ptr->R = Src.B * 2;
-			Ptr->G = Src.G * 2;
-			Ptr->B = Src.R * 2;
-			Ptr->A = Src.A * 2;
+			int idx = src[x];
+			FColor c = (!masked || idx != 0) ? palette[idx] : black;
+			Ptr->R = c.R;
+			Ptr->G = c.G;
+			Ptr->B = c.B;
+			Ptr->A = c.A;
 			Ptr++;
 		}
+		src += pitch;
+	}
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
+int TextureUploader_BGRA8_LM::GetUploadSize(int x, int y, int w, int h)
+{
+	return w * h * 4;
+}
+
+void TextureUploader_BGRA8_LM::UploadRect(void* dst, FMipmapBase* mip, int x, int y, int w, int h, FColor* palette, bool masked)
+{
+	int pitch = mip->USize;
+	FColor* src = ((FColor*)mip->DataPtr) + x + y * pitch;
+	auto Ptr = (FColor*)dst;
+	for (int i = 0; i < h; i++)
+	{
+		for (int x = 0; x < w; x++)
+		{
+			FColor Src = src[x];
+			Ptr->R = Src.B << 1;
+			Ptr->G = Src.G << 1;
+			Ptr->B = Src.R << 1;
+			Ptr->A = Src.A << 1;
+			Ptr++;
+		}
+		src += pitch;
+	}
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
+int TextureUploader_Simple::GetUploadSize(int x, int y, int w, int h)
+{
+	return w * h * BytesPerPixel;
+}
+
+void TextureUploader_Simple::UploadRect(void* d, FMipmapBase* mip, int x, int y, int w, int h, FColor* palette, bool masked)
+{
+	int pitch = mip->USize * BytesPerPixel;
+	int size = w * BytesPerPixel;
+	BYTE* src = mip->DataPtr + x * BytesPerPixel + y * pitch;
+	BYTE* dst = (BYTE*)d;
+	for (int i = 0; i < h; i++)
+	{
+		memcpy(dst, src, size);
+		dst += size;
+		src += pitch;
+	}
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
+int TextureUploader_4x4Block::GetUploadSize(int x, int y, int w, int h)
+{
+	int x0 = x / 4;
+	int y0 = y / 4;
+	int x1 = (x + w + 3) / 4;
+	int y1 = (y + h + 3) / 4;
+	return (x1 - x0) * (y0 - y1) * BytesPerBlock;
+}
+
+void TextureUploader_4x4Block::UploadRect(void* d, FMipmapBase* mip, int x, int y, int w, int h, FColor* palette, bool masked)
+{
+	int x0 = x / 4;
+	int y0 = y / 4;
+	int x1 = (x + w + 3) / 4;
+	int y1 = (y + h + 3) / 4;
+
+	int pitch = (mip->USize + 3) / 4 * BytesPerBlock;
+	int size = (x1 - x0) * BytesPerBlock;
+	BYTE* src = mip->DataPtr + x0 * BytesPerBlock + y0 * pitch;
+	BYTE* dst = (BYTE*)d;
+	for (int i = y0; i < y1; i++)
+	{
+		memcpy(dst, src, size);
+		dst += size;
+		src += pitch;
 	}
 }

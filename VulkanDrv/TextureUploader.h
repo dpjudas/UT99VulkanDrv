@@ -9,56 +9,58 @@ enum ETextureFormat;
 class TextureUploader
 {
 public:
+	TextureUploader(VkFormat format) : Format(format) { }
 	virtual ~TextureUploader() = default;
-	virtual void Begin(const FTextureInfo& Info, bool masked) {}
-	virtual void End() {}
-	virtual int GetMipSize(FMipmapBase* mip) = 0;
-	virtual void UploadMip(FMipmapBase* mip, void* dst);
-	virtual VkFormat GetVkFormat() = 0;
+
+	virtual int GetUploadSize(int x, int y, int w, int h) = 0;
+	virtual void UploadRect(void* dst, FMipmapBase* mip, int x, int y, int w, int h, FColor* palette, bool masked) = 0;
+
+	VkFormat GetVkFormat() const { return Format; }
 
 	static TextureUploader* GetUploader(ETextureFormat format);
+
+private:
+	VkFormat Format;
 };
 
 class TextureUploader_P8 : public TextureUploader
 {
 public:
-	void Begin(const FTextureInfo& Info, bool masked) override;
-	int GetMipSize(FMipmapBase* mip) override;
-	void UploadMip(FMipmapBase* mip, void* dst) override;
-	VkFormat GetVkFormat() override;
+	TextureUploader_P8() : TextureUploader(VK_FORMAT_R8G8B8A8_UNORM) { }
 
-private:
-	FColor NewPal[256];
+	int GetUploadSize(int x, int y, int w, int h) override;
+	void UploadRect(void* dst, FMipmapBase* mip, int x, int y, int w, int h, FColor* palette, bool masked) override;
 };
 
 class TextureUploader_BGRA8_LM : public TextureUploader
 {
 public:
-	int GetMipSize(FMipmapBase* mip) override;
-	void UploadMip(FMipmapBase* mip, void* dst) override;
-	VkFormat GetVkFormat() override;
+	TextureUploader_BGRA8_LM() : TextureUploader(VK_FORMAT_R8G8B8A8_UNORM) { }
+
+	int GetUploadSize(int x, int y, int w, int h) override;
+	void UploadRect(void* dst, FMipmapBase* mip, int x, int y, int w, int h, FColor* palette, bool masked) override;
 };
 
 class TextureUploader_Simple : public TextureUploader
 {
 public:
-	TextureUploader_Simple(VkFormat format, int bytesPerPixel) : Format(format), BytesPerPixel(bytesPerPixel) { }
-	int GetMipSize(FMipmapBase* mip) override { return mip->USize * mip->VSize * BytesPerPixel; }
-	VkFormat GetVkFormat() override { return Format; }
+	TextureUploader_Simple(VkFormat format, int bytesPerPixel) : TextureUploader(format), BytesPerPixel(bytesPerPixel) { }
+
+	int GetUploadSize(int x, int y, int w, int h) override;
+	void UploadRect(void* dst, FMipmapBase* mip, int x, int y, int w, int h, FColor* palette, bool masked) override;
 
 private:
-	VkFormat Format;
 	int BytesPerPixel;
 };
 
 class TextureUploader_4x4Block : public TextureUploader
 {
 public:
-	TextureUploader_4x4Block(VkFormat format, int bytesPerBlock) : Format(format), BytesPerBlock(bytesPerBlock) { }
-	int GetMipSize(FMipmapBase* mip) override { return((mip->USize + 3) / 4) * ((mip->VSize + 3) / 4) * BytesPerBlock; }
-	VkFormat GetVkFormat() override { return Format; }
+	TextureUploader_4x4Block(VkFormat format, int bytesPerBlock) : TextureUploader(format), BytesPerBlock(bytesPerBlock) { }
+
+	int GetUploadSize(int x, int y, int w, int h) override;
+	void UploadRect(void* dst, FMipmapBase* mip, int x, int y, int w, int h, FColor* palette, bool masked) override;
 
 private:
-	VkFormat Format;
 	int BytesPerBlock;
 };

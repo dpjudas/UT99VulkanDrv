@@ -59,39 +59,27 @@ void UploadManager::UploadTexture(CachedTexture* tex, const FTextureInfo& Info, 
 		UploadWhite(tex->image->image);
 }
 
-void UploadManager::UploadTextureRect(CachedTexture* tex, const FTextureInfo& Info, int xx, int yy, int w, int h)
+void UploadManager::UploadTextureRect(CachedTexture* tex, const FTextureInfo& Info, int x, int y, int w, int h)
 {
-	if (Info.Format != TEXF_RGBA7 || Info.NumMips < 1 || xx < 0 || yy < 0 || w <= 0 || h <= 0 || xx + w > Info.Mips[0]->USize || yy + h > Info.Mips[0]->VSize || !Info.Mips[0]->DataPtr)
+	TextureUploader* uploader = TextureUploader::GetUploader(Info.Format);
+	if (!uploader || Info.NumMips < 1 || x < 0 || y < 0 || w <= 0 || h <= 0 || x + w > Info.Mips[0]->USize || y + h > Info.Mips[0]->VSize || !Info.Mips[0]->DataPtr)
 		return;
 
-	size_t pixelsSize = w * h * 4;
+	size_t pixelsSize = uploader->GetUploadSize(x, y, w, h);
 	pixelsSize = (pixelsSize + 15) / 16 * 16; // memory alignment
 
 	WaitIfUploadBufferIsFull(pixelsSize);
 
-	FMipmapBase* Mip = Info.Mips[0];
-
-	auto Ptr = (FColor*)(renderer->Buffers->UploadData + UploadBufferPos);
-	for (int y = yy; y < yy + h; y++)
-	{
-		FColor* line = (FColor*)Mip->DataPtr + y * Mip->USize;
-		for (int x = xx; x < xx + w; x++)
-		{
-			const FColor& Src = line[x];
-			Ptr->R = Src.B * 2;
-			Ptr->G = Src.G * 2;
-			Ptr->B = Src.R * 2;
-			Ptr->A = Src.A * 2;
-			Ptr++;
-		}
-	}
+	uint8_t* data = renderer->Buffers->UploadData;
+	uint8_t* Ptr = data + UploadBufferPos;
+	uploader->UploadRect(Ptr, Info.Mips[0], x, y, w, h, Info.Palette, false);
 
 	VkBufferImageCopy region = {};
-	region.bufferOffset = UploadBufferPos;
+	region.bufferOffset = (VkDeviceSize)(Ptr - data);
 	region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 	region.imageSubresource.mipLevel = 0;
 	region.imageSubresource.layerCount = 1;
-	region.imageOffset = { (int32_t)xx, (int32_t)yy, 0 };
+	region.imageOffset = { (int32_t)x, (int32_t)y, 0 };
 	region.imageExtent = { (uint32_t)w, (uint32_t)h, 1 };
 	RectUploads[tex->image->image].push_back(region);
 
@@ -100,15 +88,13 @@ void UploadManager::UploadTextureRect(CachedTexture* tex, const FTextureInfo& In
 
 void UploadManager::UploadData(VkImage image, const FTextureInfo& Info, bool masked, TextureUploader* uploader)
 {
-	uploader->Begin(Info, masked);
-
 	size_t pixelsSize = 0;
 	for (INT level = 0; level < Info.NumMips; level++)
 	{
 		FMipmapBase* Mip = Info.Mips[level];
 		if (Mip->DataPtr)
 		{
-			INT mipsize = uploader->GetMipSize(Mip);
+			INT mipsize = uploader->GetUploadSize(0, 0, Mip->USize, Mip->VSize);
 			mipsize = (mipsize + 15) / 16 * 16; // memory alignment
 			pixelsSize += mipsize;
 		}
@@ -135,26 +121,21 @@ void UploadManager::UploadData(VkImage image, const FTextureInfo& Info, bool mas
 
 			VkBufferImageCopy region = {};
 			region.bufferOffset = (VkDeviceSize)(Ptr - data);
-			region.bufferRowLength = 0;
-			region.bufferImageHeight = 0;
 			region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 			region.imageSubresource.mipLevel = level;
-			region.imageSubresource.baseArrayLayer = 0;
 			region.imageSubresource.layerCount = 1;
 			region.imageOffset = { 0, 0, 0 };
 			region.imageExtent = { mipwidth, mipheight, 1 };
 			ImageCopies.push_back(region);
 
-			INT mipsize = uploader->GetMipSize(Mip);
-			uploader->UploadMip(Mip, Ptr);
+			INT mipsize = uploader->GetUploadSize(0, 0, Mip->USize, Mip->VSize);
+			uploader->UploadRect(Ptr, Mip, 0, 0, Mip->USize, Mip->VSize, Info.Palette, masked);
 			mipsize = (mipsize + 15) / 16 * 16; // memory alignment
 			Ptr += mipsize;
 		}
 	}
 
 	UploadBufferPos += pixelsSize;
-
-	uploader->End();
 }
 
 void UploadManager::UploadWhite(VkImage image)
