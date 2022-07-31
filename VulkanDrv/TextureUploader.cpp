@@ -11,7 +11,8 @@ TextureUploader* TextureUploader::GetUploader(ETextureFormat format)
 		Uploaders[TEXF_P8].reset(new TextureUploader_P8());
 		Uploaders[TEXF_BGRA8_LM].reset(new TextureUploader_BGRA8_LM());
 		Uploaders[TEXF_R5G6B5].reset(new TextureUploader_Simple(VK_FORMAT_R5G6B5_UNORM_PACK16, 2));
-		Uploaders[TEXF_BC1].reset(new TextureUploader_4x4Block(VK_FORMAT_BC1_RGB_UNORM_BLOCK, 8));
+		// Note: according to formats this should have been VK_FORMAT_BC1_RGB_UNORM_BLOCK, but some textures does use the alpha bit!
+		Uploaders[TEXF_BC1].reset(new TextureUploader_4x4Block(VK_FORMAT_BC1_RGBA_UNORM_BLOCK, 8));
 		Uploaders[TEXF_RGB8].reset(new TextureUploader_Simple(VK_FORMAT_R8G8B8_UNORM, 3));
 		Uploaders[TEXF_BGRA8].reset(new TextureUploader_Simple(VK_FORMAT_B8G8R8A8_UNORM, 4));
 
