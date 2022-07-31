@@ -108,8 +108,8 @@ private:
 	bool StatResources = false;
 	bool StatDraw = false;
 
-	void SetPipeline(VulkanCommandBuffer* cmdbuffer, VulkanPipeline* pipeline);
-	void SetDescriptorSet(VulkanCommandBuffer* cmdbuffer, VulkanDescriptorSet* descriptorSet, bool bindless);
+	void SetPipeline(VulkanPipeline* pipeline);
+	void SetDescriptorSet(VulkanDescriptorSet* descriptorSet, bool bindless);
 	void DrawBatch(VulkanCommandBuffer* cmdbuffer);
 	void SubmitAndWait(bool present, int presentWidth, int presentHeight);
 
@@ -126,3 +126,25 @@ private:
 	size_t SceneVertexPos = 0;
 	size_t SceneIndexPos = 0;
 };
+
+inline void UVulkanRenderDevice::SetPipeline(VulkanPipeline* pipeline)
+{
+	if (pipeline != Batch.Pipeline)
+	{
+		DrawBatch(Commands->GetDrawCommands());
+		Batch.Pipeline = pipeline;
+	}
+}
+
+inline void UVulkanRenderDevice::SetDescriptorSet(VulkanDescriptorSet* descriptorSet, bool bindless)
+{
+	if (descriptorSet != Batch.DescriptorSet)
+	{
+		DrawBatch(Commands->GetDrawCommands());
+		Batch.DescriptorSet = descriptorSet;
+		Batch.Bindless = bindless;
+	}
+}
+
+inline float GetUMult(const FTextureInfo& Info) { return 1.0f / (Info.UScale * Info.USize); }
+inline float GetVMult(const FTextureInfo& Info) { return 1.0f / (Info.VScale * Info.VSize); }

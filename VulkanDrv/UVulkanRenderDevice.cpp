@@ -488,28 +488,6 @@ void UVulkanRenderDevice::UpdateTextureRect(FTextureInfo& Info, INT U, INT V, IN
 	unguard;
 }
 
-static float GetUMult(const FTextureInfo& Info) { return 1.0f / (Info.UScale * Info.USize); }
-static float GetVMult(const FTextureInfo& Info) { return 1.0f / (Info.VScale * Info.VSize); }
-
-void UVulkanRenderDevice::SetPipeline(VulkanCommandBuffer* cmdbuffer, VulkanPipeline* pipeline)
-{
-	if (pipeline != Batch.Pipeline)
-	{
-		DrawBatch(cmdbuffer);
-		Batch.Pipeline = pipeline;
-	}
-}
-
-void UVulkanRenderDevice::SetDescriptorSet(VulkanCommandBuffer* cmdbuffer, VulkanDescriptorSet* descriptorSet, bool bindless)
-{
-	if (descriptorSet != Batch.DescriptorSet)
-	{
-		DrawBatch(cmdbuffer);
-		Batch.DescriptorSet = descriptorSet;
-		Batch.Bindless = bindless;
-	}
-}
-
 void UVulkanRenderDevice::DrawBatch(VulkanCommandBuffer* cmdbuffer)
 {
 	size_t icount = SceneIndexPos - Batch.SceneIndexStart;
@@ -528,8 +506,6 @@ void UVulkanRenderDevice::DrawBatch(VulkanCommandBuffer* cmdbuffer)
 void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Surface, FSurfaceFacet& Facet)
 {
 	guard(UVulkanRenderDevice::DrawComplexSurface);
-
-	VulkanCommandBuffer* cmdbuffer = Commands->GetDrawCommands();
 
 	CachedTexture* tex = Textures->GetTexture(Surface.Texture, !!(Surface.PolyFlags & PF_Masked));
 	CachedTexture* lightmap = Textures->GetTexture(Surface.LightMap, false);
@@ -574,7 +550,7 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 		DetailVMult = GetVMult(*Surface.FogMap);
 	}
 
-	SetPipeline(cmdbuffer, RenderPasses->getPipeline(Surface.PolyFlags, UsesBindless));
+	SetPipeline(RenderPasses->getPipeline(Surface.PolyFlags, UsesBindless));
 
 	ivec4 textureBinds;
 	if (UsesBindless)
@@ -584,7 +560,7 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 		textureBinds.z = DescriptorSets->GetTextureArrayIndex(0, detailtex);
 		textureBinds.w = DescriptorSets->GetTextureArrayIndex(0, lightmap);
 
-		SetDescriptorSet(cmdbuffer, DescriptorSets->GetBindlessDescriptorSet(), true);
+		SetDescriptorSet(DescriptorSets->GetBindlessDescriptorSet(), true);
 	}
 	else
 	{
@@ -593,7 +569,7 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 		textureBinds.z = 0.0f;
 		textureBinds.w = 0.0f;
 
-		SetDescriptorSet(cmdbuffer, DescriptorSets->GetTextureDescriptorSet(Surface.PolyFlags, tex, lightmap, macrotex, detailtex), false);
+		SetDescriptorSet(DescriptorSets->GetTextureDescriptorSet(Surface.PolyFlags, tex, lightmap, macrotex, detailtex), false);
 	}
 
 	uint32_t vpos = SceneVertexPos;
@@ -662,70 +638,82 @@ void UVulkanRenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& In
 
 	if (NumPts < 3) return; // This can apparently happen!!
 
-	auto cmdbuffer = Commands->GetDrawCommands();
+	SetPipeline(RenderPasses->getPipeline(PolyFlags, UsesBindless));
 
 	CachedTexture* tex = Textures->GetTexture(&Info, !!(PolyFlags & PF_Masked));
-
-	SetPipeline(cmdbuffer, RenderPasses->getPipeline(PolyFlags, UsesBindless));
-
 	ivec4 textureBinds;
 	if (UsesBindless)
 	{
 		textureBinds.x = DescriptorSets->GetTextureArrayIndex(PolyFlags, tex);
-		textureBinds.y = 0.0f;
-		textureBinds.z = 0.0f;
-		textureBinds.w = 0.0f;
-
-		SetDescriptorSet(cmdbuffer, DescriptorSets->GetBindlessDescriptorSet(), true);
+		textureBinds.y = 0;
+		textureBinds.z = 0;
+		textureBinds.w = 0;
+		SetDescriptorSet(DescriptorSets->GetBindlessDescriptorSet(), true);
 	}
 	else
 	{
-		textureBinds.x = 0.0f;
-		textureBinds.y = 0.0f;
-		textureBinds.z = 0.0f;
-		textureBinds.w = 0.0f;
-
-		SetDescriptorSet(cmdbuffer, DescriptorSets->GetTextureDescriptorSet(PolyFlags, tex), false);
+		textureBinds.x = 0;
+		textureBinds.y = 0;
+		textureBinds.z = 0;
+		textureBinds.w = 0;
+		SetDescriptorSet(DescriptorSets->GetTextureDescriptorSet(PolyFlags, tex), false);
 	}
 
-	float UMult = tex ? GetUMult(Info) : 0.0f;
-	float VMult = tex ? GetVMult(Info) : 0.0f;
-
-	SceneVertex* vertexdata = &Buffers->SceneVertices[SceneVertexPos];
-
+	float UMult = GetUMult(Info);
+	float VMult = GetVMult(Info);
 	int flags = (PolyFlags & (PF_RenderFog | PF_Translucent | PF_Modulated)) == PF_RenderFog ? 16 : 0;
 
-	for (INT i = 0; i < NumPts; i++)
+	if (PolyFlags & PF_Modulated)
 	{
-		FTransTexture* P = Pts[i];
-		SceneVertex& v = vertexdata[i];
-		v.Flags = flags;
-		v.Position.x = P->Point.X;
-		v.Position.y = P->Point.Y;
-		v.Position.z = P->Point.Z;
-		v.TexCoord.s = P->U * UMult;
-		v.TexCoord.t = P->V * VMult;
-		v.TexCoord2.s = P->Fog.X;
-		v.TexCoord2.t = P->Fog.Y;
-		v.TexCoord3.s = P->Fog.Z;
-		v.TexCoord3.t = P->Fog.W;
-		v.TexCoord4.s = 0.0f;
-		v.TexCoord4.t = 0.0f;
-		if (PolyFlags & PF_Modulated)
+		SceneVertex* vertex = &Buffers->SceneVertices[SceneVertexPos];
+		for (INT i = 0; i < NumPts; i++)
 		{
-			v.Color.r = 1.0f;
-			v.Color.g = 1.0f;
-			v.Color.b = 1.0f;
-			v.Color.a = 1.0f;
+			FTransTexture* P = Pts[i];
+			vertex->Flags = flags;
+			vertex->Position.x = P->Point.X;
+			vertex->Position.y = P->Point.Y;
+			vertex->Position.z = P->Point.Z;
+			vertex->TexCoord.s = P->U * UMult;
+			vertex->TexCoord.t = P->V * VMult;
+			vertex->TexCoord2.s = P->Fog.X;
+			vertex->TexCoord2.t = P->Fog.Y;
+			vertex->TexCoord3.s = P->Fog.Z;
+			vertex->TexCoord3.t = P->Fog.W;
+			vertex->TexCoord4.s = 0.0f;
+			vertex->TexCoord4.t = 0.0f;
+			vertex->Color.r = 1.0f;
+			vertex->Color.g = 1.0f;
+			vertex->Color.b = 1.0f;
+			vertex->Color.a = 1.0f;
+			vertex->TextureBinds = textureBinds;
+			vertex++;
 		}
-		else
+	}
+	else
+	{
+		SceneVertex* vertex = &Buffers->SceneVertices[SceneVertexPos];
+		for (INT i = 0; i < NumPts; i++)
 		{
-			v.Color.r = P->Light.X;
-			v.Color.g = P->Light.Y;
-			v.Color.b = P->Light.Z;
-			v.Color.a = 1.0f;
+			FTransTexture* P = Pts[i];
+			vertex->Flags = flags;
+			vertex->Position.x = P->Point.X;
+			vertex->Position.y = P->Point.Y;
+			vertex->Position.z = P->Point.Z;
+			vertex->TexCoord.s = P->U * UMult;
+			vertex->TexCoord.t = P->V * VMult;
+			vertex->TexCoord2.s = P->Fog.X;
+			vertex->TexCoord2.t = P->Fog.Y;
+			vertex->TexCoord3.s = P->Fog.Z;
+			vertex->TexCoord3.t = P->Fog.W;
+			vertex->TexCoord4.s = 0.0f;
+			vertex->TexCoord4.t = 0.0f;
+			vertex->Color.r = P->Light.X;
+			vertex->Color.g = P->Light.Y;
+			vertex->Color.b = P->Light.Z;
+			vertex->Color.a = 1.0f;
+			vertex->TextureBinds = textureBinds;
+			vertex++;
 		}
-		v.TextureBinds = textureBinds;
 	}
 
 	size_t vstart = SceneVertexPos;
@@ -756,11 +744,9 @@ void UVulkanRenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT 
 	if ((PolyFlags & (PF_Modulated)) == (PF_Modulated) && Info.Format == TEXF_P8)
 		PolyFlags = PF_Modulated;
 
-	auto cmdbuffer = Commands->GetDrawCommands();
-
 	CachedTexture* tex = Textures->GetTexture(&Info, !!(PolyFlags & PF_Masked));
 
-	SetPipeline(cmdbuffer, RenderPasses->getPipeline(PolyFlags, UsesBindless));
+	SetPipeline(RenderPasses->getPipeline(PolyFlags, UsesBindless));
 
 	ivec4 textureBinds;
 	if (UsesBindless)
@@ -770,7 +756,7 @@ void UVulkanRenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT 
 		textureBinds.z = 0.0f;
 		textureBinds.w = 0.0f;
 
-		SetDescriptorSet(cmdbuffer, DescriptorSets->GetBindlessDescriptorSet(), true);
+		SetDescriptorSet(DescriptorSets->GetBindlessDescriptorSet(), true);
 	}
 	else
 	{
@@ -779,7 +765,7 @@ void UVulkanRenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT 
 		textureBinds.z = 0.0f;
 		textureBinds.w = 0.0f;
 
-		SetDescriptorSet(cmdbuffer, DescriptorSets->GetTextureDescriptorSet(PolyFlags, tex, nullptr, nullptr, nullptr, true), false);
+		SetDescriptorSet(DescriptorSets->GetTextureDescriptorSet(PolyFlags, tex, nullptr, nullptr, nullptr, true), false);
 	}
 
 	float UMult = tex ? GetUMult(Info) : 0.0f;
@@ -1041,13 +1027,11 @@ void UVulkanRenderDevice::EndFlash()
 		vec2 zero2(0.0f);
 		ivec4 zero4(0);
 
-		auto cmdbuffer = Commands->GetDrawCommands();
-
-		DrawBatch(cmdbuffer);
+		DrawBatch(Commands->GetDrawCommands());
 		pushconstants.objectToProjection = mat4::identity();
 
-		SetPipeline(cmdbuffer, RenderPasses->getEndFlashPipeline());
-		SetDescriptorSet(cmdbuffer, DescriptorSets->GetTextureDescriptorSet(0, nullptr), false);
+		SetPipeline(RenderPasses->getEndFlashPipeline());
+		SetDescriptorSet(DescriptorSets->GetTextureDescriptorSet(0, nullptr), false);
 
 		SceneVertex* v = &Buffers->SceneVertices[SceneVertexPos];
 
