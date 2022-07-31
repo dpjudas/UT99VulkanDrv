@@ -41,6 +41,33 @@ public:
 	void UploadRect(void* dst, FMipmapBase* mip, int x, int y, int w, int h, FColor* palette, bool masked) override;
 };
 
+class TextureUploader_RGB10A2 : public TextureUploader
+{
+public:
+	TextureUploader_RGB10A2() : TextureUploader(VK_FORMAT_R16G16B16A16_UNORM) { }
+
+	int GetUploadSize(int x, int y, int w, int h) override;
+	void UploadRect(void* dst, FMipmapBase* mip, int x, int y, int w, int h, FColor* palette, bool masked) override;
+};
+
+class TextureUploader_RGB10A2_UI : public TextureUploader
+{
+public:
+	TextureUploader_RGB10A2_UI() : TextureUploader(VK_FORMAT_R16G16B16A16_UINT) { }
+
+	int GetUploadSize(int x, int y, int w, int h) override;
+	void UploadRect(void* dst, FMipmapBase* mip, int x, int y, int w, int h, FColor* palette, bool masked) override;
+};
+
+class TextureUploader_RGB10A2_LM : public TextureUploader
+{
+public:
+	TextureUploader_RGB10A2_LM() : TextureUploader(VK_FORMAT_R16G16B16A16_UNORM) { }
+
+	int GetUploadSize(int x, int y, int w, int h) override;
+	void UploadRect(void* dst, FMipmapBase* mip, int x, int y, int w, int h, FColor* palette, bool masked) override;
+};
+
 class TextureUploader_Simple : public TextureUploader
 {
 public:

@@ -71,16 +71,16 @@ TextureUploader* TextureUploader::GetUploader(ETextureFormat format)
 		Uploaders[TEXF_RGBA32_F].reset(new TextureUploader_Simple(VK_FORMAT_R32G32B32A32_SFLOAT, 16));
 
 		// Special.
-		//Uploaders[TEXF_ARGB8].reset(new TextureUploader_ARGB8(VK_FORMAT_R16_SFLOAT, 2));
-		//Uploaders[TEXF_RGB10A2].reset(new TextureUploader_RGB10A2(VK_FORMAT_R16_SFLOAT, 2));
-		//Uploaders[TEXF_RGB10A2_UI].reset(new TextureUploader_RGB10A2_UI(VK_FORMAT_R16_SFLOAT, 2));
-		//Uploaders[TEXF_RGB10A2_LM].reset(new TextureUploader_RGB10A2_LM(VK_FORMAT_R16_SFLOAT, 2));
-		//Uploaders[TEXF_RGB9E5].reset(new TextureUploader_RGB9E5(VK_FORMAT_R16_SFLOAT, 2));
-		//Uploaders[TEXF_P8_RGB9E5].reset(new TextureUploader_P8_RGB9E5(VK_FORMAT_R16_SFLOAT, 2));
-		//Uploaders[TEXF_R1].reset(new TextureUploader_R1(VK_FORMAT_R16_SFLOAT, 2));
-		//Uploaders[TEXF_RGB10A2_S].reset(new TextureUploader_RGB10A2_S(VK_FORMAT_R16_SFLOAT, 2));
-		//Uploaders[TEXF_RGB10A2_I].reset(new TextureUploader_RGB10A2_I(VK_FORMAT_R16_SFLOAT, 2));
-		//Uploaders[TEXF_R11G11B10_F].reset(new TextureUploader_R11G11B10_F(VK_FORMAT_R16_SFLOAT, 2));
+		//Uploaders[TEXF_ARGB8].reset(new TextureUploader_ARGB8());
+		Uploaders[TEXF_RGB10A2].reset(new TextureUploader_RGB10A2());
+		Uploaders[TEXF_RGB10A2_UI].reset(new TextureUploader_RGB10A2_UI());
+		Uploaders[TEXF_RGB10A2_LM].reset(new TextureUploader_RGB10A2_LM());
+		//Uploaders[TEXF_RGB9E5].reset(new TextureUploader_RGB9E5());
+		//Uploaders[TEXF_P8_RGB9E5].reset(new TextureUploader_P8_RGB9E5());
+		//Uploaders[TEXF_R1].reset(new TextureUploader_R1());
+		//Uploaders[TEXF_RGB10A2_S].reset(new TextureUploader_RGB10A2_S());
+		//Uploaders[TEXF_RGB10A2_I].reset(new TextureUploader_RGB10A2_I());
+		//Uploaders[TEXF_R11G11B10_F].reset(new TextureUploader_R11G11B10_F());
 	}
 
 	auto it = Uploaders.find(format);
@@ -141,6 +141,109 @@ void TextureUploader_BGRA8_LM::UploadRect(void* dst, FMipmapBase* mip, int x, in
 			Ptr->B = Src.R << 1;
 			Ptr->A = Src.A << 1;
 			Ptr++;
+		}
+		src += pitch;
+	}
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
+int TextureUploader_RGB10A2::GetUploadSize(int x, int y, int w, int h)
+{
+	return w * h * 8;
+}
+
+void TextureUploader_RGB10A2::UploadRect(void* dst, FMipmapBase* mip, int x, int y, int w, int h, FColor* palette, bool masked)
+{
+	int pitch = mip->USize;
+	uint32_t* src = ((uint32_t*)mip->DataPtr) + x + y * pitch;
+	uint16_t* Ptr = (uint16_t*)dst;
+	for (int i = 0; i < h; i++)
+	{
+		for (int x = 0; x < w; x++)
+		{
+			uint32_t c = *Ptr;
+			uint32_t r = (c >> 22) & 0x3ff;
+			uint32_t g = (c >> 12) & 0x3ff;
+			uint32_t b = (c >> 2) & 0x3ff;
+			uint32_t a = c & 0x3;
+
+			r = r * 0xffff / 0x3ff;
+			g = g * 0xffff / 0x3ff;
+			b = b * 0xffff / 0x3ff;
+			a = a * 0xffff / 0x3;
+
+			*(Ptr++) = r;
+			*(Ptr++) = g;
+			*(Ptr++) = b;
+			*(Ptr++) = a;
+		}
+		src += pitch;
+	}
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
+int TextureUploader_RGB10A2_UI::GetUploadSize(int x, int y, int w, int h)
+{
+	return w * h * 8;
+}
+
+void TextureUploader_RGB10A2_UI::UploadRect(void* dst, FMipmapBase* mip, int x, int y, int w, int h, FColor* palette, bool masked)
+{
+	int pitch = mip->USize;
+	uint32_t* src = ((uint32_t*)mip->DataPtr) + x + y * pitch;
+	uint16_t* Ptr = (uint16_t*)dst;
+	for (int i = 0; i < h; i++)
+	{
+		for (int x = 0; x < w; x++)
+		{
+			uint32_t c = *Ptr;
+			uint32_t r = (c >> 22) & 0x3ff;
+			uint32_t g = (c >> 12) & 0x3ff;
+			uint32_t b = (c >> 2) & 0x3ff;
+			uint32_t a = c & 0x3;
+
+			*(Ptr++) = r;
+			*(Ptr++) = g;
+			*(Ptr++) = b;
+			*(Ptr++) = a;
+		}
+		src += pitch;
+	}
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
+int TextureUploader_RGB10A2_LM::GetUploadSize(int x, int y, int w, int h)
+{
+	return w * h * 8;
+}
+
+void TextureUploader_RGB10A2_LM::UploadRect(void* dst, FMipmapBase* mip, int x, int y, int w, int h, FColor* palette, bool masked)
+{
+	int pitch = mip->USize;
+	uint32_t* src = ((uint32_t*)mip->DataPtr) + x + y * pitch;
+	uint16_t* Ptr = (uint16_t*)dst;
+	for (int i = 0; i < h; i++)
+	{
+		for (int x = 0; x < w; x++)
+		{
+			uint32_t c = *Ptr;
+			uint32_t r = (c >> 22) & 0x3ff;
+			uint32_t g = (c >> 12) & 0x3ff;
+			uint32_t b = (c >> 2) & 0x3ff;
+			uint32_t a = c & 0x3;
+
+			r = (r << 1) * 0xffff / 0xff;
+			g = (g << 1) * 0xffff / 0xff;
+			b = (b << 1) * 0xffff / 0xff;
+			a = (a << 1) * 0xffff / 0x3;
+
+			*(Ptr++) = r;
+			*(Ptr++) = g;
+			*(Ptr++) = b;
+			*(Ptr++) = a;
 		}
 		src += pitch;
 	}
