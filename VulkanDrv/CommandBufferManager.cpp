@@ -12,7 +12,7 @@ CommandBufferManager::CommandBufferManager(UVulkanRenderDevice* renderer) : rend
 	RenderFinishedSemaphore.reset(new VulkanSemaphore(renderer->Device));
 	RenderFinishedFence.reset(new VulkanFence(renderer->Device));
 	TransferSemaphore.reset(new VulkanSemaphore(renderer->Device));
-	CommandPool.reset(new VulkanCommandPool(renderer->Device, renderer->Device->graphicsFamily));
+	CommandPool.reset(new VulkanCommandPool(renderer->Device, renderer->Device->GraphicsFamily));
 	FrameDeleteList.reset(new DeleteList());
 }
 
@@ -31,7 +31,7 @@ void CommandBufferManager::WaitForTransfer()
 
 		QueueSubmit()
 			.AddCommandBuffer(TransferCommands.get())
-			.Execute(renderer->Device, renderer->Device->graphicsQueue, RenderFinishedFence.get());
+			.Execute(renderer->Device, renderer->Device->GraphicsQueue, RenderFinishedFence.get());
 
 		vkWaitForFences(renderer->Device->device, 1, &RenderFinishedFence->fence, VK_TRUE, std::numeric_limits<uint64_t>::max());
 		vkResetFences(renderer->Device->device, 1, &RenderFinishedFence->fence);
@@ -60,7 +60,7 @@ void CommandBufferManager::SubmitCommands(bool present, int presentWidth, int pr
 		QueueSubmit()
 			.AddCommandBuffer(TransferCommands.get())
 			.AddSignal(TransferSemaphore.get())
-			.Execute(renderer->Device, renderer->Device->graphicsQueue);
+			.Execute(renderer->Device, renderer->Device->GraphicsQueue);
 	}
 
 	if (DrawCommands)
@@ -80,7 +80,7 @@ void CommandBufferManager::SubmitCommands(bool present, int presentWidth, int pr
 		submit.AddWait(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, ImageAvailableSemaphore.get());
 		submit.AddSignal(RenderFinishedSemaphore.get());
 	}
-	submit.Execute(renderer->Device, renderer->Device->graphicsQueue, RenderFinishedFence.get());
+	submit.Execute(renderer->Device, renderer->Device->GraphicsQueue, RenderFinishedFence.get());
 
 	if (present && PresentImageIndex != 0xffffffff)
 	{

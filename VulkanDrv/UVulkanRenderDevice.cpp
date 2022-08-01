@@ -3,7 +3,9 @@
 #include "UVulkanRenderDevice.h"
 #include "CachedTexture.h"
 #include "VulkanBuilders.h"
+#include "VulkanSurface.h"
 #include "VulkanSwapChain.h"
+#include "VulkanCompatibleDevice.h"
 #include "UTF16.h"
 
 IMPLEMENT_CLASS(UVulkanRenderDevice);
@@ -43,24 +45,31 @@ void UVulkanRenderDevice::StaticConstructor()
 	unguard;
 }
 
+void VulkanPrintLog(const char* typestr, const std::string& msg)
+{
+	debugf(TEXT("[%s] %s"), to_utf16(typestr).c_str(), to_utf16(msg).c_str());
+}
+
+void VulkanError(const char* text)
+{
+	throw std::runtime_error(text);
+}
+
 UBOOL UVulkanRenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT NewColorBytes, UBOOL Fullscreen)
 {
 	guard(UVulkanRenderDevice::Init);
-
-	auto printLog = [](const char* typestr, const std::string& msg)
-	{
-		debugf(TEXT("[%s] %s"), to_utf16(typestr).c_str(), to_utf16(msg).c_str());
-	};
 
 	Viewport = InViewport;
 
 	try
 	{
-		Device = new VulkanDevice((HWND)Viewport->GetWindow(), VkDeviceIndex, VkDebug, printLog);
+		auto instance = std::make_shared<VulkanInstance>(VkDebug);
+		auto surface = std::make_shared<VulkanSurface>(instance, (HWND)Viewport->GetWindow());
+		Device = new VulkanDevice(instance, surface, VulkanCompatibleDevice::SelectDevice(instance, surface, VkDeviceIndex));
 		SupportsBindless =
-			Device->PhysicalDevice.DescriptorIndexingFeatures.descriptorBindingPartiallyBound &&
-			Device->PhysicalDevice.DescriptorIndexingFeatures.runtimeDescriptorArray &&
-			Device->PhysicalDevice.DescriptorIndexingFeatures.shaderSampledImageArrayNonUniformIndexing;
+			Device->EnabledFeatures.DescriptorIndexing.descriptorBindingPartiallyBound &&
+			Device->EnabledFeatures.DescriptorIndexing.runtimeDescriptorArray &&
+			Device->EnabledFeatures.DescriptorIndexing.shaderSampledImageArrayNonUniformIndexing;
 		Commands.reset(new CommandBufferManager(this));
 		Samplers.reset(new SamplerManager(this));
 		Textures.reset(new TextureManager(this));
@@ -319,9 +328,10 @@ UBOOL UVulkanRenderDevice::Exec(const TCHAR* Cmd, FOutputDevice& Ar)
 	}
 	else if (ParseCommand(&Cmd, TEXT("GetVkDevices")))
 	{
-		for (size_t i = 0; i < Device->SupportedDevices.size(); i++)
+		std::vector<VulkanCompatibleDevice> supportedDevices = VulkanCompatibleDevice::FindDevices(Device->Instance, Device->Surface);
+		for (size_t i = 0; i < supportedDevices.size(); i++)
 		{
-			Ar.Log(FString::Printf(TEXT("#%d - %s\r\n"), (int)i, to_utf16(Device->SupportedDevices[i].device->Properties.deviceName)));
+			Ar.Log(FString::Printf(TEXT("#%d - %s\r\n"), (int)i, to_utf16(supportedDevices[i].Device->Properties.deviceName)));
 		}
 		return 1;
 	}

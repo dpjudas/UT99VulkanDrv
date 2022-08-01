@@ -148,7 +148,7 @@ std::unique_ptr<VulkanShader> ShaderBuilder::Create(const char *shadername, Vulk
 	glslang::TShader shader(stage);
 	shader.setStrings(sources, 1);
 	shader.setEnvInput(glslang::EShSourceGlsl, stage, glslang::EShClientVulkan, 100);
-    if (device->ApiVersion >= VK_API_VERSION_1_2)
+    if (device->Instance->ApiVersion >= VK_API_VERSION_1_2)
     {
         shader.setEnvClient(glslang::EShClientVulkan, glslang::EShTargetVulkan_1_2);
         shader.setEnvTarget(glslang::EShTargetSpv, glslang::EShTargetSpv_1_4);
@@ -1322,7 +1322,7 @@ QueueSubmit& QueueSubmit::AddSignal(VulkanSemaphore* semaphore)
 
 void QueueSubmit::Execute(VulkanDevice* device, VkQueue queue, VulkanFence* fence)
 {
-	VkResult result = vkQueueSubmit(device->graphicsQueue, 1, &submitInfo, fence ? fence->fence : VK_NULL_HANDLE);
+	VkResult result = vkQueueSubmit(device->GraphicsQueue, 1, &submitInfo, fence ? fence->fence : VK_NULL_HANDLE);
 	CheckVulkanError(result, "Could not submit command buffer");
 }
 

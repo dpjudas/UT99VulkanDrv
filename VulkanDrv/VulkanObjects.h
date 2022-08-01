@@ -11,7 +11,7 @@ public:
 	VulkanSemaphore(VulkanDevice *device);
 	~VulkanSemaphore();
 
-	void SetDebugName(const char *name) { device->SetDebugObjectName(name, (uint64_t)semaphore, VK_OBJECT_TYPE_SEMAPHORE); }
+	void SetDebugName(const char *name) { device->SetObjectName(name, (uint64_t)semaphore, VK_OBJECT_TYPE_SEMAPHORE); }
 
 	VulkanDevice *device = nullptr;
 	VkSemaphore semaphore = VK_NULL_HANDLE;
@@ -27,7 +27,7 @@ public:
 	VulkanFence(VulkanDevice *device);
 	~VulkanFence();
 
-	void SetDebugName(const char *name) { device->SetDebugObjectName(name, (uint64_t)fence, VK_OBJECT_TYPE_FENCE); }
+	void SetDebugName(const char *name) { device->SetObjectName(name, (uint64_t)fence, VK_OBJECT_TYPE_FENCE); }
 
 	VulkanDevice *device = nullptr;
 	VkFence fence = VK_NULL_HANDLE;
@@ -51,10 +51,10 @@ public:
 	}
 
 #ifdef _DEBUG
-	void SetDebugName(const char* name) { debugName = name; device->SetDebugObjectName(name, (uint64_t)buffer, VK_OBJECT_TYPE_BUFFER); }
+	void SetDebugName(const char* name) { debugName = name; device->SetObjectName(name, (uint64_t)buffer, VK_OBJECT_TYPE_BUFFER); }
 	std::string debugName;
 #else
-	void SetDebugName(const char* name) { device->SetDebugObjectName(name, (uint64_t)buffer, VK_OBJECT_TYPE_BUFFER); }
+	void SetDebugName(const char* name) { device->SetObjectName(name, (uint64_t)buffer, VK_OBJECT_TYPE_BUFFER); }
 #endif
 
 	VulkanDevice *device = nullptr;
@@ -77,7 +77,7 @@ public:
 	VulkanFramebuffer(VulkanDevice *device, VkFramebuffer framebuffer);
 	~VulkanFramebuffer();
 
-	void SetDebugName(const char *name) { device->SetDebugObjectName(name, (uint64_t)framebuffer, VK_OBJECT_TYPE_FRAMEBUFFER); }
+	void SetDebugName(const char *name) { device->SetObjectName(name, (uint64_t)framebuffer, VK_OBJECT_TYPE_FRAMEBUFFER); }
 
 	VulkanDevice *device;
 	VkFramebuffer framebuffer;
@@ -93,7 +93,7 @@ public:
 	VulkanImage(VulkanDevice *device, VkImage image, VmaAllocation allocation, int width, int height, int mipLevels, int layerCount);
 	~VulkanImage();
 
-	void SetDebugName(const char *name) { device->SetDebugObjectName(name, (uint64_t)image, VK_OBJECT_TYPE_IMAGE); }
+	void SetDebugName(const char *name) { device->SetObjectName(name, (uint64_t)image, VK_OBJECT_TYPE_IMAGE); }
 
 	VkImage image = VK_NULL_HANDLE;
 	int width = 0;
@@ -118,7 +118,7 @@ public:
 	VulkanImageView(VulkanDevice *device, VkImageView view);
 	~VulkanImageView();
 
-	void SetDebugName(const char *name) { device->SetDebugObjectName(name, (uint64_t)view, VK_OBJECT_TYPE_IMAGE_VIEW); }
+	void SetDebugName(const char *name) { device->SetObjectName(name, (uint64_t)view, VK_OBJECT_TYPE_IMAGE_VIEW); }
 
 	VkImageView view = VK_NULL_HANDLE;
 
@@ -135,7 +135,7 @@ public:
 	VulkanSampler(VulkanDevice *device, VkSampler sampler);
 	~VulkanSampler();
 
-	void SetDebugName(const char *name) { device->SetDebugObjectName(name, (uint64_t)sampler, VK_OBJECT_TYPE_SAMPLER); }
+	void SetDebugName(const char *name) { device->SetObjectName(name, (uint64_t)sampler, VK_OBJECT_TYPE_SAMPLER); }
 
 	VkSampler sampler = VK_NULL_HANDLE;
 
@@ -152,7 +152,7 @@ public:
 	VulkanShader(VulkanDevice *device, VkShaderModule module);
 	~VulkanShader();
 
-	void SetDebugName(const char *name) { device->SetDebugObjectName(name, (uint64_t)module, VK_OBJECT_TYPE_SHADER_MODULE); }
+	void SetDebugName(const char *name) { device->SetObjectName(name, (uint64_t)module, VK_OBJECT_TYPE_SHADER_MODULE); }
 
 	VkShaderModule module = VK_NULL_HANDLE;
 
@@ -169,7 +169,7 @@ public:
 	VulkanDescriptorSetLayout(VulkanDevice *device, VkDescriptorSetLayout layout);
 	~VulkanDescriptorSetLayout();
 
-	void SetDebugName(const char *name) { device->SetDebugObjectName(name, (uint64_t)layout, VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT); }
+	void SetDebugName(const char *name) { device->SetObjectName(name, (uint64_t)layout, VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT); }
 
 	VulkanDevice *device;
 	VkDescriptorSetLayout layout;
@@ -186,10 +186,10 @@ public:
 	~VulkanDescriptorSet();
 
 #ifdef _DEBUG
-	void SetDebugName(const char* name) { debugName = name; device->SetDebugObjectName(name, (uint64_t)set, VK_OBJECT_TYPE_DESCRIPTOR_SET); }
+	void SetDebugName(const char* name) { debugName = name; device->SetObjectName(name, (uint64_t)set, VK_OBJECT_TYPE_DESCRIPTOR_SET); }
 	std::string debugName;
 #else
-	void SetDebugName(const char* name) { device->SetDebugObjectName(name, (uint64_t)set, VK_OBJECT_TYPE_DESCRIPTOR_SET); }
+	void SetDebugName(const char* name) { device->SetObjectName(name, (uint64_t)set, VK_OBJECT_TYPE_DESCRIPTOR_SET); }
 #endif
 
 	VulkanDevice *device;
@@ -208,10 +208,10 @@ public:
 	~VulkanDescriptorPool();
 
 #ifdef _DEBUG
-	void SetDebugName(const char* name) { debugName = name; device->SetDebugObjectName(name, (uint64_t)pool, VK_OBJECT_TYPE_DESCRIPTOR_POOL); }
+	void SetDebugName(const char* name) { debugName = name; device->SetObjectName(name, (uint64_t)pool, VK_OBJECT_TYPE_DESCRIPTOR_POOL); }
 	std::string debugName;
 #else
-	void SetDebugName(const char* name) { device->SetDebugObjectName(name, (uint64_t)pool, VK_OBJECT_TYPE_DESCRIPTOR_POOL); }
+	void SetDebugName(const char* name) { device->SetObjectName(name, (uint64_t)pool, VK_OBJECT_TYPE_DESCRIPTOR_POOL); }
 #endif
 
 	std::unique_ptr<VulkanDescriptorSet> tryAllocate(VulkanDescriptorSetLayout *layout);
@@ -237,7 +237,7 @@ public:
 	VulkanQueryPool(VulkanDevice *device, VkQueryPool pool);
 	~VulkanQueryPool();
 
-	void SetDebugName(const char *name) { device->SetDebugObjectName(name, (uint64_t)pool, VK_OBJECT_TYPE_QUERY_POOL); }
+	void SetDebugName(const char *name) { device->SetObjectName(name, (uint64_t)pool, VK_OBJECT_TYPE_QUERY_POOL); }
 
 	bool getResults(uint32_t firstQuery, uint32_t queryCount, size_t dataSize, void *data, VkDeviceSize stride, VkQueryResultFlags flags);
 
@@ -262,7 +262,7 @@ public:
 		return vkGetAccelerationStructureDeviceAddressKHR(device->device, &addressInfo);
 	}
 
-	void SetDebugName(const char* name) { device->SetDebugObjectName(name, (uint64_t)accelstruct, VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR); }
+	void SetDebugName(const char* name) { device->SetObjectName(name, (uint64_t)accelstruct, VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR); }
 
 	VulkanDevice* device;
 	VkAccelerationStructureKHR accelstruct;
@@ -278,7 +278,7 @@ public:
 	VulkanPipeline(VulkanDevice *device, VkPipeline pipeline);
 	~VulkanPipeline();
 
-	void SetDebugName(const char *name) { device->SetDebugObjectName(name, (uint64_t)pipeline, VK_OBJECT_TYPE_PIPELINE); }
+	void SetDebugName(const char *name) { device->SetObjectName(name, (uint64_t)pipeline, VK_OBJECT_TYPE_PIPELINE); }
 
 	VulkanDevice *device;
 	VkPipeline pipeline;
@@ -294,7 +294,7 @@ public:
 	VulkanPipelineLayout(VulkanDevice *device, VkPipelineLayout layout);
 	~VulkanPipelineLayout();
 
-	void SetDebugName(const char *name) { device->SetDebugObjectName(name, (uint64_t)layout, VK_OBJECT_TYPE_PIPELINE_LAYOUT); }
+	void SetDebugName(const char *name) { device->SetObjectName(name, (uint64_t)layout, VK_OBJECT_TYPE_PIPELINE_LAYOUT); }
 
 	VulkanDevice *device;
 	VkPipelineLayout layout;
@@ -310,7 +310,7 @@ public:
 	VulkanRenderPass(VulkanDevice *device, VkRenderPass renderPass);
 	~VulkanRenderPass();
 
-	void SetDebugName(const char *name) { device->SetDebugObjectName(name, (uint64_t)renderPass, VK_OBJECT_TYPE_RENDER_PASS); }
+	void SetDebugName(const char *name) { device->SetObjectName(name, (uint64_t)renderPass, VK_OBJECT_TYPE_RENDER_PASS); }
 
 	VulkanDevice *device;
 	VkRenderPass renderPass;
@@ -426,7 +426,7 @@ public:
 	VulkanCommandPool(VulkanDevice *device, int queueFamilyIndex);
 	~VulkanCommandPool();
 
-	void SetDebugName(const char *name) { device->SetDebugObjectName(name, (uint64_t)pool, VK_OBJECT_TYPE_COMMAND_POOL); }
+	void SetDebugName(const char *name) { device->SetObjectName(name, (uint64_t)pool, VK_OBJECT_TYPE_COMMAND_POOL); }
 
 	std::unique_ptr<VulkanCommandBuffer> createBuffer();
 
@@ -950,7 +950,7 @@ inline void VulkanCommandBuffer::writeAccelerationStructuresProperties(uint32_t 
 
 inline void VulkanCommandBuffer::SetDebugName(const char *name)
 {
-	pool->device->SetDebugObjectName(name, (uint64_t)buffer, VK_OBJECT_TYPE_COMMAND_BUFFER);
+	pool->device->SetObjectName(name, (uint64_t)buffer, VK_OBJECT_TYPE_COMMAND_BUFFER);
 }
 
 /////////////////////////////////////////////////////////////////////////////

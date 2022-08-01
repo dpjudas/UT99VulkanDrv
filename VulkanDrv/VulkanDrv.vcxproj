@@ -120,8 +120,11 @@
     <ClInclude Include="UVulkanRenderDevice.h" />
     <ClInclude Include="vec.h" />
     <ClInclude Include="VulkanBuilders.h" />
+    <ClInclude Include="VulkanCompatibleDevice.h" />
     <ClInclude Include="VulkanDevice.h" />
+    <ClInclude Include="VulkanInstance.h" />
     <ClInclude Include="VulkanObjects.h" />
+    <ClInclude Include="VulkanSurface.h" />
     <ClInclude Include="VulkanSwapChain.h" />
     <ClInclude Include="CachedTexture.h" />
   </ItemGroup>
@@ -155,8 +158,11 @@
     <ClCompile Include="UTF16.cpp" />
     <ClCompile Include="UVulkanRenderDevice.cpp" />
     <ClCompile Include="VulkanBuilders.cpp" />
+    <ClCompile Include="VulkanCompatibleDevice.cpp" />
     <ClCompile Include="VulkanDevice.cpp" />
     <ClCompile Include="VulkanDrv.cpp" />
+    <ClCompile Include="VulkanInstance.cpp" />
+    <ClCompile Include="VulkanSurface.cpp" />
     <ClCompile Include="VulkanSwapChain.cpp" />
   </ItemGroup>
   <ItemGroup>
