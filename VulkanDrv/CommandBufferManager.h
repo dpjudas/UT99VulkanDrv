@@ -11,7 +11,7 @@ public:
 	~CommandBufferManager();
 
 	void WaitForTransfer();
-	void SubmitCommands(bool present, int presentWidth, int presentHeight);
+	void SubmitCommands(bool present, int presentWidth, int presentHeight, bool presentFullscreen);
 	VulkanCommandBuffer* GetTransferCommands();
 	VulkanCommandBuffer* GetDrawCommands();
 	void DeleteFrameObjects();

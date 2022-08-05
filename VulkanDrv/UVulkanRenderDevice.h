@@ -111,7 +111,7 @@ private:
 	void SetPipeline(VulkanPipeline* pipeline);
 	void SetDescriptorSet(VulkanDescriptorSet* descriptorSet, bool bindless);
 	void DrawBatch(VulkanCommandBuffer* cmdbuffer);
-	void SubmitAndWait(bool present, int presentWidth, int presentHeight);
+	void SubmitAndWait(bool present, int presentWidth, int presentHeight, bool presentFullscreen);
 
 	struct
 	{

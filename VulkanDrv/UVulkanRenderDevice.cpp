@@ -141,6 +141,19 @@ UBOOL UVulkanRenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL F
 	if (!Viewport->ResizeViewport(Fullscreen ? (BLIT_Fullscreen | BLIT_OpenGL) : (BLIT_HardwarePaint | BLIT_OpenGL), NewX, NewY, NewColorBytes))
 		return 0;
 
+#ifdef USE_HORRIBLE_WIN32_MODE_SWITCHES
+	if (Fullscreen)
+	{
+		DEVMODE devmode = {};
+		devmode.dmSize = sizeof(DEVMODE);
+		devmode.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT; // | DM_DISPLAYFREQUENCY
+		devmode.dmPelsWidth = NewX;
+		devmode.dmPelsHeight = NewY;
+		// devmode.dmDisplayFrequency = 360;
+		ChangeDisplaySettingsEx(nullptr, &devmode, 0, CDS_FULLSCREEN, 0);
+	}
+#endif
+
 	SaveConfig();
 
 	Flush(1);
@@ -154,6 +167,10 @@ void UVulkanRenderDevice::Exit()
 	guard(UVulkanRenderDevice::Exit);
 
 	if (Device) vkDeviceWaitIdle(Device->device);
+
+#ifdef USE_HORRIBLE_WIN32_MODE_SWITCHES
+	ChangeDisplaySettingsEx(nullptr, nullptr, 0, 0, 0);
+#endif
 
 	Framebuffers.reset();
 	RenderPasses.reset();
@@ -170,12 +187,12 @@ void UVulkanRenderDevice::Exit()
 	unguard;
 }
 
-void UVulkanRenderDevice::SubmitAndWait(bool present, int presentWidth, int presentHeight)
+void UVulkanRenderDevice::SubmitAndWait(bool present, int presentWidth, int presentHeight, bool presentFullscreen)
 {
 	if (UsesBindless)
 		DescriptorSets->UpdateBindlessDescriptorSet();
 
-	Commands->SubmitCommands(present, presentWidth, presentHeight);
+	Commands->SubmitCommands(present, presentWidth, presentHeight, presentFullscreen);
 
 	Batch.Pipeline = nullptr;
 	Batch.DescriptorSet = nullptr;
@@ -192,7 +209,7 @@ void UVulkanRenderDevice::Flush(UBOOL AllowPrecache)
 	{
 		DrawBatch(Commands->GetDrawCommands());
 		RenderPasses->EndScene(Commands->GetDrawCommands());
-		SubmitAndWait(false, 0, 0);
+		SubmitAndWait(false, 0, 0, false);
 
 		ClearTextureCache();
 
@@ -260,6 +277,7 @@ UBOOL UVulkanRenderDevice::Exec(const TCHAR* Cmd, FOutputDevice& Ar)
 		resolutions.insert({ screenWidth, screenHeight });
 		ReleaseDC(0, screenDC);
 
+#ifdef USE_HORRIBLE_WIN32_MODE_SWITCHES
 		// Get what else is available according to Windows
 		DEVMODE devmode = {};
 		devmode.dmSize = sizeof(DEVMODE);
@@ -279,12 +297,11 @@ UBOOL UVulkanRenderDevice::Exec(const TCHAR* Cmd, FOutputDevice& Ar)
 		resolutions.insert({ (screenHeight * 4 + 2) / 3, screenHeight });
 
 		// Include a few classics from the era
-		resolutions.insert({ 640, 480 });
 		resolutions.insert({ 800, 600 });
 		resolutions.insert({ 1024, 768 });
 		resolutions.insert({ 1600, 1200 });
+#endif
 #else
-		resolutions.insert({ 640, 480 });
 		resolutions.insert({ 800, 600 });
 		resolutions.insert({ 1280, 720 });
 		resolutions.insert({ 1024, 768 });
@@ -466,7 +483,7 @@ void UVulkanRenderDevice::Unlock(UBOOL Blit)
 		RenderPasses->EndScene(Commands->GetDrawCommands());
 
 		BlitSceneToPostprocess();
-		SubmitAndWait(Blit ? true : false, Viewport->SizeX, Viewport->SizeY);
+		SubmitAndWait(Blit ? true : false, Viewport->SizeX, Viewport->SizeY, Viewport->IsFullscreen());
 
 		IsLocked = false;
 	}
@@ -999,7 +1016,7 @@ void UVulkanRenderDevice::ReadPixels(FColor* Pixels)
 	cmdbuffer->copyImageToBuffer(dstimage->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, staging->buffer, 1, &region);
 
 	// Submit command buffers and wait for device to finish the work
-	SubmitAndWait(false, 0, 0);
+	SubmitAndWait(false, 0, 0, false);
 
 	uint8_t* pixels = (uint8_t*)staging->Map(0, w * h * 4);
 	if (gamma != 1.0f)
