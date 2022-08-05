@@ -25,9 +25,13 @@ struct ScenePushConstants
 struct PresentPushConstants
 {
 	float InvGamma;
-	float padding1;
-	float padding2;
-	float padding3;
+	float Contrast;
+	float Saturation;
+	float Brightness;
+	int GrayFormula;
+	int32_t padding1;
+	int32_t padding2;
+	int32_t padding3;
 };
 
 class ShaderManager

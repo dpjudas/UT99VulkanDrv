@@ -76,6 +76,10 @@ public:
 	INT VkDeviceIndex;
 	BITFIELD VkDebug;
 	INT Multisample;
+	FLOAT VkBrightness;
+	FLOAT VkContrast;
+	FLOAT VkSaturation;
+	INT VkGrayFormula;
 
 	void DrawPresentTexture(int x, int y, int width, int height);
 

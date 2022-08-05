@@ -35,12 +35,22 @@ void UVulkanRenderDevice::StaticConstructor()
 	SupportsUpdateTextureRect = 1;
 	MaxTextureSize = 4096;
 
+	VkBrightness = 0.0f;
+	VkContrast = 1.0f;
+	VkSaturation = 1.0f;
+	VkGrayFormula = 1;
+
 	new(GetClass(), TEXT("UseLightmapAtlas"), RF_Public) UBoolProperty(CPP_PROPERTY(UseLightmapAtlas), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("UseVSync"), RF_Public) UBoolProperty(CPP_PROPERTY(UseVSync), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("UsePrecache"), RF_Public) UBoolProperty(CPP_PROPERTY(UsePrecache), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("Multisample"), RF_Public) UIntProperty(CPP_PROPERTY(Multisample), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("VkDeviceIndex"), RF_Public) UIntProperty(CPP_PROPERTY(VkDeviceIndex), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("VkDebug"), RF_Public) UBoolProperty(CPP_PROPERTY(VkDebug), TEXT("Display"), CPF_Config);
+
+	new(GetClass(), TEXT("VkBrightness"), RF_Public) UFloatProperty(CPP_PROPERTY(VkBrightness), TEXT("Display"), CPF_Config);
+	new(GetClass(), TEXT("VkContrast"), RF_Public) UFloatProperty(CPP_PROPERTY(VkContrast), TEXT("Display"), CPF_Config);
+	new(GetClass(), TEXT("VkSaturation"), RF_Public) UFloatProperty(CPP_PROPERTY(VkSaturation), TEXT("Display"), CPF_Config);
+	new(GetClass(), TEXT("VkGrayFormula"), RF_Public) UIntProperty(CPP_PROPERTY(VkGrayFormula), TEXT("Display"), CPF_Config);
 
 	unguard;
 }
@@ -238,6 +248,34 @@ UBOOL UVulkanRenderDevice::Exec(const TCHAR* Cmd, FOutputDevice& Ar)
 
 	if (URenderDevice::Exec(Cmd, Ar))
 	{
+		return 1;
+	}
+	else if (ParseCommand(&Cmd, TEXT("vk_contrast")))
+	{
+		float value = _wtof(Cmd);
+		VkContrast = clamp(value, 0.1f, 3.f);
+		SaveConfig();
+		return 1;
+	}
+	else if (ParseCommand(&Cmd, TEXT("vk_saturation")))
+	{
+		float value = _wtof(Cmd);
+		VkSaturation = clamp(value, -0.8f, 0.8f);
+		SaveConfig();
+		return 1;
+	}
+	else if (ParseCommand(&Cmd, TEXT("vk_brightness")))
+	{
+		float value = _wtof(Cmd);
+		VkBrightness = clamp(value, -15.0f, 15.f);
+		SaveConfig();
+		return 1;
+	}
+	else if (ParseCommand(&Cmd, TEXT("vk_grayformula")))
+	{
+		int value = _wtoi(Cmd);
+		VkGrayFormula = clamp(value, 0, 2);
+		SaveConfig();
 		return 1;
 	}
 	else if (ParseCommand(&Cmd, TEXT("DGL")))
@@ -1209,6 +1247,10 @@ void UVulkanRenderDevice::DrawPresentTexture(int x, int y, int width, int height
 
 	PresentPushConstants pushconstants;
 	pushconstants.InvGamma = 1.0f / gamma;
+	pushconstants.Contrast = clamp(VkContrast, 0.1f, 3.f);
+	pushconstants.Saturation = clamp(VkSaturation, -0.8f, 0.8f);
+	pushconstants.Brightness = clamp(VkBrightness, -15.0f, 15.f);
+	pushconstants.GrayFormula = clamp(VkGrayFormula, 0, 2);
 
 	VkViewport viewport = {};
 	viewport.x = x;

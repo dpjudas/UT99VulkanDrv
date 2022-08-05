@@ -166,9 +166,13 @@ std::string FileResource::readAllText(const std::string& filename)
 			layout(push_constant) uniform PresentPushConstants
 			{
 				float InvGamma;
-				float padding1;
-				float padding2;
-				float padding3;
+				float Contrast;
+				float Saturation;
+				float Brightness;
+				int GrayFormula;
+				int Padding1;
+				int Padding2;
+				int Padding3;
 			};
 
 			layout(binding = 0) uniform sampler2D texSampler;
@@ -188,9 +192,24 @@ std::string FileResource::readAllText(const std::string& filename)
 				return mix(c * 12.92, 1.055 * pow(c, vec3(1.0/2.4)) - 0.055, step(c, vec3(0.0031308)));
 			}
 
+			vec3 applyGamma(vec3 c)
+			{
+				vec3 valgray;
+				if (GrayFormula == 0)
+					valgray = vec3(c.r + c.g + c.b) * (1 - Saturation) / 3 + c * Saturation;
+				else if (GrayFormula == 2)	// new formula
+					valgray = mix(vec3(pow(dot(pow(c, vec3(2.2)), vec3(0.2126, 0.7152, 0.0722)), 1.0/2.2)), c, Saturation);
+				else
+					valgray = mix(vec3(dot(c, vec3(0.3,0.56,0.14))), c, Saturation);
+				vec3 val = valgray * Contrast - (Contrast - 1.0) * 0.5;
+				val += Brightness * 0.5;
+				val = pow(max(val, vec3(0.0)), vec3(InvGamma));
+				return val;
+			}
+
 			void main()
 			{
-				outColor = vec4(dither(pow(texture(texSampler, texCoord).rgb, vec3(InvGamma))), 1.0f);
+				outColor = vec4(dither(applyGamma(texture(texSampler, texCoord).rgb)), 1.0f);
 			}
 		)";
 	}
