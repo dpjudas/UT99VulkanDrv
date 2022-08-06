@@ -34,6 +34,7 @@ void UVulkanRenderDevice::StaticConstructor()
 	UseLightmapAtlas = 0;
 	SupportsUpdateTextureRect = 1;
 	MaxTextureSize = 4096;
+	NeedsMaskedFonts = 0;
 
 	VkBrightness = 0.0f;
 	VkContrast = 1.0f;
@@ -852,6 +853,16 @@ void UVulkanRenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT 
 		b = Color.Z;
 	}
 	a = 1.0f;
+
+	if (Multisample > 0)
+	{
+		XL = std::floor(X + XL + 0.5f);
+		YL = std::floor(Y + YL + 0.5f);
+		X = std::floor(X + 0.5f);
+		Y = std::floor(Y + 0.5f);
+		XL = XL - X;
+		YL = YL - Y;
+	}
 
 	v[0] = { 0, vec3(RFX2 * Z * (X - Frame->FX2),      RFY2 * Z * (Y - Frame->FY2),      Z), vec2(U * UMult,        V * VMult),        vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec4(r, g, b, a), textureBinds };
 	v[1] = { 0, vec3(RFX2 * Z * (X + XL - Frame->FX2), RFY2 * Z * (Y - Frame->FY2),      Z), vec2((U + UL) * UMult, V * VMult),        vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec4(r, g, b, a), textureBinds };
