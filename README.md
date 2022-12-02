@@ -30,14 +30,19 @@ Add the following section to the file:
 	VkDeviceIndex=0
 	VkHdr=False
 	VkExclusiveFullscreen=False
+	LODBias=0.0
+	ActorXBlending=False
+	OneXBlending=False
 
-VkHdr enables HDR mode for monitors supporting HDR. This causes overbright pixels to become brighter rather than saturating to white.
+## Description of VulkanDrv specific new settings
 
-VkExclusiveFullscreen enables vulkan's exclusive full screen feature. It is off by default as some users have reported problems with it.
-
-The VkDeviceIndex selects which vulkan device in the system the render device should use. Type 'GetVkDevices' in the system console to get the list of available devices.
-
-For debugging, VkDebug can be set to true. This enables the vulkan debug layer and will cause the render device to output extra information into the UnrealTournament.log file. 'VkMemStats' can also be typed into the console.
+- VkDebug enables the vulkan debug layer and will cause the render device to output extra information into the UnrealTournament.log file. 'VkMemStats' can also be typed into the console.
+- VkHdr enables HDR mode for monitors supporting HDR. This causes overbright pixels to become brighter rather than saturating to white.
+- VkExclusiveFullscreen enables vulkan's exclusive full screen feature. It is off by default as some users have reported problems with it.
+- VkDeviceIndex selects which vulkan device in the system the render device should use. Type 'GetVkDevices' in the system console to get the list of available devices.
+- OneXBlending halves the lightmap light contribution. This makes actors appear brighter at the cost losing overbright lightmaps.
+- ActorXBlending is an alternative to OneXBlending. Here it increases the brightness of actors instead to better match the lightmaps.
+- LODBias Adjusts the level-of-detail bias for textures. A number greater than zero will bias it towards using lower detail mipmaps. A negative number will bias it towards using higher level mipmaps.
 
 ## Brightness controls console commands:
 
