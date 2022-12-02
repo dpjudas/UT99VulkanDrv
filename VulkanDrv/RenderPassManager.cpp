@@ -165,12 +165,15 @@ void RenderPassManager::CreatePipelines()
 			{
 			case 0: // PF_Translucent
 				builder.BlendMode(VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR);
+				builder.DepthBias(true, -1.0f, 0.0f, -1.0f);
 				break;
 			case 1: // PF_Modulated
 				builder.BlendMode(VK_BLEND_OP_ADD, VK_BLEND_FACTOR_DST_COLOR, VK_BLEND_FACTOR_SRC_COLOR);
+				builder.DepthBias(true, -1.0f, 0.0f, -1.0f);
 				break;
 			case 2: // PF_Highlighted
 				builder.BlendMode(VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA);
+				builder.DepthBias(true, -1.0f, 0.0f, -1.0f);
 				break;
 			case 3:
 				builder.BlendMode(VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ZERO); // Hmm, is it faster to keep the blend mode enabled or to toggle it?
