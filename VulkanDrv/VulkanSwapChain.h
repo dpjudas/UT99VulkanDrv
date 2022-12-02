@@ -37,7 +37,7 @@ private:
 	void recreate(int width, int height, bool fullscreen);
 
 	std::vector<VkSurfaceFormatKHR> getSurfaceFormats();
-	std::vector<VkPresentModeKHR> getPresentModes(bool fullscreen);
+	std::vector<VkPresentModeKHR> getPresentModes(bool exclusivefullscreen);
 
 	VulkanDevice *device = nullptr;
 

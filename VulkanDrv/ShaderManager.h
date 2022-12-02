@@ -29,7 +29,7 @@ struct PresentPushConstants
 	float Saturation;
 	float Brightness;
 	int GrayFormula;
-	int32_t padding1;
+	int HdrMode;
 	int32_t padding2;
 	int32_t padding3;
 };

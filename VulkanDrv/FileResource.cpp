@@ -170,7 +170,7 @@ std::string FileResource::readAllText(const std::string& filename)
 				float Saturation;
 				float Brightness;
 				int GrayFormula;
-				int Padding1;
+				int HdrMode;
 				int Padding2;
 				int Padding3;
 			};
@@ -192,6 +192,11 @@ std::string FileResource::readAllText(const std::string& filename)
 				return mix(c * 12.92, 1.055 * pow(c, vec3(1.0/2.4)) - 0.055, step(c, vec3(0.0031308)));
 			}
 
+			vec3 linear(vec3 c)
+			{
+				return pow(c, vec3(2.2)) * 1.2;
+			}
+
 			vec3 applyGamma(vec3 c)
 			{
 				vec3 valgray;
@@ -209,7 +214,14 @@ std::string FileResource::readAllText(const std::string& filename)
 
 			void main()
 			{
-				outColor = vec4(dither(applyGamma(texture(texSampler, texCoord).rgb)), 1.0f);
+				if (HdrMode == 0)
+				{
+					outColor = vec4(dither(applyGamma(texture(texSampler, texCoord).rgb)), 1.0f);
+				}
+				else
+				{
+					outColor = vec4(linear(applyGamma(texture(texSampler, texCoord).rgb)), 1.0f);
+				}
 			}
 		)";
 	}

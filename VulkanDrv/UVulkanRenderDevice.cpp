@@ -1262,6 +1262,7 @@ void UVulkanRenderDevice::DrawPresentTexture(int x, int y, int width, int height
 	pushconstants.Saturation = clamp(VkSaturation, -0.8f, 0.8f);
 	pushconstants.Brightness = clamp(VkBrightness, -15.0f, 15.f);
 	pushconstants.GrayFormula = clamp(VkGrayFormula, 0, 2);
+	pushconstants.HdrMode = (Commands->SwapChain->swapChainFormat.colorSpace == VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT) ? 1 : 0;
 
 	VkViewport viewport = {};
 	viewport.x = x;
