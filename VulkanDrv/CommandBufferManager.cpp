@@ -60,8 +60,9 @@ void CommandBufferManager::SubmitCommands(bool present, int presentWidth, int pr
 
 	if (present)
 	{
-		if (SwapChain->Lost() || SwapChain->Width() != presentWidth || SwapChain->Height() != presentHeight)
+		if (SwapChain->Lost() || SwapChain->Width() != presentWidth || SwapChain->Height() != presentHeight || UsingVsync != renderer->UseVSync)
 		{
+			UsingVsync = renderer->UseVSync;
 			renderer->Framebuffers->DestroySwapChainFramebuffers();
 			SwapChain->Create(presentWidth, presentHeight, renderer->UseVSync ? 2 : 3, renderer->UseVSync, renderer->VkHdr, renderer->VkExclusiveFullscreen && presentFullscreen);
 			renderer->Framebuffers->CreateSwapChainFramebuffers();

@@ -25,6 +25,7 @@ public:
 
 	std::shared_ptr<VulkanSwapChain> SwapChain;
 	int PresentImageIndex = -1;
+	BITFIELD UsingVsync = 0;
 
 private:
 	UVulkanRenderDevice* renderer = nullptr;
