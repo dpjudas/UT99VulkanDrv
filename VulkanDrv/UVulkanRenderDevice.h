@@ -82,6 +82,8 @@ public:
 	BITFIELD VkHdr;
 	BITFIELD VkExclusiveFullscreen;
 	FLOAT LODBias;
+	BITFIELD OneXBlending;
+	BITFIELD ActorXBlending;
 
 	void DrawPresentTexture(int x, int y, int width, int height);
 

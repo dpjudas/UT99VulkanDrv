@@ -41,6 +41,8 @@ void UVulkanRenderDevice::StaticConstructor()
 	VkExclusiveFullscreen = 0;
 
 	LODBias = 0.0f;
+	OneXBlending = 0;
+	ActorXBlending = 0;
 
 	new(GetClass(), TEXT("UseLightmapAtlas"), RF_Public) UBoolProperty(CPP_PROPERTY(UseLightmapAtlas), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("UseVSync"), RF_Public) UBoolProperty(CPP_PROPERTY(UseVSync), TEXT("Display"), CPF_Config);
@@ -57,6 +59,8 @@ void UVulkanRenderDevice::StaticConstructor()
 	new(GetClass(), TEXT("VkExclusiveFullscreen"), RF_Public) UBoolProperty(CPP_PROPERTY(VkExclusiveFullscreen), TEXT("Display"), CPF_Config);
 
 	new(GetClass(), TEXT("LODBias"), RF_Public) UFloatProperty(CPP_PROPERTY(LODBias), TEXT("Display"), CPF_Config);
+	new(GetClass(), TEXT("OneXBlending"), RF_Public) UBoolProperty(CPP_PROPERTY(OneXBlending), TEXT("Display"), CPF_Config);
+	new(GetClass(), TEXT("ActorXBlending"), RF_Public) UBoolProperty(CPP_PROPERTY(ActorXBlending), TEXT("Display"), CPF_Config);
 
 	unguard;
 }
@@ -629,6 +633,8 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 	if (detailtex && !fogmap) flags |= 4;
 	if (fogmap) flags |= 8;
 
+	if (OneXBlending) flags |= 64;
+
 	if (fogmap) // if Surface.FogMap exists, use instead of detail texture
 	{
 		detailtex = fogmap;
@@ -750,6 +756,8 @@ void UVulkanRenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& In
 	float UMult = GetUMult(Info);
 	float VMult = GetVMult(Info);
 	int flags = (PolyFlags & (PF_RenderFog | PF_Translucent | PF_Modulated)) == PF_RenderFog ? 16 : 0;
+
+	if ((PolyFlags & (PF_Translucent | PF_Modulated)) == 0 && ActorXBlending) flags |= 32;
 
 	if (PolyFlags & PF_Modulated)
 	{

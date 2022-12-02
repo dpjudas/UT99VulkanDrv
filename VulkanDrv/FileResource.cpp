@@ -100,7 +100,10 @@ std::string FileResource::readAllText(const std::string& filename)
 
 			void main()
 			{
-				outColor = darkClamp(textureTex(texCoord)) * darkClamp(color);
+				float actorXBlending = (flags & 32) != 0 ? 1.5 : 1.0;
+				float oneXBlending = (flags & 64) != 0 ? 1.0 : 2.0;
+
+				outColor = darkClamp(textureTex(texCoord)) * darkClamp(color) * actorXBlending;
 
 				if ((flags & 2) != 0) // Macro texture
 				{
@@ -109,7 +112,7 @@ std::string FileResource::readAllText(const std::string& filename)
 
 				if ((flags & 1) != 0) // Lightmap
 				{
-					outColor.rgb *= clamp(textureLightmap(texCoord2).rgb - 0.03, 0.0, 1.0) * 2.0;
+					outColor.rgb *= clamp(textureLightmap(texCoord2).rgb - 0.03, 0.0, 1.0) * oneXBlending;
 				}
 
 				if ((flags & 4) != 0) // Detail texture
