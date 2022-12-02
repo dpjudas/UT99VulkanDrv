@@ -1,6 +1,5 @@
 #pragma once
 
-#include "VulkanObjects.h"
 #include "CommandBufferManager.h"
 #include "BufferManager.h"
 #include "DescriptorSetManager.h"
@@ -54,7 +53,7 @@ public:
 	int InterfacePadding[64]; // For allowing URenderDeviceOldUnreal469 interface to add things
 
 	HWND WindowHandle = 0;
-	VulkanDevice* Device = nullptr;
+	std::shared_ptr<VulkanDevice> Device;
 
 	std::unique_ptr<CommandBufferManager> Commands;
 
@@ -80,6 +79,8 @@ public:
 	FLOAT VkContrast;
 	FLOAT VkSaturation;
 	INT VkGrayFormula;
+	BITFIELD VkHdr;
+	BITFIELD VkExclusiveFullscreen;
 
 	void DrawPresentTexture(int x, int y, int width, int height);
 

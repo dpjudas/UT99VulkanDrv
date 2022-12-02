@@ -1,7 +1,7 @@
 #pragma once
 
-#include "VulkanObjects.h"
 #include "TextureUploader.h"
+#include <unordered_map>
 
 class UVulkanRenderDevice;
 class CachedTexture;

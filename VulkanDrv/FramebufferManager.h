@@ -1,7 +1,5 @@
 #pragma once
 
-#include "VulkanObjects.h"
-
 class UVulkanRenderDevice;
 
 class FramebufferManager
@@ -12,11 +10,14 @@ public:
 	void CreateSceneFramebuffer();
 	void DestroySceneFramebuffer();
 
+	void CreateSwapChainFramebuffers();
+	void DestroySwapChainFramebuffers();
+
 	VulkanFramebuffer* GetSwapChainFramebuffer();
 
 	std::unique_ptr<VulkanFramebuffer> sceneFramebuffer;
 
 private:
 	UVulkanRenderDevice* renderer = nullptr;
-	std::unique_ptr<VulkanFramebuffer> swapChainFramebuffer;
+	std::vector<std::unique_ptr<VulkanFramebuffer>> swapChainFramebuffers;
 };

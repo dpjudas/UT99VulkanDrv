@@ -2,10 +2,6 @@
 #include "Precomp.h"
 #include "UVulkanRenderDevice.h"
 #include "CachedTexture.h"
-#include "VulkanBuilders.h"
-#include "VulkanSurface.h"
-#include "VulkanSwapChain.h"
-#include "VulkanCompatibleDevice.h"
 #include "UTF16.h"
 
 IMPLEMENT_CLASS(UVulkanRenderDevice);
@@ -41,6 +37,9 @@ void UVulkanRenderDevice::StaticConstructor()
 	VkSaturation = 1.0f;
 	VkGrayFormula = 1;
 
+	VkHdr = 1;
+	VkExclusiveFullscreen = 0;
+
 	new(GetClass(), TEXT("UseLightmapAtlas"), RF_Public) UBoolProperty(CPP_PROPERTY(UseLightmapAtlas), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("UseVSync"), RF_Public) UBoolProperty(CPP_PROPERTY(UseVSync), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("UsePrecache"), RF_Public) UBoolProperty(CPP_PROPERTY(UsePrecache), TEXT("Display"), CPF_Config);
@@ -52,6 +51,8 @@ void UVulkanRenderDevice::StaticConstructor()
 	new(GetClass(), TEXT("VkContrast"), RF_Public) UFloatProperty(CPP_PROPERTY(VkContrast), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("VkSaturation"), RF_Public) UFloatProperty(CPP_PROPERTY(VkSaturation), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("VkGrayFormula"), RF_Public) UIntProperty(CPP_PROPERTY(VkGrayFormula), TEXT("Display"), CPF_Config);
+	new(GetClass(), TEXT("VkHdr"), RF_Public) UBoolProperty(CPP_PROPERTY(VkHdr), TEXT("Display"), CPF_Config);
+	new(GetClass(), TEXT("VkExclusiveFullscreen"), RF_Public) UBoolProperty(CPP_PROPERTY(VkExclusiveFullscreen), TEXT("Display"), CPF_Config);
 
 	unguard;
 }
@@ -74,13 +75,26 @@ UBOOL UVulkanRenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT N
 
 	try
 	{
-		auto instance = std::make_shared<VulkanInstance>(VkDebug);
-		auto surface = std::make_shared<VulkanSurface>(instance, (HWND)Viewport->GetWindow());
-		Device = new VulkanDevice(instance, surface, VulkanCompatibleDevice::SelectDevice(instance, surface, VkDeviceIndex));
+		auto instance = VulkanInstanceBuilder()
+			.RequireSurfaceExtensions()
+			.DebugLayer(VkDebug)
+			.Create();
+
+		auto surface = VulkanSurfaceBuilder()
+			.Win32Window((HWND)Viewport->GetWindow())
+			.Create(instance);
+
+		Device = VulkanDeviceBuilder()
+			.Surface(surface)
+			.OptionalDescriptorIndexing()
+			.SelectDevice(VkDeviceIndex)
+			.Create(instance);
+
 		SupportsBindless =
 			Device->EnabledFeatures.DescriptorIndexing.descriptorBindingPartiallyBound &&
 			Device->EnabledFeatures.DescriptorIndexing.runtimeDescriptorArray &&
 			Device->EnabledFeatures.DescriptorIndexing.shaderSampledImageArrayNonUniformIndexing;
+
 		Commands.reset(new CommandBufferManager(this));
 		Samplers.reset(new SamplerManager(this));
 		Textures.reset(new TextureManager(this));
@@ -193,7 +207,7 @@ void UVulkanRenderDevice::Exit()
 	Samplers.reset();
 	Commands.reset();
 
-	delete Device; Device = nullptr;
+	Device.reset();
 
 	unguard;
 }
@@ -384,7 +398,11 @@ UBOOL UVulkanRenderDevice::Exec(const TCHAR* Cmd, FOutputDevice& Ar)
 	}
 	else if (ParseCommand(&Cmd, TEXT("GetVkDevices")))
 	{
-		std::vector<VulkanCompatibleDevice> supportedDevices = VulkanCompatibleDevice::FindDevices(Device->Instance, Device->Surface);
+		std::vector<VulkanCompatibleDevice> supportedDevices = VulkanDeviceBuilder()
+			.Surface(Device->Surface)
+			.OptionalDescriptorIndexing()
+			.FindDevices(Device->Instance);
+
 		for (size_t i = 0; i < supportedDevices.size(); i++)
 		{
 			Ar.Log(FString::Printf(TEXT("#%d - %s\r\n"), (int)i, to_utf16(supportedDevices[i].Device->Properties.deviceName)));
@@ -429,7 +447,7 @@ void UVulkanRenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane Sc
 			WriteDescriptors()
 				.AddCombinedImageSampler(descriptors, 0, Textures->Scene->PPImageView.get(), Samplers->PPLinearClamp.get(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
 				.AddCombinedImageSampler(descriptors, 1, Textures->DitherImageView.get(), Samplers->PPNearestRepeat.get(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-				.Execute(Device);
+				.Execute(Device.get());
 		}
 
 		PipelineBarrier()
@@ -1012,7 +1030,7 @@ void UVulkanRenderDevice::ReadPixels(FColor* Pixels)
 		.Usage(VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
 		.Size(w, h)
 		.DebugName("ReadPixelsDstImage")
-		.Create(Device);
+		.Create(Device.get());
 
 	// Convert from rgba16f to bgra8 using the GPU:
 	auto srcimage = Textures->Scene->PPImage.get();
@@ -1053,7 +1071,7 @@ void UVulkanRenderDevice::ReadPixels(FColor* Pixels)
 		.Size(w * h * 4)
 		.Usage(VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_TO_CPU)
 		.DebugName("ReadPixelsStaging")
-		.Create(Device);
+		.Create(Device.get());
 
 	// Copy from image to buffer
 	VkBufferImageCopy region = {};
@@ -1247,13 +1265,6 @@ void UVulkanRenderDevice::BlitSceneToPostprocess()
 
 void UVulkanRenderDevice::DrawPresentTexture(int x, int y, int width, int height)
 {
-	if (Commands->SwapChain->newSwapChain)
-	{
-		Commands->SwapChain->newSwapChain = false;
-		RenderPasses->CreatePresentRenderPass();
-		RenderPasses->CreatePresentPipeline();
-	}
-
 	float gamma = (1.5f * Viewport->GetOuterUClient()->Brightness * 2.0f);
 
 	PresentPushConstants pushconstants;
@@ -1262,7 +1273,7 @@ void UVulkanRenderDevice::DrawPresentTexture(int x, int y, int width, int height
 	pushconstants.Saturation = clamp(VkSaturation, -0.8f, 0.8f);
 	pushconstants.Brightness = clamp(VkBrightness, -15.0f, 15.f);
 	pushconstants.GrayFormula = clamp(VkGrayFormula, 0, 2);
-	pushconstants.HdrMode = (Commands->SwapChain->swapChainFormat.colorSpace == VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT) ? 1 : 0;
+	pushconstants.HdrMode = (Commands->SwapChain->Format().colorSpace == VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT) ? 1 : 0;
 
 	VkViewport viewport = {};
 	viewport.x = x;

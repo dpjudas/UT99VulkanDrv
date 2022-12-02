@@ -1,22 +1,20 @@
 #pragma once
 
 #include <vector>
+#include <map>
 
 #define _CRT_SECURE_NO_WARNINGS
 #define WIN32_LEAN_AND_MEAN
-
-#ifdef _WIN32
-#define VK_USE_PLATFORM_WIN32_KHR
-#endif
+#define NOMINMAX
 
 #pragma pack(push, 8)
 #include <Windows.h>
-#undef min
-#undef max
-#include "volk/volk.h"
-#include "vk_mem_alloc/vk_mem_alloc.h"
-#include "../ShaderCompiler/glslang/Public/ShaderLang.h"
-#include "../ShaderCompiler/spirv/GlslangToSpv.h"
+#include <zvulkan/vulkandevice.h>
+#include <zvulkan/vulkaninstance.h>
+#include <zvulkan/vulkansurface.h>
+#include <zvulkan/vulkanswapchain.h>
+#include <zvulkan/vulkanbuilders.h>
+#include <zvulkan/vulkancompatibledevice.h>
 #include <mutex>
 #include <vector>
 #include <algorithm>

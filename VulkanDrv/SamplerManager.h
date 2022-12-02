@@ -1,7 +1,5 @@
 #pragma once
 
-#include "VulkanObjects.h"
-
 class UVulkanRenderDevice;
 
 class SamplerManager

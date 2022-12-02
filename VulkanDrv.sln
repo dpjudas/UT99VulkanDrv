@@ -5,7 +5,7 @@ VisualStudioVersion = 16.0.30523.141
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "VulkanDrv", "VulkanDrv\VulkanDrv.vcxproj", "{2E0FB4CD-9019-45B1-B2BF-E99023DC70DA}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ShaderCompiler", "ShaderCompiler\ShaderCompiler.vcxproj", "{4DEAE017-3206-4351-BB75-4947D0314829}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ZVulkan", "ZVulkan\ZVulkan.vcxproj", "{4DEAE017-3206-4351-BB75-4947D0314829}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "HRTFAudio", "HRTFAudio\HRTFAudio.vcxproj", "{CCFAA700-BBB0-40A3-901B-7C69FAAC9A79}"
 EndProject

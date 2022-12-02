@@ -1,6 +1,5 @@
 #pragma once
 
-#include "VulkanObjects.h"
 #include "SceneTextures.h"
 
 struct FTextureInfo;

@@ -1,6 +1,5 @@
 #pragma once
 
-#include "VulkanObjects.h"
 #include "ShaderManager.h"
 #include "mat.h"
 #include "vec.h"

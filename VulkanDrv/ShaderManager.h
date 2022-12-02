@@ -1,6 +1,5 @@
 #pragma once
 
-#include "VulkanObjects.h"
 #include "mat.h"
 
 class UVulkanRenderDevice;

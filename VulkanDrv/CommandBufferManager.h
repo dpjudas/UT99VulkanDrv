@@ -1,7 +1,5 @@
 #pragma once
 
-#include "VulkanObjects.h"
-
 class UVulkanRenderDevice;
 
 class CommandBufferManager
@@ -25,8 +23,8 @@ public:
 	};
 	std::unique_ptr<DeleteList> FrameDeleteList;
 
-	std::unique_ptr<VulkanSwapChain> SwapChain;
-	uint32_t PresentImageIndex = 0xffffffff;
+	std::shared_ptr<VulkanSwapChain> SwapChain;
+	int PresentImageIndex = -1;
 
 private:
 	UVulkanRenderDevice* renderer = nullptr;

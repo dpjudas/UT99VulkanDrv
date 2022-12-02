@@ -58,7 +58,7 @@
       <SDLCheck>false</SDLCheck>
       <PreprocessorDefinitions>WIN32;_DEBUG;VULKANDRV_EXPORTS;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>false</ConformanceMode>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(SolutionDir)Thirdparty\UnrealTournamentSDK\Core\Inc;$(SolutionDir)Thirdparty\UnrealTournamentSDK\Engine\Inc;$(SolutionDir)Thirdparty;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(SolutionDir)ZVulkan\include;$(SolutionDir)Thirdparty\UnrealTournamentSDK\Core\Inc;$(SolutionDir)Thirdparty\UnrealTournamentSDK\Engine\Inc;$(SolutionDir)Thirdparty;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <TreatWChar_tAsBuiltInType>false</TreatWChar_tAsBuiltInType>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <StructMemberAlignment>4Bytes</StructMemberAlignment>
@@ -81,7 +81,7 @@
       <SDLCheck>false</SDLCheck>
       <PreprocessorDefinitions>WIN32;NDEBUG;VULKANDRV_EXPORTS;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>false</ConformanceMode>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(SolutionDir)Thirdparty\UnrealTournamentSDK\Core\Inc;$(SolutionDir)Thirdparty\UnrealTournamentSDK\Engine\Inc;$(SolutionDir)Thirdparty;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(SolutionDir)ZVulkan\include;$(SolutionDir)Thirdparty\UnrealTournamentSDK\Core\Inc;$(SolutionDir)Thirdparty\UnrealTournamentSDK\Engine\Inc;$(SolutionDir)Thirdparty;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <TreatWChar_tAsBuiltInType>false</TreatWChar_tAsBuiltInType>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <StructMemberAlignment>4Bytes</StructMemberAlignment>
@@ -99,7 +99,6 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="..\Thirdparty\volk\volk.h" />
     <ClInclude Include="BufferManager.h" />
     <ClInclude Include="CommandBufferManager.h" />
     <ClInclude Include="DescriptorSetManager.h" />
@@ -119,24 +118,9 @@
     <ClInclude Include="UTF16.h" />
     <ClInclude Include="UVulkanRenderDevice.h" />
     <ClInclude Include="vec.h" />
-    <ClInclude Include="VulkanBuilders.h" />
-    <ClInclude Include="VulkanCompatibleDevice.h" />
-    <ClInclude Include="VulkanDevice.h" />
-    <ClInclude Include="VulkanInstance.h" />
-    <ClInclude Include="VulkanObjects.h" />
-    <ClInclude Include="VulkanSurface.h" />
-    <ClInclude Include="VulkanSwapChain.h" />
     <ClInclude Include="CachedTexture.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\Thirdparty\vk_mem_alloc\vk_mem_alloc.cpp">
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
-    </ClCompile>
-    <ClCompile Include="..\Thirdparty\volk\volk.c">
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
-    </ClCompile>
     <ClCompile Include="BufferManager.cpp" />
     <ClCompile Include="CommandBufferManager.cpp" />
     <ClCompile Include="DescriptorSetManager.cpp" />
@@ -157,19 +141,13 @@
     <ClCompile Include="UploadManager.cpp" />
     <ClCompile Include="UTF16.cpp" />
     <ClCompile Include="UVulkanRenderDevice.cpp" />
-    <ClCompile Include="VulkanBuilders.cpp" />
-    <ClCompile Include="VulkanCompatibleDevice.cpp" />
-    <ClCompile Include="VulkanDevice.cpp" />
     <ClCompile Include="VulkanDrv.cpp" />
-    <ClCompile Include="VulkanInstance.cpp" />
-    <ClCompile Include="VulkanSurface.cpp" />
-    <ClCompile Include="VulkanSwapChain.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\VulkanDrv.int" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\ShaderCompiler\ShaderCompiler.vcxproj">
+    <ProjectReference Include="..\ZVulkan\ZVulkan.vcxproj">
       <Project>{4deae017-3206-4351-bb75-4947d0314829}</Project>
     </ProjectReference>
   </ItemGroup>

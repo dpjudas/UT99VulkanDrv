@@ -3,7 +3,6 @@
 #include "UploadManager.h"
 #include "UVulkanRenderDevice.h"
 #include "CachedTexture.h"
-#include "VulkanBuilders.h"
 
 UploadManager::UploadManager(UVulkanRenderDevice* renderer) : renderer(renderer)
 {
@@ -26,8 +25,8 @@ void UploadManager::UploadTexture(CachedTexture* tex, const FTextureInfo& Info, 
 
 	TextureUploader* uploader = TextureUploader::GetUploader(Info.Format);
 
-	if ((uint32_t)Info.USize > renderer->Device->PhysicalDevice.Properties.limits.maxImageDimension2D ||
-		(uint32_t)Info.VSize > renderer->Device->PhysicalDevice.Properties.limits.maxImageDimension2D ||
+	if ((uint32_t)Info.USize > renderer->Device.get()->PhysicalDevice.Properties.limits.maxImageDimension2D ||
+		(uint32_t)Info.VSize > renderer->Device.get()->PhysicalDevice.Properties.limits.maxImageDimension2D ||
 		!uploader)
 	{
 		width = 1;
@@ -45,12 +44,12 @@ void UploadManager::UploadTexture(CachedTexture* tex, const FTextureInfo& Info, 
 			.Size(width, height, mipcount)
 			.Usage(VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
 			.DebugName("CachedTexture.Image")
-			.Create(renderer->Device);
+			.Create(renderer->Device.get());
 
 		tex->imageView = ImageViewBuilder()
 			.Image(tex->image.get(), format)
 			.DebugName("CachedTexture.ImageView")
-			.Create(renderer->Device);
+			.Create(renderer->Device.get());
 	}
 
 	if (uploader)

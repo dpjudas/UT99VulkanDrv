@@ -1,7 +1,5 @@
 #pragma once
 
-#include "VulkanObjects.h"
-
 struct FTextureInfo;
 struct FMipmapBase;
 enum ETextureFormat;

@@ -2,10 +2,6 @@
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <ClInclude Include="UVulkanRenderDevice.h" />
-    <ClInclude Include="VulkanBuilders.h" />
-    <ClInclude Include="VulkanDevice.h" />
-    <ClInclude Include="VulkanObjects.h" />
-    <ClInclude Include="VulkanSwapChain.h" />
     <ClInclude Include="Precomp.h" />
     <ClInclude Include="SceneTextures.h" />
     <ClInclude Include="halffloat.h" />
@@ -14,9 +10,6 @@
     <ClInclude Include="vec.h" />
     <ClInclude Include="FileResource.h" />
     <ClInclude Include="CachedTexture.h" />
-    <ClInclude Include="..\Thirdparty\volk\volk.h">
-      <Filter>Thirdparty</Filter>
-    </ClInclude>
     <ClInclude Include="ShaderManager.h" />
     <ClInclude Include="SamplerManager.h" />
     <ClInclude Include="BufferManager.h" />
@@ -28,27 +21,15 @@
     <ClInclude Include="UTF16.h" />
     <ClInclude Include="UploadManager.h" />
     <ClInclude Include="TextureUploader.h" />
-    <ClInclude Include="VulkanInstance.h" />
-    <ClInclude Include="VulkanSurface.h" />
-    <ClInclude Include="VulkanCompatibleDevice.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="VulkanDrv.cpp" />
     <ClCompile Include="UVulkanRenderDevice.cpp" />
-    <ClCompile Include="VulkanBuilders.cpp" />
-    <ClCompile Include="VulkanDevice.cpp" />
-    <ClCompile Include="VulkanSwapChain.cpp" />
     <ClCompile Include="Precomp.cpp" />
     <ClCompile Include="SceneTextures.cpp" />
     <ClCompile Include="halffloat.cpp" />
     <ClCompile Include="mat.cpp" />
     <ClCompile Include="FileResource.cpp" />
-    <ClCompile Include="..\Thirdparty\volk\volk.c">
-      <Filter>Thirdparty</Filter>
-    </ClCompile>
-    <ClCompile Include="..\Thirdparty\vk_mem_alloc\vk_mem_alloc.cpp">
-      <Filter>Thirdparty</Filter>
-    </ClCompile>
     <ClCompile Include="ShaderManager.cpp" />
     <ClCompile Include="SamplerManager.cpp" />
     <ClCompile Include="BufferManager.cpp" />
@@ -60,16 +41,8 @@
     <ClCompile Include="UTF16.cpp" />
     <ClCompile Include="UploadManager.cpp" />
     <ClCompile Include="TextureUploader.cpp" />
-    <ClCompile Include="VulkanInstance.cpp" />
-    <ClCompile Include="VulkanSurface.cpp" />
-    <ClCompile Include="VulkanCompatibleDevice.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\VulkanDrv.int" />
-  </ItemGroup>
-  <ItemGroup>
-    <Filter Include="Thirdparty">
-      <UniqueIdentifier>{25b23aa5-e71b-4fc2-869e-d9ca815c5f8a}</UniqueIdentifier>
-    </Filter>
   </ItemGroup>
 </Project>

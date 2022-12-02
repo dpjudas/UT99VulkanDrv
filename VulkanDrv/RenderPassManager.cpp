@@ -2,8 +2,6 @@
 #include "Precomp.h"
 #include "RenderPassManager.h"
 #include "UVulkanRenderDevice.h"
-#include "VulkanBuilders.h"
-#include "VulkanSwapChain.h"
 
 RenderPassManager::RenderPassManager(UVulkanRenderDevice* renderer) : renderer(renderer)
 {
@@ -22,7 +20,7 @@ void RenderPassManager::CreateScenePipelineLayout()
 		.AddSetLayout(renderer->DescriptorSets->SceneDescriptorSetLayout.get())
 		.AddPushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ScenePushConstants))
 		.DebugName("ScenePipelineLayout")
-		.Create(renderer->Device);
+		.Create(renderer->Device.get());
 }
 
 void RenderPassManager::CreateSceneBindlessPipelineLayout()
@@ -34,7 +32,7 @@ void RenderPassManager::CreateSceneBindlessPipelineLayout()
 		.AddSetLayout(renderer->DescriptorSets->SceneBindlessDescriptorSetLayout.get())
 		.AddPushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ScenePushConstants))
 		.DebugName("SceneBindlessPipelineLayout")
-		.Create(renderer->Device);
+		.Create(renderer->Device.get());
 }
 
 void RenderPassManager::CreatePresentPipelineLayout()
@@ -43,18 +41,18 @@ void RenderPassManager::CreatePresentPipelineLayout()
 		.AddSetLayout(renderer->DescriptorSets->PresentDescriptorSetLayout.get())
 		.AddPushConstantRange(VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PresentPushConstants))
 		.DebugName("PresentPipelineLayout")
-		.Create(renderer->Device);
+		.Create(renderer->Device.get());
 }
 
 void RenderPassManager::BeginScene(VulkanCommandBuffer* cmdbuffer)
 {
-	RenderPassBegin renderPassInfo;
-	renderPassInfo.setRenderPass(SceneRenderPass.get());
-	renderPassInfo.setFramebuffer(renderer->Framebuffers->sceneFramebuffer.get());
-	renderPassInfo.setRenderArea(0, 0, renderer->Textures->Scene->width, renderer->Textures->Scene->height);
-	renderPassInfo.addClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-	renderPassInfo.addClearDepthStencil(1.0f, 0);
-	cmdbuffer->beginRenderPass(renderPassInfo);
+	RenderPassBegin()
+		.RenderPass(SceneRenderPass.get())
+		.Framebuffer(renderer->Framebuffers->sceneFramebuffer.get())
+		.RenderArea(0, 0, renderer->Textures->Scene->width, renderer->Textures->Scene->height)
+		.AddClearColor(0.0f, 0.0f, 0.0f, 1.0f)
+		.AddClearDepthStencil(1.0f, 0)
+		.Execute(cmdbuffer);
 }
 
 void RenderPassManager::EndScene(VulkanCommandBuffer* cmdbuffer)
@@ -64,12 +62,12 @@ void RenderPassManager::EndScene(VulkanCommandBuffer* cmdbuffer)
 
 void RenderPassManager::BeginPresent(VulkanCommandBuffer* cmdbuffer)
 {
-	RenderPassBegin renderPassInfo;
-	renderPassInfo.setRenderPass(PresentRenderPass.get());
-	renderPassInfo.setFramebuffer(renderer->Framebuffers->GetSwapChainFramebuffer());
-	renderPassInfo.setRenderArea(0, 0, renderer->Textures->Scene->width, renderer->Textures->Scene->height);
-	renderPassInfo.addClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-	cmdbuffer->beginRenderPass(renderPassInfo);
+	RenderPassBegin()
+		.RenderPass(PresentRenderPass.get())
+		.Framebuffer(renderer->Framebuffers->GetSwapChainFramebuffer())
+		.RenderArea(0, 0, renderer->Textures->Scene->width, renderer->Textures->Scene->height)
+		.AddClearColor(0.0f, 0.0f, 0.0f, 1.0f)
+		.Execute(cmdbuffer);
 }
 
 void RenderPassManager::EndPresent(VulkanCommandBuffer* cmdbuffer)
@@ -160,7 +158,7 @@ void RenderPassManager::CreatePipelines()
 			builder.RenderPass(SceneRenderPass.get());
 
 			// Avoid clipping the weapon. The UE1 engine clips the geometry anyway.
-			if (renderer->Device->EnabledFeatures.Features.depthClamp)
+			if (renderer->Device.get()->EnabledFeatures.Features.depthClamp)
 				builder.DepthClampEnable(true);
 
 			switch (i & 3)
@@ -202,7 +200,7 @@ void RenderPassManager::CreatePipelines()
 			builder.RasterizationSamples(renderer->Textures->Scene->SceneSamples);
 			builder.DebugName(debugName[type]);
 
-			pipeline[type][i] = builder.Create(renderer->Device);
+			pipeline[type][i] = builder.Create(renderer->Device.get());
 		}
 	}
 }
@@ -235,14 +233,14 @@ void RenderPassManager::CreateRenderPass()
 		.AddSubpassColorAttachmentRef(0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
 		.AddSubpassDepthStencilAttachmentRef(1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
 		.DebugName("SceneRenderPass")
-		.Create(renderer->Device);
+		.Create(renderer->Device.get());
 }
 
 void RenderPassManager::CreatePresentRenderPass()
 {
 	PresentRenderPass = RenderPassBuilder()
 		.AddAttachment(
-			renderer->Commands->SwapChain->swapChainFormat.format,
+			renderer->Commands->SwapChain->Format().format,
 			VK_SAMPLE_COUNT_1_BIT,
 			VK_ATTACHMENT_LOAD_OP_CLEAR,
 			VK_ATTACHMENT_STORE_OP_STORE,
@@ -256,7 +254,7 @@ void RenderPassManager::CreatePresentRenderPass()
 		.AddSubpass()
 		.AddSubpassColorAttachmentRef(0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
 		.DebugName("PresentRenderPass")
-		.Create(renderer->Device);
+		.Create(renderer->Device.get());
 }
 
 void RenderPassManager::CreatePresentPipeline()
@@ -273,5 +271,5 @@ void RenderPassManager::CreatePresentPipeline()
 		.Layout(PresentPipelineLayout.get())
 		.RenderPass(PresentRenderPass.get())
 		.DebugName("PresentPipeline")
-		.Create(renderer->Device);
+		.Create(renderer->Device.get());
 }

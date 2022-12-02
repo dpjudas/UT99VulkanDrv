@@ -28,6 +28,12 @@ Add the following section to the file:
 	VolumetricLighting=True
 	VkDebug=False
 	VkDeviceIndex=0
+	VkHdr=False
+	VkExclusiveFullscreen=False
+
+VkHdr enables HDR mode for monitors supporting HDR. This causes overbright pixels to become brighter rather than saturating to white.
+
+VkExclusiveFullscreen enables vulkan's exclusive full screen feature. It is off by default as some users have reported problems with it.
 
 The VkDeviceIndex selects which vulkan device in the system the render device should use. Type 'GetVkDevices' in the system console to get the list of available devices.
 
