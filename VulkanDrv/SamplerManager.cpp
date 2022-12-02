@@ -9,7 +9,7 @@ SamplerManager::SamplerManager(UVulkanRenderDevice* renderer) : renderer(rendere
 	{
 		SamplerBuilder builder;
 		builder.Anisotropy(8.0f);
-		builder.MipLodBias(-0.5f);
+		builder.MipLodBias(renderer->LODBias);
 
 		if (i & 1)
 		{

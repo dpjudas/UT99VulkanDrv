@@ -40,6 +40,8 @@ void UVulkanRenderDevice::StaticConstructor()
 	VkHdr = 1;
 	VkExclusiveFullscreen = 0;
 
+	LODBias = 0.0f;
+
 	new(GetClass(), TEXT("UseLightmapAtlas"), RF_Public) UBoolProperty(CPP_PROPERTY(UseLightmapAtlas), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("UseVSync"), RF_Public) UBoolProperty(CPP_PROPERTY(UseVSync), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("UsePrecache"), RF_Public) UBoolProperty(CPP_PROPERTY(UsePrecache), TEXT("Display"), CPF_Config);
@@ -53,6 +55,8 @@ void UVulkanRenderDevice::StaticConstructor()
 	new(GetClass(), TEXT("VkGrayFormula"), RF_Public) UIntProperty(CPP_PROPERTY(VkGrayFormula), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("VkHdr"), RF_Public) UBoolProperty(CPP_PROPERTY(VkHdr), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("VkExclusiveFullscreen"), RF_Public) UBoolProperty(CPP_PROPERTY(VkExclusiveFullscreen), TEXT("Display"), CPF_Config);
+
+	new(GetClass(), TEXT("LODBias"), RF_Public) UFloatProperty(CPP_PROPERTY(LODBias), TEXT("Display"), CPF_Config);
 
 	unguard;
 }

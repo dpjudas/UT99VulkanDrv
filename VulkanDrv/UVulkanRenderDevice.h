@@ -81,6 +81,7 @@ public:
 	INT VkGrayFormula;
 	BITFIELD VkHdr;
 	BITFIELD VkExclusiveFullscreen;
+	FLOAT LODBias;
 
 	void DrawPresentTexture(int x, int y, int width, int height);
 
