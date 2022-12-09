@@ -622,8 +622,8 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 	float MacroVPan = macrotex ? VDot + Surface.MacroTexture->Pan.Y : 0.0f;
 	float MacroUMult = macrotex ? GetUMult(*Surface.MacroTexture) : 0.0f;
 	float MacroVMult = macrotex ? GetVMult(*Surface.MacroTexture) : 0.0f;
-	float DetailUPan = detailtex ? UDot + Surface.DetailTexture->Pan.X : 0.0f;
-	float DetailVPan = detailtex ? VDot + Surface.DetailTexture->Pan.Y : 0.0f;
+	float DetailUPan = UPan;
+	float DetailVPan = VPan;
 	float DetailUMult = detailtex ? GetUMult(*Surface.DetailTexture) : 0.0f;
 	float DetailVMult = detailtex ? GetVMult(*Surface.DetailTexture) : 0.0f;
 
