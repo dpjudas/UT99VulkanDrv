@@ -112,7 +112,6 @@ private:
 	float RFY2;
 
 	bool IsLocked = false;
-	bool StatMemory = false;
 	bool StatResources = false;
 	bool StatDraw = false;
 

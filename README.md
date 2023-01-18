@@ -53,10 +53,8 @@ Add the following section to the file:
 
 ## Debugging console commands:
 
-	vstat memory
 	vstat resources
 	vstat draw
-	vkmemstats
 
 ## License
 

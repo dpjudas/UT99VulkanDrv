@@ -26,27 +26,22 @@ private:
 	bool debugLayer = false;
 };
 
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+
 class VulkanSurfaceBuilder
 {
 public:
 	VulkanSurfaceBuilder();
 
-#ifdef VK_USE_PLATFORM_WIN32_KHR
 	VulkanSurfaceBuilder& Win32Window(HWND handle);
-#elif defined(VK_USE_PLATFORM_XLIB_KHR)
-	VulkanSurfaceBuilder& X11Window(Display* disp, Window wind);
-#endif
 
 	std::shared_ptr<VulkanSurface> Create(std::shared_ptr<VulkanInstance> instance);
 
 private:
-#ifdef VK_USE_PLATFORM_WIN32_KHR
 	HWND hwnd = {};
-#elif defined(VK_USE_PLATFORM_XLIB_KHR)
-	Display* disp = nullptr;
-	Window wind = {};
-#endif
 };
+
+#endif
 
 class VulkanDeviceBuilder
 {
@@ -189,6 +184,7 @@ public:
 	BufferBuilder& Size(size_t size);
 	BufferBuilder& Usage(VkBufferUsageFlags bufferUsage, VmaMemoryUsage memoryUsage = VMA_MEMORY_USAGE_GPU_ONLY, VmaAllocationCreateFlags allocFlags = 0);
 	BufferBuilder& MemoryType(VkMemoryPropertyFlags requiredFlags, VkMemoryPropertyFlags preferredFlags, uint32_t memoryTypeBits = 0);
+	BufferBuilder& MinAlignment(VkDeviceSize memoryAlignment);
 	BufferBuilder& DebugName(const char* name) { debugName = name; return *this; }
 
 	std::unique_ptr<VulkanBuffer> Create(VulkanDevice *device);
@@ -197,6 +193,7 @@ private:
 	VkBufferCreateInfo bufferInfo = {};
 	VmaAllocationCreateInfo allocInfo = {};
 	const char* debugName = nullptr;
+	VkDeviceSize minAlignment = 0;
 };
 
 class ShaderBuilder
@@ -241,6 +238,7 @@ class ComputePipelineBuilder
 public:
 	ComputePipelineBuilder();
 
+	ComputePipelineBuilder& Cache(VulkanPipelineCache* cache);
 	ComputePipelineBuilder& Layout(VulkanPipelineLayout *layout);
 	ComputePipelineBuilder& ComputeShader(VulkanShader *shader);
 	ComputePipelineBuilder& DebugName(const char* name) { debugName = name; return *this; }
@@ -250,6 +248,7 @@ public:
 private:
 	VkComputePipelineCreateInfo pipelineInfo = {};
 	VkPipelineShaderStageCreateInfo stageInfo = {};
+	VulkanPipelineCache* cache = nullptr;
 	const char* debugName = nullptr;
 };
 
@@ -329,6 +328,7 @@ class GraphicsPipelineBuilder
 public:
 	GraphicsPipelineBuilder();
 
+	GraphicsPipelineBuilder& Cache(VulkanPipelineCache* cache);
 	GraphicsPipelineBuilder& Subpass(int subpass);
 	GraphicsPipelineBuilder& Layout(VulkanPipelineLayout *layout);
 	GraphicsPipelineBuilder& RenderPass(VulkanRenderPass *renderPass);
@@ -382,6 +382,7 @@ private:
 	std::vector<VkVertexInputAttributeDescription> vertexInputAttributes;
 	std::vector<VkDynamicState> dynamicStates;
 
+	VulkanPipelineCache* cache = nullptr;
 	const char* debugName = nullptr;
 };
 
@@ -401,6 +402,24 @@ private:
 	VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
 	std::vector<VkDescriptorSetLayout> setLayouts;
 	std::vector<VkPushConstantRange> pushConstantRanges;
+	const char* debugName = nullptr;
+};
+
+class PipelineCacheBuilder
+{
+public:
+	PipelineCacheBuilder();
+
+	PipelineCacheBuilder& InitialData(const void* data, size_t size);
+	PipelineCacheBuilder& Flags(VkPipelineCacheCreateFlags flags);
+
+	PipelineCacheBuilder& DebugName(const char* name) { debugName = name; return *this; }
+
+	std::unique_ptr<VulkanPipelineCache> Create(VulkanDevice* device);
+
+private:
+	VkPipelineCacheCreateInfo pipelineCacheInfo = {};
+	std::vector<uint8_t> initData;
 	const char* debugName = nullptr;
 };
 

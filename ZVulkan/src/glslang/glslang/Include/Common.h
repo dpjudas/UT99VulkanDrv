@@ -94,6 +94,7 @@ std::string to_string(const T& val) {
 #endif
 
 #if defined(_MSC_VER)
+#undef strdup
 #define strdup _strdup
 #endif
 

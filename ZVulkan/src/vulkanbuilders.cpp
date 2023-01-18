@@ -527,15 +527,29 @@ BufferBuilder& BufferBuilder::MemoryType(VkMemoryPropertyFlags requiredFlags, Vk
 	return *this;
 }
 
+BufferBuilder& BufferBuilder::MinAlignment(VkDeviceSize memoryAlignment)
+{
+	minAlignment = memoryAlignment;
+	return *this;
+}
+
 std::unique_ptr<VulkanBuffer> BufferBuilder::Create(VulkanDevice* device)
 {
 	VkBuffer buffer;
 	VmaAllocation allocation;
 
-	VkResult result = vmaCreateBuffer(device->allocator, &bufferInfo, &allocInfo, &buffer, &allocation, nullptr);
-	CheckVulkanError(result, "Could not allocate memory for vulkan buffer");
+	if (minAlignment == 0)
+	{
+		VkResult result = vmaCreateBuffer(device->allocator, &bufferInfo, &allocInfo, &buffer, &allocation, nullptr);
+		CheckVulkanError(result, "Could not allocate memory for vulkan buffer");
+	}
+	else
+	{
+		VkResult result = vmaCreateBufferWithAlignment(device->allocator, &bufferInfo, &allocInfo, minAlignment, &buffer, &allocation, nullptr);
+		CheckVulkanError(result, "Could not allocate memory for vulkan buffer");
+	}
 
-	auto obj = std::make_unique<VulkanBuffer>(device, buffer, allocation, (size_t)bufferInfo.size);
+	auto obj = std::make_unique<VulkanBuffer>(device, buffer, allocation, bufferInfo.size);
 	if (debugName)
 		obj->SetDebugName(debugName);
 	return obj;
@@ -589,6 +603,12 @@ ComputePipelineBuilder::ComputePipelineBuilder()
 	stageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 }
 
+ComputePipelineBuilder& ComputePipelineBuilder::Cache(VulkanPipelineCache* cache)
+{
+	this->cache = cache;
+	return *this;
+}
+
 ComputePipelineBuilder& ComputePipelineBuilder::Layout(VulkanPipelineLayout* layout)
 {
 	pipelineInfo.layout = layout->layout;
@@ -608,7 +628,7 @@ ComputePipelineBuilder& ComputePipelineBuilder::ComputeShader(VulkanShader* shad
 std::unique_ptr<VulkanPipeline> ComputePipelineBuilder::Create(VulkanDevice* device)
 {
 	VkPipeline pipeline;
-	vkCreateComputePipelines(device->device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline);
+	vkCreateComputePipelines(device->device, cache ? cache->cache : VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline);
 	auto obj = std::make_unique<VulkanPipeline>(device, pipeline);
 	if (debugName)
 		obj->SetDebugName(debugName);
@@ -871,6 +891,12 @@ GraphicsPipelineBuilder& GraphicsPipelineBuilder::RasterizationSamples(VkSampleC
 	return *this;
 }
 
+GraphicsPipelineBuilder& GraphicsPipelineBuilder::Cache(VulkanPipelineCache* cache)
+{
+	this->cache = cache;
+	return *this;
+}
+
 GraphicsPipelineBuilder& GraphicsPipelineBuilder::Subpass(int subpass)
 {
 	pipelineInfo.subpass = subpass;
@@ -1087,7 +1113,7 @@ GraphicsPipelineBuilder& GraphicsPipelineBuilder::AddDynamicState(VkDynamicState
 std::unique_ptr<VulkanPipeline> GraphicsPipelineBuilder::Create(VulkanDevice* device)
 {
 	VkPipeline pipeline = 0;
-	VkResult result = vkCreateGraphicsPipelines(device->device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline);
+	VkResult result = vkCreateGraphicsPipelines(device->device, cache ? cache->cache : VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline);
 	CheckVulkanError(result, "Could not create graphics pipeline");
 	auto obj = std::make_unique<VulkanPipeline>(device, pipeline);
 	if (debugName)
@@ -1128,6 +1154,54 @@ std::unique_ptr<VulkanPipelineLayout> PipelineLayoutBuilder::Create(VulkanDevice
 	VkResult result = vkCreatePipelineLayout(device->device, &pipelineLayoutInfo, nullptr, &pipelineLayout);
 	CheckVulkanError(result, "Could not create pipeline layout");
 	auto obj = std::make_unique<VulkanPipelineLayout>(device, pipelineLayout);
+	if (debugName)
+		obj->SetDebugName(debugName);
+	return obj;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
+PipelineCacheBuilder::PipelineCacheBuilder()
+{
+	pipelineCacheInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+}
+
+PipelineCacheBuilder& PipelineCacheBuilder::InitialData(const void* data, size_t size)
+{
+	initData.resize(size);
+	memcpy(initData.data(), data, size);
+	return *this;
+}
+
+PipelineCacheBuilder& PipelineCacheBuilder::Flags(VkPipelineCacheCreateFlags flags)
+{
+	pipelineCacheInfo.flags = flags;
+	return *this;
+}
+
+std::unique_ptr<VulkanPipelineCache> PipelineCacheBuilder::Create(VulkanDevice* device)
+{
+	pipelineCacheInfo.pInitialData = nullptr;
+	pipelineCacheInfo.initialDataSize = 0;
+
+	// Check if the saved cache data is compatible with our device:
+	if (initData.size() >= sizeof(VkPipelineCacheHeaderVersionOne))
+	{
+		VkPipelineCacheHeaderVersionOne* header = (VkPipelineCacheHeaderVersionOne*)initData.data();
+		if (header->headerVersion == VK_PIPELINE_CACHE_HEADER_VERSION_ONE &&
+			header->vendorID == device->PhysicalDevice.Properties.Properties.vendorID &&
+			header->deviceID == device->PhysicalDevice.Properties.Properties.deviceID &&
+			memcmp(header->pipelineCacheUUID, device->PhysicalDevice.Properties.Properties.pipelineCacheUUID, VK_UUID_SIZE) == 0)
+		{
+			pipelineCacheInfo.pInitialData = initData.data();
+			pipelineCacheInfo.initialDataSize = initData.size();
+		}
+	}
+
+	VkPipelineCache pipelineCache;
+	VkResult result = vkCreatePipelineCache(device->device, &pipelineCacheInfo, nullptr, &pipelineCache);
+	CheckVulkanError(result, "Could not create pipeline cache");
+	auto obj = std::make_unique<VulkanPipelineCache>(device, pipelineCache);
 	if (debugName)
 		obj->SetDebugName(debugName);
 	return obj;
@@ -1543,11 +1617,11 @@ std::shared_ptr<VulkanInstance> VulkanInstanceBuilder::Create()
 
 /////////////////////////////////////////////////////////////////////////////
 
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+
 VulkanSurfaceBuilder::VulkanSurfaceBuilder()
 {
 }
-
-#ifdef VK_USE_PLATFORM_WIN32_KHR
 
 VulkanSurfaceBuilder& VulkanSurfaceBuilder::Win32Window(HWND hwnd)
 {
@@ -1555,26 +1629,12 @@ VulkanSurfaceBuilder& VulkanSurfaceBuilder::Win32Window(HWND hwnd)
 	return *this;
 }
 
-#elif defined(VK_USE_PLATFORM_XLIB_KHR)
-
-VulkanSurfaceBuilder& VulkanSurfaceBuilder::X11Window(Display* disp, Window wind)
-{
-	this->disp = disp;
-	this->wind = wind;
-}
-
-#endif
-
 std::shared_ptr<VulkanSurface> VulkanSurfaceBuilder::Create(std::shared_ptr<VulkanInstance> instance)
 {
-#ifdef VK_USE_PLATFORM_WIN32_KHR
 	return std::make_shared<VulkanSurface>(std::move(instance), hwnd);
-#elif defined(VK_USE_PLATFORM_XLIB_KHR)
-	return std::make_shared<VulkanSurface>(std::move(instance), disp, wind);
-#else
-	return std::make_shared<VulkanSurface>(std::move(instance));
-#endif
 }
+
+#endif
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -1721,13 +1781,13 @@ std::vector<VulkanCompatibleDevice> VulkanDeviceBuilder::FindDevices(const std::
 	{
 		// Sort by GPU type first. This will ensure the "best" device is most likely to map to vk_device 0
 		static const int typeSort[] = { 4, 1, 0, 2, 3 };
-		int sortA = a.Device->Properties.deviceType < 5 ? typeSort[a.Device->Properties.deviceType] : (int)a.Device->Properties.deviceType;
-		int sortB = b.Device->Properties.deviceType < 5 ? typeSort[b.Device->Properties.deviceType] : (int)b.Device->Properties.deviceType;
+		int sortA = a.Device->Properties.Properties.deviceType < 5 ? typeSort[a.Device->Properties.Properties.deviceType] : (int)a.Device->Properties.Properties.deviceType;
+		int sortB = b.Device->Properties.Properties.deviceType < 5 ? typeSort[b.Device->Properties.Properties.deviceType] : (int)b.Device->Properties.Properties.deviceType;
 		if (sortA != sortB)
 			return sortA < sortB;
 
 		// Then sort by the device's unique ID so that vk_device uses a consistent order
-		int sortUUID = memcmp(a.Device->Properties.pipelineCacheUUID, b.Device->Properties.pipelineCacheUUID, VK_UUID_SIZE);
+		int sortUUID = memcmp(a.Device->Properties.Properties.pipelineCacheUUID, b.Device->Properties.Properties.pipelineCacheUUID, VK_UUID_SIZE);
 		return sortUUID < 0;
 	};
 	std::stable_sort(supportedDevices.begin(), supportedDevices.end(), sortFunc);

@@ -117,7 +117,7 @@ UBOOL UVulkanRenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT N
 
 		if (VkDebug)
 		{
-			const auto& props = Device->PhysicalDevice.Properties;
+			const auto& props = Device->PhysicalDevice.Properties.Properties;
 
 			FString deviceType;
 			switch (props.deviceType)
@@ -387,12 +387,7 @@ UBOOL UVulkanRenderDevice::Exec(const TCHAR* Cmd, FOutputDevice& Ar)
 	}
 	else if (ParseCommand(&Cmd, TEXT("VSTAT")))
 	{
-		if (ParseCommand(&Cmd, TEXT("Memory")))
-		{
-			StatMemory = !StatMemory;
-			return 1;
-		}
-		else if (ParseCommand(&Cmd, TEXT("Resources")))
+		if (ParseCommand(&Cmd, TEXT("Resources")))
 		{
 			StatResources = !StatResources;
 			return 1;
@@ -413,16 +408,8 @@ UBOOL UVulkanRenderDevice::Exec(const TCHAR* Cmd, FOutputDevice& Ar)
 
 		for (size_t i = 0; i < supportedDevices.size(); i++)
 		{
-			Ar.Log(FString::Printf(TEXT("#%d - %s\r\n"), (int)i, to_utf16(supportedDevices[i].Device->Properties.deviceName)));
+			Ar.Log(FString::Printf(TEXT("#%d - %s\r\n"), (int)i, to_utf16(supportedDevices[i].Device->Properties.Properties.deviceName)));
 		}
-		return 1;
-	}
-	else if (ParseCommand(&Cmd, TEXT("VkMemStats")))
-	{
-		VmaStats stats = {};
-		vmaCalculateStats(Device->allocator, &stats);
-		Ar.Log(FString::Printf(TEXT("Allocated objects: %d, used bytes: %d MB\r\n"), (int)stats.total.allocationCount, (int)stats.total.usedBytes / (1024 * 1024)));
-		Ar.Log(FString::Printf(TEXT("Unused range count: %d, unused bytes: %d MB\r\n"), (int)stats.total.unusedRangeCount, (int)stats.total.unusedBytes / (1024 * 1024)));
 		return 1;
 	}
 	else
@@ -494,7 +481,7 @@ void UVulkanRenderDevice::Unlock(UBOOL Blit)
 
 	try
 	{
-		if (Blit && (StatMemory || StatResources || StatDraw))
+		if (Blit && (StatResources || StatDraw))
 		{
 			UCanvas* canvas = Viewport->Canvas;
 			canvas->CurX = 16;
@@ -503,20 +490,8 @@ void UVulkanRenderDevice::Unlock(UBOOL Blit)
 
 			int y = 110;
 
-			if (StatMemory)
-			{
-				VmaStats stats = {};
-				vmaCalculateStats(Device->allocator, &stats);
-				canvas->CurX = 16;
-				canvas->CurY = y;
-				canvas->WrappedPrintf(canvas->SmallFont, 0, TEXT("Allocated objects: %d, used bytes: %d MB\r\n"), (int)stats.total.allocationCount, (int)stats.total.usedBytes / (1024 * 1024));
-				y += 8;
-			}
-
 			if (StatResources)
 			{
-				VmaStats stats = {};
-				vmaCalculateStats(Device->allocator, &stats);
 				canvas->CurX = 16;
 				canvas->CurY = y;
 				canvas->WrappedPrintf(canvas->SmallFont, 0, TEXT("Textures in cache: %d\r\n"), Textures->GetTexturesInCache());
@@ -525,8 +500,6 @@ void UVulkanRenderDevice::Unlock(UBOOL Blit)
 
 			if (StatDraw)
 			{
-				VmaStats stats = {};
-				vmaCalculateStats(Device->allocator, &stats);
 				canvas->CurX = 16;
 				canvas->CurY = y;
 				canvas->WrappedPrintf(canvas->SmallFont, 0, TEXT("Draw calls: %d, Complex surfaces: %d, Gouraud polygons: %d, Tiles: %d; Uploads: %d, Rect Uploads: %d\r\n"), Stats.DrawCalls, Stats.ComplexSurfaces, Stats.GouraudPolygons, Stats.Tiles, Stats.Uploads, Stats.RectUploads);
