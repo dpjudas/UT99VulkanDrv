@@ -119,7 +119,7 @@ std::string FileResource::readAllText(const std::string& filename)
 				{
 					float fadedistance = 380.0f;
 					float a = clamp(2.0f - (1.0f / gl_FragCoord.w) / fadedistance, 0.0f, 1.0f);
-					vec4 detailColor = (textureDetail(texCoord4) - 0.5) * 0.5 + 1.0;
+					vec4 detailColor = (textureDetail(texCoord4) - 0.5) * 0.8 + 1.0;
 					outColor.rgb = mix(outColor.rgb, outColor.rgb * detailColor.rgb, a);
 				}
 				else if ((flags & 8) != 0) // Fog map
