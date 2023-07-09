@@ -1310,7 +1310,7 @@ void UD3D11RenderDevice::SetSceneNode(FSceneNode* Frame)
 
 	D3D11_VIEWPORT viewport = {};
 	viewport.TopLeftX = Frame->XB;
-	viewport.TopLeftY = Frame->YB;
+	viewport.TopLeftY = SceneBuffers.Height - Frame->YB - Frame->Y;
 	viewport.Width = Frame->X;
 	viewport.Height = Frame->Y;
 	viewport.MinDepth = 0.0f;
