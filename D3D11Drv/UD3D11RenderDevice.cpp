@@ -321,7 +321,7 @@ void UD3D11RenderDevice::CreateScenePass()
 
 	for (int i = 0; i < 4; i++)
 	{
-		D3D11_FILTER filter = (i & 1) ? D3D11_FILTER_MIN_MAG_MIP_POINT : D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+		D3D11_FILTER filter = (i & 1) ? D3D11_FILTER_MIN_MAG_MIP_POINT : D3D11_FILTER_ANISOTROPIC;
 		D3D11_TEXTURE_ADDRESS_MODE addressmode = (i & 2) ? D3D11_TEXTURE_ADDRESS_CLAMP : D3D11_TEXTURE_ADDRESS_WRAP;
 		D3D11_SAMPLER_DESC samplerDesc = {};
 		samplerDesc.MinLOD = 0;
@@ -1345,8 +1345,8 @@ void UD3D11RenderDevice::DrawBatch()
 		{
 			Batch.Tex ? Batch.Tex->View : Textures->GetNullTexture()->View,
 			Batch.Lightmap ? Batch.Lightmap->View : Textures->GetNullTexture()->View,
-			Batch.Detailtex ? Batch.Detailtex->View : Textures->GetNullTexture()->View,
-			Batch.Macrotex ? Batch.Macrotex->View : Textures->GetNullTexture()->View
+			Batch.Macrotex ? Batch.Macrotex->View : Textures->GetNullTexture()->View,
+			Batch.Detailtex ? Batch.Detailtex->View : Textures->GetNullTexture()->View
 		};
 
 		ID3D11SamplerState* samplers[4] =
