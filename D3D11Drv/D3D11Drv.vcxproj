@@ -129,11 +129,6 @@
   <ItemGroup>
     <None Include="..\D3D11Drv.int" />
   </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\ShaderCompiler\ShaderCompiler.vcxproj">
-      <Project>{4deae017-3206-4351-bb75-4947d0314829}</Project>
-    </ProjectReference>
-  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
