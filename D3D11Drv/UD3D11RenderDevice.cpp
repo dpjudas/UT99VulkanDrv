@@ -128,6 +128,9 @@ UBOOL UD3D11RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 {
 	guard(UD3D11RenderDevice::SetRes);
 
+	ReleaseObject(BackBuffer);
+	ReleaseObject(BackBufferView);
+
 	if (SceneBuffers.Width != NewX || SceneBuffers.Height != NewY)
 	{
 		HRESULT result = SwapChain->ResizeBuffers(2, NewX, NewY, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
@@ -138,9 +141,17 @@ UBOOL UD3D11RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 	if (!Viewport->ResizeViewport(Fullscreen ? (BLIT_Fullscreen | BLIT_Direct3D) : (BLIT_HardwarePaint | BLIT_Direct3D), NewX, NewY, NewColorBytes))
 		return 0;
 
+	HRESULT result = SwapChain->SetFullscreenState(Fullscreen ? TRUE : FALSE, nullptr);
+	if (FAILED(result))
+		return FALSE;
+
 	ResizeSceneBuffers(NewX, NewY);
 
-	HRESULT result = SwapChain->SetFullscreenState(Fullscreen ? TRUE : FALSE, nullptr);
+	result = SwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**)&BackBuffer);
+	if (FAILED(result))
+		return FALSE;
+
+	result = Device->CreateRenderTargetView(BackBuffer, nullptr, &BackBufferView);
 	if (FAILED(result))
 		return FALSE;
 
@@ -669,7 +680,7 @@ void UD3D11RenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane Scr
 	FlashScale = InFlashScale;
 	FlashFog = InFlashFog;
 
-	FLOAT color[4] = { 0.0f, 1.0f, 0.0f, 1.0f };
+	FLOAT color[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
 	Context->ClearRenderTargetView(SceneBuffers.ColorBufferView, color);
 	Context->ClearDepthStencilView(SceneBuffers.DepthBufferView, D3D11_CLEAR_DEPTH, 1.0f, 0);
 	Context->OMSetRenderTargets(1, &SceneBuffers.ColorBufferView, SceneBuffers.DepthBufferView);
