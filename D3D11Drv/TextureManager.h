@@ -18,7 +18,10 @@ public:
 	void ClearCache();
 	int GetTexturesInCache() { return TextureCache[0].size() + TextureCache[1].size(); }
 
+	CachedTexture* GetNullTexture();
+
 private:
 	UD3D11RenderDevice* renderer = nullptr;
 	std::map<QWORD, std::unique_ptr<CachedTexture>> TextureCache[2];
+	std::unique_ptr<CachedTexture> NullTexture;
 };

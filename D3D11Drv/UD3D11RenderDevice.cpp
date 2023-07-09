@@ -1,8 +1,10 @@
 
 #include "Precomp.h"
 #include "UD3D11RenderDevice.h"
+#include "CachedTexture.h"
 #include "UTF16.h"
 #include "FileResource.h"
+#include "halffloat.h"
 #include <set>
 
 IMPLEMENT_CLASS(UD3D11RenderDevice);
@@ -81,7 +83,7 @@ UBOOL UD3D11RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 			nullptr,
 			D3D_DRIVER_TYPE_HARDWARE,
 			0,
-			0/*D3D11_CREATE_DEVICE_SINGLETHREADED | D3D11_CREATE_DEVICE_BGRA_SUPPORT*/,
+			D3D11_CREATE_DEVICE_SINGLETHREADED | D3D11_CREATE_DEVICE_BGRA_SUPPORT,
 			featurelevels.data(), (UINT)featurelevels.size(),
 			D3D11_SDK_VERSION,
 			&swapDesc,
@@ -153,6 +155,18 @@ UBOOL UD3D11RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 void UD3D11RenderDevice::Exit()
 {
 	guard(UD3D11RenderDevice::Exit);
+
+	if (SceneVertices)
+	{
+		Context->Unmap(ScenePass.VertexBuffer, 0);
+		SceneVertices = nullptr;
+	}
+
+	if (SceneIndexes)
+	{
+		Context->Unmap(ScenePass.IndexBuffer, 0);
+		SceneIndexes = nullptr;
+	}
 
 	Uploads.reset();
 	Textures.reset();
@@ -274,23 +288,23 @@ void UD3D11RenderDevice::CreateScenePass()
 
 	std::vector<D3D11_INPUT_ELEMENT_DESC> elements =
 	{
-		{ "AttrFlags", 0, DXGI_FORMAT_R32G32_FLOAT, 0, offsetof(SceneVertex, Flags), D3D11_INPUT_PER_VERTEX_DATA, 0 },
+		{ "AttrFlags", 0, DXGI_FORMAT_R32_UINT, 0, offsetof(SceneVertex, Flags), D3D11_INPUT_PER_VERTEX_DATA, 0 },
 		{ "AttrPos", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(SceneVertex, Position), D3D11_INPUT_PER_VERTEX_DATA, 0 },
-		{ "AttrTexCoord", 0, DXGI_FORMAT_R32G32_FLOAT, 0, offsetof(SceneVertex, TexCoord), D3D11_INPUT_PER_VERTEX_DATA, 0 },
-		{ "AttrTexCoord2", 0, DXGI_FORMAT_R32G32_FLOAT, 0, offsetof(SceneVertex, TexCoord2), D3D11_INPUT_PER_VERTEX_DATA, 0 },
-		{ "AttrTexCoord3", 0, DXGI_FORMAT_R32G32_FLOAT, 0, offsetof(SceneVertex, TexCoord3), D3D11_INPUT_PER_VERTEX_DATA, 0 },
-		{ "AttrTexCoord4", 0, DXGI_FORMAT_R32G32_FLOAT, 0, offsetof(SceneVertex, TexCoord4), D3D11_INPUT_PER_VERTEX_DATA, 0 },
+		{ "AttrTexCoordOne", 0, DXGI_FORMAT_R32G32_FLOAT, 0, offsetof(SceneVertex, TexCoord), D3D11_INPUT_PER_VERTEX_DATA, 0 },
+		{ "AttrTexCoordTwo", 0, DXGI_FORMAT_R32G32_FLOAT, 0, offsetof(SceneVertex, TexCoord2), D3D11_INPUT_PER_VERTEX_DATA, 0 },
+		{ "AttrTexCoordThree", 0, DXGI_FORMAT_R32G32_FLOAT, 0, offsetof(SceneVertex, TexCoord3), D3D11_INPUT_PER_VERTEX_DATA, 0 },
+		{ "AttrTexCoordFour", 0, DXGI_FORMAT_R32G32_FLOAT, 0, offsetof(SceneVertex, TexCoord4), D3D11_INPUT_PER_VERTEX_DATA, 0 },
 		{ "AttrColor", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, offsetof(SceneVertex, Color), D3D11_INPUT_PER_VERTEX_DATA, 0 }
 	};
 
 	result = Device->CreateInputLayout(elements.data(), (UINT)elements.size(), vscode.data(), vscode.size(), &ScenePass.InputLayout);
 	ThrowIfFailed(result, "CreateInputLayout(ScenePass.InputLayout) failed");
 
-	std::vector<uint8_t> pscode = CompileHlsl("shaders/Present.frag", "ps");
+	std::vector<uint8_t> pscode = CompileHlsl("shaders/Scene.frag", "ps");
 	result = Device->CreatePixelShader(pscode.data(), pscode.size(), nullptr, &ScenePass.PixelShader);
 	ThrowIfFailed(result, "CreatePixelShader(ScenePass.PixelShader) failed");
 
-	std::vector<uint8_t> pscodeAT = CompileHlsl("shaders/Present.frag", "ps", { "ALPHATEST" });
+	std::vector<uint8_t> pscodeAT = CompileHlsl("shaders/Scene.frag", "ps", { "ALPHATEST" });
 	result = Device->CreatePixelShader(pscodeAT.data(), pscodeAT.size(), nullptr, &ScenePass.PixelShaderAlphaTest);
 	ThrowIfFailed(result, "CreatePixelShader(ScenePass.PixelShaderAlphaTest) failed");
 
@@ -299,8 +313,8 @@ void UD3D11RenderDevice::CreateScenePass()
 		D3D11_FILTER filter = (i & 1) ? D3D11_FILTER_MIN_MAG_MIP_POINT : D3D11_FILTER_MIN_MAG_MIP_LINEAR;
 		D3D11_TEXTURE_ADDRESS_MODE addressmode = (i & 2) ? D3D11_TEXTURE_ADDRESS_CLAMP : D3D11_TEXTURE_ADDRESS_WRAP;
 		D3D11_SAMPLER_DESC samplerDesc = {};
-		samplerDesc.MinLOD = -FLT_MAX;
-		samplerDesc.MaxLOD = FLT_MAX;
+		samplerDesc.MinLOD = 0;
+		samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
 		samplerDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
 		samplerDesc.BorderColor[0] = 1.0f;
 		samplerDesc.BorderColor[1] = 1.0f;
@@ -312,7 +326,8 @@ void UD3D11RenderDevice::CreateScenePass()
 		samplerDesc.AddressU = addressmode;
 		samplerDesc.AddressV = addressmode;
 		samplerDesc.AddressW = addressmode;
-		Device->CreateSamplerState(&samplerDesc, &ScenePass.Samplers[i]);
+		result = Device->CreateSamplerState(&samplerDesc, &ScenePass.Samplers[i]);
+		ThrowIfFailed(result, "CreateSamplerState(ScenePass.Samplers) failed");
 	}
 
 	D3D11_RASTERIZER_DESC rasterizerDesc = {};
@@ -371,7 +386,8 @@ void UD3D11RenderDevice::CreateScenePass()
 		ThrowIfFailed(result, "CreateBlendState(ScenePass.Pipelines.BlendState) failed");
 
 		D3D11_DEPTH_STENCIL_DESC depthStencilDesc = {};
-		depthStencilDesc.DepthFunc = D3D11_COMPARISON_ALWAYS;
+		depthStencilDesc.DepthEnable = TRUE;
+		depthStencilDesc.DepthFunc = D3D11_COMPARISON_LESS_EQUAL;
 		if (i & 8) // PF_Occlude
 			depthStencilDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
 		else
@@ -549,6 +565,7 @@ void UD3D11RenderDevice::Flush(UBOOL AllowPrecache)
 {
 	guard(UD3D11RenderDevice::Flush);
 
+	DrawBatch();
 	ClearTextureCache();
 
 	if (AllowPrecache && UsePrecache && !GIsEditor)
@@ -652,15 +669,45 @@ void UD3D11RenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane Scr
 	FlashScale = InFlashScale;
 	FlashFog = InFlashFog;
 
-	FLOAT color[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+	FLOAT color[4] = { 0.0f, 1.0f, 0.0f, 1.0f };
 	Context->ClearRenderTargetView(SceneBuffers.ColorBufferView, color);
 	Context->ClearDepthStencilView(SceneBuffers.DepthBufferView, D3D11_CLEAR_DEPTH, 1.0f, 0);
 	Context->OMSetRenderTargets(1, &SceneBuffers.ColorBufferView, SceneBuffers.DepthBufferView);
+
+	UINT stride = sizeof(SceneVertex);
+	UINT offset = 0;
+	Context->IASetVertexBuffers(0, 1, &ScenePass.VertexBuffer, &stride, &offset);
+	Context->IASetIndexBuffer(ScenePass.IndexBuffer, DXGI_FORMAT_R32_UINT, 0);
+	Context->IASetInputLayout(ScenePass.InputLayout);
+	Context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	Context->VSSetShader(ScenePass.VertexShader, nullptr, 0);
+	Context->VSSetConstantBuffers(0, 1, &ScenePass.ConstantBuffer);
+	Context->RSSetState(ScenePass.RasterizerState);
 
 	D3D11_RECT box = {};
 	box.right = Viewport->SizeX;
 	box.bottom = Viewport->SizeY;
 	Context->RSSetScissorRects(1, &box);
+
+	if (!SceneVertices)
+	{
+		D3D11_MAPPED_SUBRESOURCE mappedVertexBuffer = {};
+		HRESULT result = Context->Map(ScenePass.VertexBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedVertexBuffer);
+		if (SUCCEEDED(result))
+		{
+			SceneVertices = (SceneVertex*)mappedVertexBuffer.pData;
+		}
+	}
+
+	if (!SceneIndexes)
+	{
+		D3D11_MAPPED_SUBRESOURCE mappedIndexBuffer = {};
+		HRESULT result = Context->Map(ScenePass.IndexBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedIndexBuffer);
+		if (SUCCEEDED(result))
+		{
+			SceneIndexes = (uint32_t*)mappedIndexBuffer.pData;
+		}
+	}
 
 	IsLocked = true;
 
@@ -673,6 +720,8 @@ void UD3D11RenderDevice::Unlock(UBOOL Blit)
 
 	if (Blit)
 	{
+		DrawBatch();
+
 		if (Multisample > 1)
 		{
 			Context->ResolveSubresource(SceneBuffers.PPImage, 0, SceneBuffers.ColorBuffer, 0, DXGI_FORMAT_R16G16B16A16_FLOAT);
@@ -715,6 +764,28 @@ void UD3D11RenderDevice::Unlock(UBOOL Blit)
 		Context->Draw(6, 0);
 
 		SwapChain->Present(UseVSync ? 1 : 0, 0);
+
+		Batch.Pipeline = nullptr;
+		Batch.Tex = nullptr;
+		Batch.Lightmap = nullptr;
+		Batch.Detailtex = nullptr;
+		Batch.Macrotex = nullptr;
+		Batch.SceneIndexStart = 0;
+
+		if (SceneVertices)
+		{
+			Context->Unmap(ScenePass.VertexBuffer, 0);
+			SceneVertices = nullptr;
+		}
+
+		if (SceneIndexes)
+		{
+			Context->Unmap(ScenePass.IndexBuffer, 0);
+			SceneIndexes = nullptr;
+		}
+
+		SceneVertexPos = 0;
+		SceneIndexPos = 0;
 	}
 
 	Context->OMSetRenderTargets(0, nullptr, nullptr);
@@ -746,6 +817,108 @@ void UD3D11RenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Sur
 {
 	guard(UD3D11RenderDevice::DrawComplexSurface);
 
+	CachedTexture* tex = Textures->GetTexture(Surface.Texture, !!(Surface.PolyFlags & PF_Masked));
+	CachedTexture* lightmap = Textures->GetTexture(Surface.LightMap, false);
+	CachedTexture* macrotex = Textures->GetTexture(Surface.MacroTexture, false);
+	CachedTexture* detailtex = Textures->GetTexture(Surface.DetailTexture, false);
+	CachedTexture* fogmap = Textures->GetTexture(Surface.FogMap, false);
+
+	if ((Surface.DetailTexture && Surface.FogMap) || (!DetailTextures)) detailtex = nullptr;
+
+	float UDot = Facet.MapCoords.XAxis | Facet.MapCoords.Origin;
+	float VDot = Facet.MapCoords.YAxis | Facet.MapCoords.Origin;
+
+	float UPan = tex ? UDot + Surface.Texture->Pan.X : 0.0f;
+	float VPan = tex ? VDot + Surface.Texture->Pan.Y : 0.0f;
+	float UMult = tex ? GetUMult(*Surface.Texture) : 0.0f;
+	float VMult = tex ? GetVMult(*Surface.Texture) : 0.0f;
+	float LMUPan = lightmap ? UDot + Surface.LightMap->Pan.X - 0.5f * Surface.LightMap->UScale : 0.0f;
+	float LMVPan = lightmap ? VDot + Surface.LightMap->Pan.Y - 0.5f * Surface.LightMap->VScale : 0.0f;
+	float LMUMult = lightmap ? GetUMult(*Surface.LightMap) : 0.0f;
+	float LMVMult = lightmap ? GetVMult(*Surface.LightMap) : 0.0f;
+	float MacroUPan = macrotex ? UDot + Surface.MacroTexture->Pan.X : 0.0f;
+	float MacroVPan = macrotex ? VDot + Surface.MacroTexture->Pan.Y : 0.0f;
+	float MacroUMult = macrotex ? GetUMult(*Surface.MacroTexture) : 0.0f;
+	float MacroVMult = macrotex ? GetVMult(*Surface.MacroTexture) : 0.0f;
+	float DetailUPan = detailtex ? UDot + Surface.DetailTexture->Pan.X : 0.0f;
+	float DetailVPan = detailtex ? VDot + Surface.DetailTexture->Pan.Y : 0.0f;
+	float DetailUMult = detailtex ? GetUMult(*Surface.DetailTexture) : 0.0f;
+	float DetailVMult = detailtex ? GetVMult(*Surface.DetailTexture) : 0.0f;
+
+	uint32_t flags = 0;
+	if (lightmap) flags |= 1;
+	if (macrotex) flags |= 2;
+	if (detailtex && !fogmap) flags |= 4;
+	if (fogmap) flags |= 8;
+
+	if (fogmap) // if Surface.FogMap exists, use instead of detail texture
+	{
+		detailtex = fogmap;
+		DetailUPan = UDot + Surface.FogMap->Pan.X - 0.5f * Surface.FogMap->UScale;
+		DetailVPan = VDot + Surface.FogMap->Pan.Y - 0.5f * Surface.FogMap->VScale;
+		DetailUMult = GetUMult(*Surface.FogMap);
+		DetailVMult = GetVMult(*Surface.FogMap);
+	}
+
+	SetPipeline(Surface.PolyFlags);
+	SetDescriptorSet(Surface.PolyFlags, tex, lightmap, macrotex, detailtex);
+
+	if (!SceneVertices || !SceneIndexes) return;
+
+	uint32_t vpos = SceneVertexPos;
+	uint32_t ipos = SceneIndexPos;
+
+	SceneVertex* vptr = SceneVertices + vpos;
+	uint32_t* iptr = SceneIndexes + ipos;
+
+	uint32_t istart = ipos;
+	uint32_t icount = 0;
+
+	for (FSavedPoly* Poly = Facet.Polys; Poly; Poly = Poly->Next)
+	{
+		auto pts = Poly->Pts;
+		uint32_t vcount = Poly->NumPts;
+		if (vcount < 3) continue;
+
+		for (uint32_t i = 0; i < vcount; i++)
+		{
+			FVector point = pts[i]->Point;
+			FLOAT u = Facet.MapCoords.XAxis | point;
+			FLOAT v = Facet.MapCoords.YAxis | point;
+
+			vptr->Flags = flags;
+			vptr->Position.x = point.X;
+			vptr->Position.y = point.Y;
+			vptr->Position.z = point.Z;
+			vptr->TexCoord.s = (u - UPan) * UMult;
+			vptr->TexCoord.t = (v - VPan) * VMult;
+			vptr->TexCoord2.s = (u - LMUPan) * LMUMult;
+			vptr->TexCoord2.t = (v - LMVPan) * LMVMult;
+			vptr->TexCoord3.s = (u - MacroUPan) * MacroUMult;
+			vptr->TexCoord3.t = (v - MacroVPan) * MacroVMult;
+			vptr->TexCoord4.s = (u - DetailUPan) * DetailUMult;
+			vptr->TexCoord4.t = (v - DetailVPan) * DetailVMult;
+			vptr->Color.r = 1.0f;
+			vptr->Color.g = 1.0f;
+			vptr->Color.b = 1.0f;
+			vptr->Color.a = 1.0f;
+			vptr++;
+		}
+
+		for (uint32_t i = vpos + 2; i < vpos + vcount; i++)
+		{
+			*(iptr++) = vpos;
+			*(iptr++) = i - 1;
+			*(iptr++) = i;
+		}
+
+		vpos += vcount;
+		icount += (vcount - 2) * 3;
+	}
+
+	SceneVertexPos = vpos;
+	SceneIndexPos = ipos + icount;
+
 	unguard;
 }
 
@@ -755,12 +928,151 @@ void UD3D11RenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& Inf
 
 	if (NumPts < 3) return; // This can apparently happen!!
 
+	CachedTexture* tex = Textures->GetTexture(&Info, !!(PolyFlags & PF_Masked));
+
+	SetPipeline(PolyFlags);
+	SetDescriptorSet(PolyFlags, tex);
+
+	if (!SceneVertices || !SceneIndexes) return;
+
+	float UMult = GetUMult(Info);
+	float VMult = GetVMult(Info);
+	int flags = (PolyFlags & (PF_RenderFog | PF_Translucent | PF_Modulated)) == PF_RenderFog ? 16 : 0;
+
+	if (PolyFlags & PF_Modulated)
+	{
+		SceneVertex* vertex = &SceneVertices[SceneVertexPos];
+		for (INT i = 0; i < NumPts; i++)
+		{
+			FTransTexture* P = Pts[i];
+			vertex->Flags = flags;
+			vertex->Position.x = P->Point.X;
+			vertex->Position.y = P->Point.Y;
+			vertex->Position.z = P->Point.Z;
+			vertex->TexCoord.s = P->U * UMult;
+			vertex->TexCoord.t = P->V * VMult;
+			vertex->TexCoord2.s = P->Fog.X;
+			vertex->TexCoord2.t = P->Fog.Y;
+			vertex->TexCoord3.s = P->Fog.Z;
+			vertex->TexCoord3.t = P->Fog.W;
+			vertex->TexCoord4.s = 0.0f;
+			vertex->TexCoord4.t = 0.0f;
+			vertex->Color.r = 1.0f;
+			vertex->Color.g = 1.0f;
+			vertex->Color.b = 1.0f;
+			vertex->Color.a = 1.0f;
+			vertex++;
+		}
+	}
+	else
+	{
+		SceneVertex* vertex = &SceneVertices[SceneVertexPos];
+		for (INT i = 0; i < NumPts; i++)
+		{
+			FTransTexture* P = Pts[i];
+			vertex->Flags = flags;
+			vertex->Position.x = P->Point.X;
+			vertex->Position.y = P->Point.Y;
+			vertex->Position.z = P->Point.Z;
+			vertex->TexCoord.s = P->U * UMult;
+			vertex->TexCoord.t = P->V * VMult;
+			vertex->TexCoord2.s = P->Fog.X;
+			vertex->TexCoord2.t = P->Fog.Y;
+			vertex->TexCoord3.s = P->Fog.Z;
+			vertex->TexCoord3.t = P->Fog.W;
+			vertex->TexCoord4.s = 0.0f;
+			vertex->TexCoord4.t = 0.0f;
+			vertex->Color.r = P->Light.X;
+			vertex->Color.g = P->Light.Y;
+			vertex->Color.b = P->Light.Z;
+			vertex->Color.a = 1.0f;
+			vertex++;
+		}
+	}
+
+	size_t vstart = SceneVertexPos;
+	size_t vcount = NumPts;
+	size_t istart = SceneIndexPos;
+	size_t icount = (vcount - 2) * 3;
+
+	uint32_t* iptr = SceneIndexes + istart;
+	for (uint32_t i = vstart + 2; i < vstart + vcount; i++)
+	{
+		*(iptr++) = vstart;
+		*(iptr++) = i - 1;
+		*(iptr++) = i;
+	}
+
+	SceneVertexPos += vcount;
+	SceneIndexPos += icount;
+
 	unguard;
 }
 
 void UD3D11RenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT X, FLOAT Y, FLOAT XL, FLOAT YL, FLOAT U, FLOAT V, FLOAT UL, FLOAT VL, class FSpanBuffer* Span, FLOAT Z, FPlane Color, FPlane Fog, DWORD PolyFlags)
 {
 	guard(UD3D11RenderDevice::DrawTile);
+
+	if ((PolyFlags & (PF_Modulated)) == (PF_Modulated) && Info.Format == TEXF_P8)
+		PolyFlags = PF_Modulated;
+
+	CachedTexture* tex = Textures->GetTexture(&Info, !!(PolyFlags & PF_Masked));
+
+	SetPipeline(PolyFlags);
+	SetDescriptorSet(PolyFlags, tex, nullptr, nullptr, nullptr, true);
+
+	if (!SceneVertices || !SceneIndexes) return;
+
+	float UMult = tex ? GetUMult(Info) : 0.0f;
+	float VMult = tex ? GetVMult(Info) : 0.0f;
+
+	SceneVertex* v = &SceneVertices[SceneVertexPos];
+
+	float r, g, b, a;
+	if (PolyFlags & PF_Modulated)
+	{
+		r = 1.0f;
+		g = 1.0f;
+		b = 1.0f;
+	}
+	else
+	{
+		r = Color.X;
+		g = Color.Y;
+		b = Color.Z;
+	}
+	a = 1.0f;
+
+	if (Multisample > 0)
+	{
+		XL = std::floor(X + XL + 0.5f);
+		YL = std::floor(Y + YL + 0.5f);
+		X = std::floor(X + 0.5f);
+		Y = std::floor(Y + 0.5f);
+		XL = XL - X;
+		YL = YL - Y;
+	}
+
+	v[0] = { 0, vec3(RFX2 * Z * (X - Frame->FX2),      RFY2 * Z * (Y - Frame->FY2),      Z), vec2(U * UMult,        V * VMult),        vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec4(r, g, b, a), };
+	v[1] = { 0, vec3(RFX2 * Z * (X + XL - Frame->FX2), RFY2 * Z * (Y - Frame->FY2),      Z), vec2((U + UL) * UMult, V * VMult),        vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec4(r, g, b, a), };
+	v[2] = { 0, vec3(RFX2 * Z * (X + XL - Frame->FX2), RFY2 * Z * (Y + YL - Frame->FY2), Z), vec2((U + UL) * UMult, (V + VL) * VMult), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec4(r, g, b, a), };
+	v[3] = { 0, vec3(RFX2 * Z * (X - Frame->FX2),      RFY2 * Z * (Y + YL - Frame->FY2), Z), vec2(U * UMult,        (V + VL) * VMult), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec4(r, g, b, a), };
+
+	size_t vstart = SceneVertexPos;
+	size_t vcount = 4;
+	size_t istart = SceneIndexPos;
+	size_t icount = (vcount - 2) * 3;
+
+	uint32_t* iptr = SceneIndexes + istart;
+	for (uint32_t i = vstart + 2; i < vstart + vcount; i++)
+	{
+		*(iptr++) = vstart;
+		*(iptr++) = i - 1;
+		*(iptr++) = i;
+	}
+
+	SceneVertexPos += vcount;
+	SceneIndexPos += icount;
 
 	unguard;
 }
@@ -841,6 +1153,8 @@ void UD3D11RenderDevice::ClearZ(FSceneNode* Frame)
 {
 	guard(UD3D11RenderDevice::ClearZ);
 
+	DrawBatch();
+
 	Context->ClearDepthStencilView(SceneBuffers.DepthBufferView, D3D11_CLEAR_DEPTH, 1.0f, 0);
 
 	unguard;
@@ -869,6 +1183,54 @@ void UD3D11RenderDevice::ReadPixels(FColor* Pixels)
 {
 	guard(UD3D11RenderDevice::GetStats);
 
+	ID3D11Texture2D* stagingTexture = nullptr;
+
+	D3D11_TEXTURE2D_DESC texDesc = {};
+	texDesc.Usage = D3D11_USAGE_STAGING;
+	texDesc.BindFlags = 0;
+	texDesc.Width = SceneBuffers.Width;
+	texDesc.Height = SceneBuffers.Height;
+	texDesc.MipLevels = 1;
+	texDesc.ArraySize = 1;
+	texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+	texDesc.SampleDesc.Count = 1;
+	texDesc.SampleDesc.Quality = 0;
+	texDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+	HRESULT result = Device->CreateTexture2D(&texDesc, nullptr, &stagingTexture);
+	if (FAILED(result))
+		return;
+
+	Context->CopyResource(stagingTexture, SceneBuffers.PPImage);
+
+	D3D11_MAPPED_SUBRESOURCE mapped = {};
+	result = Context->Map(stagingTexture, 0, D3D11_MAP_READ, 0, &mapped);
+	if (SUCCEEDED(result))
+	{
+		uint8_t* srcpixels = (uint8_t*)mapped.pData;
+		int w = Viewport->SizeX;
+		int h = Viewport->SizeY;
+		void* data = Pixels;
+
+		int i = 0;
+		for (int y = 0; y < h; y++)
+		{
+			uint8_t* dest = (uint8_t*)data + (h - y - 1) * w * 4;
+			uint16_t* src = (uint16_t*)(srcpixels + y * mapped.RowPitch);
+			for (int x = 0; x < w; x++)
+			{
+				dest[2] = (int)clamp(std::round(halfToFloatSimple(*(src++)) * 255.0f), 0.0f, 255.0f);
+				dest[1] = (int)clamp(std::round(halfToFloatSimple(*(src++)) * 255.0f), 0.0f, 255.0f);
+				dest[0] = (int)clamp(std::round(halfToFloatSimple(*(src++)) * 255.0f), 0.0f, 255.0f);
+				dest[3] = (int)clamp(std::round(halfToFloatSimple(*(src++)) * 255.0f), 0.0f, 255.0f);
+				dest += 4;
+			}
+		}
+
+		Context->Unmap(stagingTexture, 0);
+	}
+
+	stagingTexture->Release();
+
 	unguard;
 }
 
@@ -877,7 +1239,45 @@ void UD3D11RenderDevice::EndFlash()
 	guard(UD3D11RenderDevice::EndFlash);
 	if (FlashScale != FPlane(0.5f, 0.5f, 0.5f, 0.0f) || FlashFog != FPlane(0.0f, 0.0f, 0.0f, 0.0f))
 	{
-		//
+		DrawBatch();
+
+		ScenePushConstants pushconstants;
+		pushconstants.objectToProjection = mat4::identity();
+		Context->UpdateSubresource(ScenePass.ConstantBuffer, 0, nullptr, &pushconstants, 0, 0);
+
+		Batch.Pipeline = &ScenePass.Pipelines[2];
+		SetDescriptorSet(0);
+
+		if (SceneVertices && SceneIndexes)
+		{
+			vec4 color(FlashFog.X, FlashFog.Y, FlashFog.Z, 1.0f - Min(FlashScale.X * 2.0f, 1.0f));
+			vec2 zero2(0.0f);
+
+			SceneVertex* v = &SceneVertices[SceneVertexPos];
+
+			v[0] = { 0, vec3(-1.0f, -1.0f, 0.0f), zero2, zero2, zero2, zero2, color };
+			v[1] = { 0, vec3(1.0f, -1.0f, 0.0f), zero2, zero2, zero2, zero2, color };
+			v[2] = { 0, vec3(1.0f,  1.0f, 0.0f), zero2, zero2, zero2, zero2, color };
+			v[3] = { 0, vec3(-1.0f,  1.0f, 0.0f), zero2, zero2, zero2, zero2, color };
+
+			size_t vstart = SceneVertexPos;
+			size_t vcount = 4;
+			size_t istart = SceneIndexPos;
+			size_t icount = (vcount - 2) * 3;
+
+			uint32_t* iptr = SceneIndexes + istart;
+			for (uint32_t i = vstart + 2; i < vstart + vcount; i++)
+			{
+				*(iptr++) = vstart;
+				*(iptr++) = i - 1;
+				*(iptr++) = i;
+			}
+
+			SceneVertexPos += vcount;
+			SceneIndexPos += icount;
+
+			DrawBatch();
+		}
 
 		if (CurrentFrame)
 			SetSceneNode(CurrentFrame);
@@ -888,6 +1288,27 @@ void UD3D11RenderDevice::EndFlash()
 void UD3D11RenderDevice::SetSceneNode(FSceneNode* Frame)
 {
 	guard(UD3D11RenderDevice::SetSceneNode);
+
+	DrawBatch();
+
+	CurrentFrame = Frame;
+	Aspect = Frame->FY / Frame->FX;
+	RProjZ = (float)appTan(radians(Viewport->Actor->FovAngle) * 0.5);
+	RFX2 = 2.0f * RProjZ / Frame->FX;
+	RFY2 = 2.0f * RProjZ * Aspect / Frame->FY;
+
+	D3D11_VIEWPORT viewport = {};
+	viewport.TopLeftX = Frame->XB;
+	viewport.TopLeftY = Frame->YB;
+	viewport.Width = Frame->X;
+	viewport.Height = Frame->Y;
+	viewport.MinDepth = 0.0f;
+	viewport.MaxDepth = 1.0f;
+	Context->RSSetViewports(1, &viewport);
+
+	ScenePushConstants pushconstants;
+	pushconstants.objectToProjection = mat4::frustum(-RProjZ, RProjZ, -Aspect * RProjZ, Aspect * RProjZ, 1.0f, 32768.0f, handedness::left, clipzrange::zero_positive_w);
+	Context->UpdateSubresource(ScenePass.ConstantBuffer, 0, nullptr, &pushconstants, 0, 0);
 
 	unguard;
 }
@@ -902,6 +1323,57 @@ void UD3D11RenderDevice::PrecacheTexture(FTextureInfo& Info, DWORD PolyFlags)
 void UD3D11RenderDevice::ClearTextureCache()
 {
 	Textures->ClearCache();
+}
+
+void UD3D11RenderDevice::DrawBatch()
+{
+	size_t icount = SceneIndexPos - Batch.SceneIndexStart;
+	if (icount > 0)
+	{
+		ID3D11ShaderResourceView* views[4] =
+		{
+			Batch.Tex ? Batch.Tex->View : Textures->GetNullTexture()->View,
+			Batch.Lightmap ? Batch.Lightmap->View : Textures->GetNullTexture()->View,
+			Batch.Detailtex ? Batch.Detailtex->View : Textures->GetNullTexture()->View,
+			Batch.Macrotex ? Batch.Macrotex->View : Textures->GetNullTexture()->View
+		};
+
+		ID3D11SamplerState* samplers[4] =
+		{
+			ScenePass.Samplers[Batch.TexSamplerMode],
+			ScenePass.Samplers[0],
+			ScenePass.Samplers[0],
+			ScenePass.Samplers[0]
+		};
+
+		Context->PSSetSamplers(0, 4, samplers);
+		Context->PSSetShaderResources(0, 4, views);
+		Context->PSSetShader(Batch.Pipeline->PixelShader, nullptr, 0);
+
+		Context->OMSetBlendState(Batch.Pipeline->BlendState, nullptr, 0xffffffff);
+		Context->OMSetDepthStencilState(Batch.Pipeline->DepthStencilState, 0);
+
+		Context->Unmap(ScenePass.VertexBuffer, 0); SceneVertices = nullptr;
+		Context->Unmap(ScenePass.IndexBuffer, 0); SceneIndexes = nullptr;
+
+		Context->DrawIndexed(icount, Batch.SceneIndexStart, 0);
+
+		D3D11_MAPPED_SUBRESOURCE mappedVertexBuffer = {};
+		HRESULT result = Context->Map(ScenePass.VertexBuffer, 0, D3D11_MAP_WRITE_NO_OVERWRITE, 0, &mappedVertexBuffer);
+		if (SUCCEEDED(result))
+		{
+			SceneVertices = (SceneVertex*)mappedVertexBuffer.pData;
+		}
+
+		D3D11_MAPPED_SUBRESOURCE mappedIndexBuffer = {};
+		result = Context->Map(ScenePass.IndexBuffer, 0, D3D11_MAP_WRITE_NO_OVERWRITE, 0, &mappedIndexBuffer);
+		if (SUCCEEDED(result))
+		{
+			SceneIndexes = (uint32_t*)mappedIndexBuffer.pData;
+		}
+
+		Batch.SceneIndexStart = SceneIndexPos;
+	}
 }
 
 std::vector<uint8_t> UD3D11RenderDevice::CompileHlsl(const std::string& filename, const std::string& shadertype, const std::vector<std::string> defines)

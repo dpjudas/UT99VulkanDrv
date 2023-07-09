@@ -51,3 +51,31 @@ void TextureManager::ClearCache()
 		cache.clear();
 	}
 }
+
+CachedTexture* TextureManager::GetNullTexture()
+{
+	if (NullTexture)
+		return NullTexture.get();
+
+	NullTexture.reset(new CachedTexture());
+
+	D3D11_TEXTURE2D_DESC texDesc = {};
+	texDesc.Usage = D3D11_USAGE_DEFAULT;
+	texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+	texDesc.Width = 1;
+	texDesc.Height = 1;
+	texDesc.MipLevels = 1;
+	texDesc.ArraySize = 1;
+	texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	texDesc.SampleDesc.Count = 1;
+	texDesc.SampleDesc.Quality = 0;
+	HRESULT result = renderer->Device->CreateTexture2D(&texDesc, nullptr, &NullTexture->Texture);
+	ThrowIfFailed(result, "CreateTexture2D(NullTexture) failed");
+
+	result = renderer->Device->CreateShaderResourceView(NullTexture->Texture, nullptr, &NullTexture->View);
+	ThrowIfFailed(result, "CreateShaderResourceView(NullTexture) failed");
+
+	renderer->Uploads->UploadWhite(NullTexture->Texture);
+
+	return NullTexture.get();
+}

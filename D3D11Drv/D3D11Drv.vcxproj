@@ -101,6 +101,7 @@
   <ItemGroup>
     <ClInclude Include="CachedTexture.h" />
     <ClInclude Include="FileResource.h" />
+    <ClInclude Include="halffloat.h" />
     <ClInclude Include="mat.h" />
     <ClInclude Include="Precomp.h" />
     <ClInclude Include="TextureManager.h" />
@@ -113,6 +114,7 @@
   <ItemGroup>
     <ClCompile Include="D3D11Drv.cpp" />
     <ClCompile Include="FileResource.cpp" />
+    <ClCompile Include="halffloat.cpp" />
     <ClCompile Include="mat.cpp" />
     <ClCompile Include="Precomp.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>

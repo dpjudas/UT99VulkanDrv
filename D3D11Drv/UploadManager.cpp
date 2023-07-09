@@ -44,7 +44,7 @@ void UploadManager::UploadTexture(CachedTexture* tex, const FTextureInfo& Info, 
 		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
 		texDesc.Width = width;
 		texDesc.Height = height;
-		texDesc.MipLevels = 1;
+		texDesc.MipLevels = mipcount;
 		texDesc.ArraySize = 1;
 		texDesc.Format = format;
 		texDesc.SampleDesc.Count = 1;

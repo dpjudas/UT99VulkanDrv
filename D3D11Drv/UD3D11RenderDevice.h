@@ -119,6 +119,23 @@ public:
 
 	struct
 	{
+		size_t SceneIndexStart = 0;
+		ScenePipelineState* Pipeline = nullptr;
+		CachedTexture* Tex = nullptr;
+		uint32_t TexSamplerMode = 0;
+		CachedTexture* Lightmap = nullptr;
+		CachedTexture* Detailtex = nullptr;
+		CachedTexture* Macrotex = nullptr;
+	} Batch;
+
+	SceneVertex* SceneVertices = nullptr;
+	size_t SceneVertexPos = 0;
+
+	uint32_t* SceneIndexes = nullptr;
+	size_t SceneIndexPos = 0;
+
+	struct
+	{
 		ID3D11VertexShader* PPStep = nullptr;
 		ID3D11InputLayout* PPStepLayout = nullptr;
 		ID3D11Buffer* PPStepVertexBuffer = nullptr;
@@ -148,6 +165,10 @@ private:
 	void CreatePresentPass();
 	void CreateScenePass();
 
+	void SetPipeline(DWORD polyflags);
+	void SetDescriptorSet(DWORD polyflags, CachedTexture* tex = nullptr, CachedTexture* lightmap = nullptr, CachedTexture* macrotex = nullptr, CachedTexture* detailtex = nullptr, bool clamp = false);
+	void DrawBatch();
+
 	ScenePipelineState* GetPipeline(DWORD PolyFlags);
 
 	std::vector<uint8_t> CompileHlsl(const std::string& filename, const std::string& shadertype, const std::vector<std::string> defines = {});
@@ -171,3 +192,30 @@ inline void ThrowIfFailed(HRESULT result, const char* msg) { if (FAILED(result))
 
 inline float GetUMult(const FTextureInfo& Info) { return 1.0f / (Info.UScale * Info.USize); }
 inline float GetVMult(const FTextureInfo& Info) { return 1.0f / (Info.VScale * Info.VSize); }
+
+inline void UD3D11RenderDevice::SetPipeline(DWORD PolyFlags)
+{
+	auto pipeline = GetPipeline(PolyFlags);
+	if (pipeline != Batch.Pipeline)
+	{
+		DrawBatch();
+		Batch.Pipeline = pipeline;
+	}
+}
+
+inline void UD3D11RenderDevice::SetDescriptorSet(DWORD PolyFlags, CachedTexture* tex, CachedTexture* lightmap, CachedTexture* macrotex, CachedTexture* detailtex, bool clamp)
+{
+	uint32_t samplermode = 0;
+	if (PolyFlags & PF_NoSmooth) samplermode |= 1;
+	if (clamp) samplermode |= 2;
+
+	if (Batch.Tex != tex || Batch.TexSamplerMode != samplermode || Batch.Lightmap != lightmap || Batch.Detailtex != detailtex || Batch.Macrotex != macrotex)
+	{
+		DrawBatch();
+		Batch.Tex = tex;
+		Batch.TexSamplerMode = samplermode;
+		Batch.Lightmap = lightmap;
+		Batch.Detailtex = detailtex;
+		Batch.Macrotex = macrotex;
+	}
+}

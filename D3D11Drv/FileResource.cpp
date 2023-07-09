@@ -13,10 +13,10 @@ std::string FileResource::readAllText(const std::string& filename)
 			{
 				uint Flags : AttrFlags;
 				float3 Position : AttrPos;
-				float2 TexCoord : AttrTexCoord;
-				float2 TexCoord2 : AttrTexCoord2;
-				float2 TexCoord3 : AttrTexCoord3;
-				float2 TexCoord4 : AttrTexCoord4;
+				float2 TexCoord : AttrTexCoordOne;
+				float2 TexCoord2 : AttrTexCoordTwo;
+				float2 TexCoord3 : AttrTexCoordThree;
+				float2 TexCoord4 : AttrTexCoordFour;
 				float4 Color : AttrColor;
 			};
 
@@ -24,10 +24,10 @@ std::string FileResource::readAllText(const std::string& filename)
 			{
 				float4 pos : SV_Position;
 				uint flags : PixelFlags;
-				float2 texCoord : PixelTexCoord;
-				float2 texCoord2 : PixelTexCoord2;
-				float2 texCoord3 : PixelTexCoord3;
-				float2 texCoord4 : PixelTexCoord4;
+				float2 texCoord : PixelTexCoordOne;
+				float2 texCoord2 : PixelTexCoordTwo;
+				float2 texCoord3 : PixelTexCoordThree;
+				float2 texCoord4 : PixelTexCoordFour;
 				float4 color : PixelColor;
 			};
 
@@ -57,10 +57,10 @@ std::string FileResource::readAllText(const std::string& filename)
 			{
 				float4 pos : SV_Position;
 				uint flags : PixelFlags;
-				float2 texCoord : PixelTexCoord;
-				float2 texCoord2 : PixelTexCoord2;
-				float2 texCoord3 : PixelTexCoord3;
-				float2 texCoord4 : PixelTexCoord4;
+				float2 texCoord : PixelTexCoordOne;
+				float2 texCoord2 : PixelTexCoordTwo;
+				float2 texCoord3 : PixelTexCoordThree;
+				float2 texCoord4 : PixelTexCoordFour;
 				float4 color : PixelColor;
 			};
 
@@ -78,11 +78,6 @@ std::string FileResource::readAllText(const std::string& filename)
 			Texture2D texLightmap;
 			Texture2D texMacro;
 			Texture2D texDetail;
-
-			float3 linear(float3 c)
-			{
-				return lerp(c / 12.92, pow((c + 0.055) / 1.055, float3(2.4, 2.4, 2.4)), step(c, float3(0.04045, 0.04045, 0.04045)));
-			}
 
 			float4 darkClamp(float4 c)
 			{
@@ -115,7 +110,7 @@ std::string FileResource::readAllText(const std::string& filename)
 				if ((input.flags & 4) != 0) // Detail texture
 				{
 					float fadedistance = 380.0f;
-					float a = clamp(2.0f - (1.0f / gl_FragCoord.w) / fadedistance, 0.0f, 1.0f);
+					float a = clamp(2.0f - (1.0f / input.pos.w) / fadedistance, 0.0f, 1.0f);
 					float4 detailColor = (textureDetail(input.texCoord4) - 0.5) * 0.5 + 1.0;
 					output.outColor.rgb = lerp(output.outColor.rgb, output.outColor.rgb * detailColor.rgb, a);
 				}
@@ -135,7 +130,6 @@ std::string FileResource::readAllText(const std::string& filename)
 				#endif
 
 				output.outColor = clamp(output.outColor, 0.0, 1.0);
-
 				return output;
 			}
 		)";
