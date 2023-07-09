@@ -1008,7 +1008,6 @@ void UVulkanRenderDevice::ReadPixels(FColor* Pixels)
 	int w = Viewport->SizeX;
 	int h = Viewport->SizeY;
 	void* data = Pixels;
-	float gamma = 1.5f * Viewport->GetOuterUClient()->Brightness;
 
 	auto dstimage = ImageBuilder()
 		.Format(VK_FORMAT_B8G8R8A8_UNORM)
@@ -1071,27 +1070,7 @@ void UVulkanRenderDevice::ReadPixels(FColor* Pixels)
 	SubmitAndWait(false, 0, 0, false);
 
 	uint8_t* pixels = (uint8_t*)staging->Map(0, w * h * 4);
-	if (gamma != 1.0f)
-	{
-		float invGamma = 1.0f / gamma;
-
-		uint8_t gammatable[256];
-		for (int i = 0; i < 256; i++)
-			gammatable[i] = (int)clamp(std::round(std::pow(i / 255.0f, invGamma) * 255.0f), 0.0f, 255.0f);
-
-		uint8_t* dest = (uint8_t*)data;
-		for (int i = 0; i < w * h * 4; i += 4)
-		{
-			dest[i] = gammatable[pixels[i]];
-			dest[i + 1] = gammatable[pixels[i + 1]];
-			dest[i + 2] = gammatable[pixels[i + 2]];
-			dest[i + 3] = pixels[i + 3];
-		}
-	}
-	else
-	{
-		memcpy(data, pixels, w * h * 4);
-	}
+	memcpy(data, pixels, w * h * 4);
 	staging->Unmap();
 
 	unguard;
