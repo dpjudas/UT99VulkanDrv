@@ -34,7 +34,7 @@ Add the following section to the file:
 	ActorXBlending=False
 	OneXBlending=False
 
-## Description of VulkanDrv specific new settings
+## Description of VulkanDrv specific settings
 
 - VkDebug enables the vulkan debug layer and will cause the render device to output extra information into the UnrealTournament.log file. 'VkMemStats' can also be typed into the console.
 - VkHdr enables HDR mode for monitors supporting HDR. This causes overbright pixels to become brighter rather than saturating to white.
@@ -55,6 +55,33 @@ Add the following section to the file:
 
 	vstat resources
 	vstat draw
+
+## Using D3D11Drv as the render device
+
+This project now also contains a Direct3D 11 render device. To use it, copy the D3D11Drv.dll and D3D11Drv.int files to the Unreal Tournament system folder.
+
+In the [Engine.Engine] section of UnrealTournament.ini, change GameRenderDevice to D3D11Drv.D3D11RenderDevice
+
+Add the following section to the file:
+
+	[D3D11Drv.D3D11RenderDevice]
+	UsePrecache=False
+	UseVSync=True
+	Multisample=4
+	DetailTextures=True
+	DescFlags=0
+	Description=
+	HighDetailActors=True
+	Coronas=True
+	ShinySurfaces=True
+	VolumetricLighting=True
+
+## Brightness controls console commands:
+
+	d3d_contrast <number> - defaults to 1.0
+	d3d_saturation <number> - defaults to 1.0 
+	d3d_brightness <number> - defaults to 0.0
+	d3d_grayformula <number> - defaults to 1, can be 0, 1 or 2
 
 ## License
 
