@@ -25,8 +25,8 @@ void UploadManager::UploadTexture(CachedTexture* tex, const FTextureInfo& Info, 
 
 	TextureUploader* uploader = TextureUploader::GetUploader(Info.Format);
 
-	if ((uint32_t)Info.USize > 2048 ||
-		(uint32_t)Info.VSize > 2048 ||
+	if ((uint32_t)Info.USize > D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION ||
+		(uint32_t)Info.VSize > D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION ||
 		!uploader)
 	{
 		width = 1;
