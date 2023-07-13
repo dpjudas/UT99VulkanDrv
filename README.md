@@ -30,7 +30,7 @@ Add the following section to the file:
 	VkDeviceIndex=0
 	VkHdr=False
 	VkExclusiveFullscreen=False
-	LODBias=0.0
+	LODBias=-0.5
 	ActorXBlending=False
 	OneXBlending=False
 
@@ -75,6 +75,15 @@ Add the following section to the file:
 	Coronas=True
 	ShinySurfaces=True
 	VolumetricLighting=True
+	LODBias=-0.5
+	ActorXBlending=False
+	OneXBlending=False
+
+## Description of D3D11Drv specific settings
+
+- OneXBlending halves the lightmap light contribution. This makes actors appear brighter at the cost losing overbright lightmaps.
+- ActorXBlending is an alternative to OneXBlending. Here it increases the brightness of actors instead to better match the lightmaps.
+- LODBias Adjusts the level-of-detail bias for textures. A number greater than zero will bias it towards using lower detail mipmaps. A negative number will bias it towards using higher level mipmaps.
 
 ## Brightness controls console commands:
 

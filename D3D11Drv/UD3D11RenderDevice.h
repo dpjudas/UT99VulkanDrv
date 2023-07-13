@@ -159,6 +159,10 @@ public:
 	FLOAT D3DSaturation;
 	INT D3DGrayFormula;
 
+	FLOAT LODBias;
+	BITFIELD OneXBlending;
+	BITFIELD ActorXBlending;
+
 private:
 	void ResizeSceneBuffers(int width, int height);
 	void ClearTextureCache();
