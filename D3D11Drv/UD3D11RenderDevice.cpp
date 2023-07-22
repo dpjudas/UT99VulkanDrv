@@ -84,21 +84,29 @@ UBOOL UD3D11RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 		swapDesc.SampleDesc.Count = 1;
 		swapDesc.OutputWindow = (HWND)Viewport->GetWindow();
 		swapDesc.Windowed = Fullscreen ? FALSE : TRUE;
-		swapDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
 		swapDesc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
 
-		HRESULT result = D3D11CreateDeviceAndSwapChain(
-			nullptr,
-			D3D_DRIVER_TYPE_HARDWARE,
-			0,
-			D3D11_CREATE_DEVICE_SINGLETHREADED | D3D11_CREATE_DEVICE_BGRA_SUPPORT,
-			featurelevels.data(), (UINT)featurelevels.size(),
-			D3D11_SDK_VERSION,
-			&swapDesc,
-			&SwapChain,
-			&Device,
-			&FeatureLevel,
-			&Context);
+		// First try create a swap chain for Windows 8 and newer. If that fails, try the old for Windows 7
+		HRESULT result = E_FAIL;
+		for (DXGI_SWAP_EFFECT swapeffect : { DXGI_SWAP_EFFECT_FLIP_DISCARD, DXGI_SWAP_EFFECT_DISCARD })
+		{
+			swapDesc.SwapEffect = swapeffect;
+
+			result = D3D11CreateDeviceAndSwapChain(
+				nullptr,
+				D3D_DRIVER_TYPE_HARDWARE,
+				0,
+				D3D11_CREATE_DEVICE_SINGLETHREADED | D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+				featurelevels.data(), (UINT)featurelevels.size(),
+				D3D11_SDK_VERSION,
+				&swapDesc,
+				&SwapChain,
+				&Device,
+				&FeatureLevel,
+				&Context);
+			if (SUCCEEDED(result))
+				break;
+		}
 		ThrowIfFailed(result, "D3D11CreateDeviceAndSwapChain failed");
 
 		result = SwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**)&BackBuffer);
