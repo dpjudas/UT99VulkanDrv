@@ -107,7 +107,7 @@ std::string FileResource::readAllText(const std::string& filename)
 
 				if ((input.flags & 1) != 0) // Lightmap
 				{
-					output.outColor.rgb *= clamp(textureLightmap(input.texCoord2).rgb - 0.03, 0.0, 1.0) * oneXBlending;
+					output.outColor.rgb *= clamp(textureLightmap(input.texCoord2).rgb, 0.0, 1.0) * oneXBlending;
 				}
 
 				if ((input.flags & 4) != 0) // Detail texture
@@ -119,12 +119,12 @@ std::string FileResource::readAllText(const std::string& filename)
 				}
 				else if ((input.flags & 8) != 0) // Fog map
 				{
-					float4 fogcolor = darkClamp(textureDetail(input.texCoord4));
+					float4 fogcolor = textureDetail(input.texCoord4);
 					output.outColor.rgb = fogcolor.rgb + output.outColor.rgb * (1.0 - fogcolor.a);
 				}
 				else if ((input.flags & 16) != 0) // Fog color
 				{
-					float4 fogcolor = darkClamp(float4(input.texCoord2, input.texCoord3));
+					float4 fogcolor = float4(input.texCoord2, input.texCoord3);
 					output.outColor.rgb = fogcolor.rgb + output.outColor.rgb * (1.0 - fogcolor.a);
 				}
 

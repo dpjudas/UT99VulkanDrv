@@ -283,7 +283,7 @@ UBOOL UVulkanRenderDevice::Exec(const TCHAR* Cmd, FOutputDevice& Ar)
 	else if (ParseCommand(&Cmd, TEXT("vk_saturation")))
 	{
 		float value = _wtof(Cmd);
-		VkSaturation = clamp(value, -0.8f, 0.8f);
+		VkSaturation = clamp(value, -1.0f, 1.0f);
 		SaveConfig();
 		return 1;
 	}
@@ -1234,7 +1234,7 @@ void UVulkanRenderDevice::DrawPresentTexture(int x, int y, int width, int height
 	PresentPushConstants pushconstants;
 	pushconstants.InvGamma = 1.0f / gamma;
 	pushconstants.Contrast = clamp(VkContrast, 0.1f, 3.f);
-	pushconstants.Saturation = clamp(VkSaturation, -0.8f, 0.8f);
+	pushconstants.Saturation = clamp(VkSaturation, -1.0f, 1.0f);
 	pushconstants.Brightness = clamp(VkBrightness, -15.0f, 15.f);
 	pushconstants.GrayFormula = clamp(VkGrayFormula, 0, 2);
 	pushconstants.HdrMode = (Commands->SwapChain->Format().colorSpace == VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT) ? 1 : 0;

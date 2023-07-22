@@ -74,11 +74,6 @@ std::string FileResource::readAllText(const std::string& filename)
 
 			layout(location = 0) out vec4 outColor;
 
-			vec3 linear(vec3 c)
-			{
-				return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(c, vec3(0.04045)));
-			}
-
 			vec4 darkClamp(vec4 c)
 			{
 				// Make all textures a little darker as some of the textures (i.e coronas) never become completely black as they should have
@@ -112,7 +107,7 @@ std::string FileResource::readAllText(const std::string& filename)
 
 				if ((flags & 1) != 0) // Lightmap
 				{
-					outColor.rgb *= clamp(textureLightmap(texCoord2).rgb - 0.03, 0.0, 1.0) * oneXBlending;
+					outColor.rgb *= clamp(textureLightmap(texCoord2).rgb, 0.0, 1.0) * oneXBlending;
 				}
 
 				if ((flags & 4) != 0) // Detail texture
@@ -124,12 +119,12 @@ std::string FileResource::readAllText(const std::string& filename)
 				}
 				else if ((flags & 8) != 0) // Fog map
 				{
-					vec4 fogcolor = darkClamp(textureDetail(texCoord4));
+					vec4 fogcolor = textureDetail(texCoord4);
 					outColor.rgb = fogcolor.rgb + outColor.rgb * (1.0 - fogcolor.a);
 				}
 				else if ((flags & 16) != 0) // Fog color
 				{
-					vec4 fogcolor = darkClamp(vec4(texCoord2, texCoord3));
+					vec4 fogcolor = vec4(texCoord2, texCoord3);
 					outColor.rgb = fogcolor.rgb + outColor.rgb * (1.0 - fogcolor.a);
 				}
 

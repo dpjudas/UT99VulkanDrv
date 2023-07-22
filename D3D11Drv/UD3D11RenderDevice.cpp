@@ -611,7 +611,7 @@ UBOOL UD3D11RenderDevice::Exec(const TCHAR* Cmd, FOutputDevice& Ar)
 	else if (ParseCommand(&Cmd, TEXT("d3d_saturation")))
 	{
 		float value = _wtof(Cmd);
-		D3DSaturation = clamp(value, -0.8f, 0.8f);
+		D3DSaturation = clamp(value, -1.0f, 1.0f);
 		SaveConfig();
 		return 1;
 	}
@@ -775,7 +775,7 @@ void UD3D11RenderDevice::Unlock(UBOOL Blit)
 		PresentPushConstants pushconstants;
 		pushconstants.InvGamma = 1.0f / (1.5f * Viewport->GetOuterUClient()->Brightness * 2.0f);
 		pushconstants.Contrast = clamp(D3DContrast, 0.1f, 3.f);
-		pushconstants.Saturation = clamp(D3DSaturation, -0.8f, 0.8f);
+		pushconstants.Saturation = clamp(D3DSaturation, -1.0f, 1.0f);
 		pushconstants.Brightness = clamp(D3DBrightness, -15.0f, 15.f);
 		pushconstants.GrayFormula = clamp(D3DGrayFormula, 0, 2);
 		Context->UpdateSubresource(PresentPass.PresentConstantBuffer, 0, nullptr, &pushconstants, 0, 0);
