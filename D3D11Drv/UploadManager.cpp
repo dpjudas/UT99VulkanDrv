@@ -39,11 +39,12 @@ void UploadManager::UploadTexture(CachedTexture* tex, const FTextureInfo& Info, 
 
 	if (!tex->Texture)
 	{
+		INT MinSize = Info.Format == TEXF_BC1 || (Info.Format >= TEXF_BC2 && Info.Format <= TEXF_BC6H) ? 4 : 0;
 		D3D11_TEXTURE2D_DESC texDesc = {};
 		texDesc.Usage = D3D11_USAGE_DEFAULT;
 		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-		texDesc.Width = width;
-		texDesc.Height = height;
+		texDesc.Width = Max(MinSize, width);
+		texDesc.Height = Max(MinSize, height);
 		texDesc.MipLevels = mipcount;
 		texDesc.ArraySize = 1;
 		texDesc.Format = format;
