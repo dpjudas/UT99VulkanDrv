@@ -773,7 +773,7 @@ void UD3D11RenderDevice::Unlock(UBOOL Blit)
 		Context->OMSetBlendState(PresentPass.BlendState, nullptr, 0xffffffff);
 
 		PresentPushConstants pushconstants;
-		pushconstants.InvGamma = 1.0f / (1.5f * Viewport->GetOuterUClient()->Brightness * 2.0f);
+		pushconstants.InvGamma = 1.0f / (Viewport->GetOuterUClient()->Brightness * 2.0f);
 		pushconstants.Contrast = clamp(D3DContrast, 0.1f, 3.f);
 		pushconstants.Saturation = clamp(D3DSaturation, -1.0f, 1.0f);
 		pushconstants.Brightness = clamp(D3DBrightness, -15.0f, 15.f);

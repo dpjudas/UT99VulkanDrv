@@ -1229,10 +1229,8 @@ void UVulkanRenderDevice::BlitSceneToPostprocess()
 
 void UVulkanRenderDevice::DrawPresentTexture(int x, int y, int width, int height)
 {
-	float gamma = (1.5f * Viewport->GetOuterUClient()->Brightness * 2.0f);
-
 	PresentPushConstants pushconstants;
-	pushconstants.InvGamma = 1.0f / gamma;
+	pushconstants.InvGamma = 1.0f / (Viewport->GetOuterUClient()->Brightness * 2.0f);
 	pushconstants.Contrast = clamp(VkContrast, 0.1f, 3.f);
 	pushconstants.Saturation = clamp(VkSaturation, -1.0f, 1.0f);
 	pushconstants.Brightness = clamp(VkBrightness, -15.0f, 15.f);
