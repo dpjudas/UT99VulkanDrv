@@ -189,6 +189,9 @@ private:
 	float RFX2;
 	float RFY2;
 
+	BYTE* HitData = nullptr;
+	INT* HitSize = nullptr;
+
 	bool IsLocked = false;
 };
 

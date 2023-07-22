@@ -689,9 +689,12 @@ UBOOL UD3D11RenderDevice::Exec(const TCHAR* Cmd, FOutputDevice& Ar)
 	unguard;
 }
 
-void UD3D11RenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane ScreenClear, DWORD RenderLockFlags, BYTE* HitData, INT* HitSize)
+void UD3D11RenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane ScreenClear, DWORD RenderLockFlags, BYTE* InHitData, INT* InHitSize)
 {
 	guard(UD3D11RenderDevice::Lock);
+
+	HitData = InHitData;
+	HitSize = InHitSize;
 
 	FlashScale = InFlashScale;
 	FlashFog = InFlashFog;
@@ -816,6 +819,14 @@ void UD3D11RenderDevice::Unlock(UBOOL Blit)
 	}
 
 	Context->OMSetRenderTargets(0, nullptr, nullptr);
+
+	if (HitData)
+	{
+		*HitSize = 0;
+	}
+
+	HitData = nullptr;
+	HitSize = nullptr;
 
 	IsLocked = false;
 

@@ -420,9 +420,12 @@ UBOOL UVulkanRenderDevice::Exec(const TCHAR* Cmd, FOutputDevice& Ar)
 	unguard;
 }
 
-void UVulkanRenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane ScreenClear, DWORD RenderLockFlags, BYTE* HitData, INT* HitSize)
+void UVulkanRenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane ScreenClear, DWORD RenderLockFlags, BYTE* InHitData, INT* InHitSize)
 {
 	guard(UVulkanRenderDevice::Lock);
+
+	HitData = InHitData;
+	HitSize = InHitSize;
 
 	FlashScale = InFlashScale;
 	FlashFog = InFlashFog;
@@ -522,6 +525,14 @@ void UVulkanRenderDevice::Unlock(UBOOL Blit)
 
 		BlitSceneToPostprocess();
 		SubmitAndWait(Blit ? true : false, Viewport->SizeX, Viewport->SizeY, Viewport->IsFullscreen());
+
+		if (HitData)
+		{
+			*HitSize = 0;
+		}
+
+		HitData = nullptr;
+		HitSize = nullptr;
 
 		IsLocked = false;
 	}
