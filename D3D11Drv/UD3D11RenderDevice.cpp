@@ -377,8 +377,8 @@ void UD3D11RenderDevice::CreateScenePass()
 			blendDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
 			blendDesc.RenderTarget[0].SrcBlend = D3D11_BLEND_DEST_COLOR;
 			blendDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_DEST_ALPHA;
-			blendDesc.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_COLOR;
-			blendDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
+			blendDesc.RenderTarget[0].DestBlend = D3D11_BLEND_SRC_COLOR;
+			blendDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_SRC_ALPHA;
 			break;
 		case 2: // PF_Highlighted
 			blendDesc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
