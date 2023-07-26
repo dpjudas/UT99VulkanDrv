@@ -83,7 +83,7 @@ UBOOL UD3D11RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 		swapDesc.BufferCount = 2;
 		swapDesc.SampleDesc.Count = 1;
 		swapDesc.OutputWindow = (HWND)Viewport->GetWindow();
-		swapDesc.Windowed = Fullscreen ? FALSE : TRUE;
+		swapDesc.Windowed = TRUE;
 		swapDesc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
 
 		// First try create a swap chain for Windows 8 and newer. If that fails, try the old for Windows 7
@@ -109,19 +109,11 @@ UBOOL UD3D11RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 		}
 		ThrowIfFailed(result, "D3D11CreateDeviceAndSwapChain failed");
 
-		result = SwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**)&BackBuffer);
-		ThrowIfFailed(result, "SwapChain.GetBuffer failed");
-
-		result = Device->CreateRenderTargetView(BackBuffer, nullptr, &BackBufferView);
-		ThrowIfFailed(result, "CreateRenderTargetView(BackBuffer) failed");
-
 		CreateScenePass();
 		CreatePresentPass();
 
 		Textures.reset(new TextureManager(this));
 		Uploads.reset(new UploadManager(this));
-
-		ResizeSceneBuffers(NewX, NewY);
 	}
 	catch (const std::exception& e)
 	{
@@ -147,19 +139,40 @@ UBOOL UD3D11RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 	ReleaseObject(BackBuffer);
 	ReleaseObject(BackBufferView);
 
-	if (SceneBuffers.Width != NewX || SceneBuffers.Height != NewY)
+	if (!Viewport->ResizeViewport(Fullscreen ? (BLIT_Fullscreen | BLIT_Direct3D) : (BLIT_HardwarePaint | BLIT_Direct3D), NewX, NewY, NewColorBytes))
 	{
-		HRESULT result = SwapChain->ResizeBuffers(2, NewX, NewY, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
-		if (FAILED(result))
-			return FALSE;
+		debugf(TEXT("Viewport.ResizeViewport failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
+		return FALSE;
 	}
 
-	if (!Viewport->ResizeViewport(Fullscreen ? (BLIT_Fullscreen | BLIT_Direct3D) : (BLIT_HardwarePaint | BLIT_Direct3D), NewX, NewY, NewColorBytes))
-		return 0;
+	HRESULT result;
 
-	HRESULT result = SwapChain->SetFullscreenState(Fullscreen ? TRUE : FALSE, nullptr);
+	if (Fullscreen)
+	{
+		DXGI_MODE_DESC modeDesc = {};
+		modeDesc.Width = NewX;
+		modeDesc.Height = NewY;
+		modeDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		result = SwapChain->ResizeTarget(&modeDesc);
+		if (FAILED(result))
+		{
+			debugf(TEXT("SwapChain.ResizeTarget failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
+		}
+	}
+
+	result = SwapChain->SetFullscreenState(Fullscreen ? TRUE : FALSE, nullptr);
 	if (FAILED(result))
+	{
+		debugf(TEXT("SwapChain.SetFullscreenState failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
 		return FALSE;
+	}
+
+	result = SwapChain->ResizeBuffers(2, NewX, NewY, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
+	if (FAILED(result))
+	{
+		debugf(TEXT("SwapChain.ResizeBuffers failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
+		return FALSE;
+	}
 
 	ResizeSceneBuffers(NewX, NewY);
 
