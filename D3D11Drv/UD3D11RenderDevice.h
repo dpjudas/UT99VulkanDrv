@@ -95,6 +95,7 @@ public:
 
 	struct ScenePipelineState
 	{
+		D3D11_PRIMITIVE_TOPOLOGY PrimitiveTopology = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 		ID3D11PixelShader* PixelShader = nullptr;
 		ID3D11BlendState* BlendState = nullptr;
 		ID3D11DepthStencilState* DepthStencilState = nullptr;
@@ -112,6 +113,8 @@ public:
 		ID3D11PixelShader* PixelShaderAlphaTest = {};
 		ID3D11SamplerState* Samplers[4] = {};
 		ScenePipelineState Pipelines[32];
+		ScenePipelineState LinePipeline;
+		ScenePipelineState PointPipeline;
 	} ScenePass;
 
 	static const int SceneVertexBufferSize = 1 * 1024 * 1024;

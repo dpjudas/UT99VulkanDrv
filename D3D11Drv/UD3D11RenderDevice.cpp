@@ -236,6 +236,10 @@ void UD3D11RenderDevice::Exit()
 		ReleaseObject(pipeline.BlendState);
 		ReleaseObject(pipeline.DepthStencilState);
 	}
+	ReleaseObject(ScenePass.LinePipeline.BlendState);
+	ReleaseObject(ScenePass.LinePipeline.DepthStencilState);
+	ReleaseObject(ScenePass.PointPipeline.BlendState);
+	ReleaseObject(ScenePass.PointPipeline.DepthStencilState);
 	ReleaseObject(SceneBuffers.ColorBufferView);
 	ReleaseObject(SceneBuffers.DepthBufferView);
 	ReleaseObject(SceneBuffers.PPImageShaderView);
@@ -439,6 +443,58 @@ void UD3D11RenderDevice::CreateScenePass()
 			ScenePass.Pipelines[i].PixelShader = ScenePass.PixelShaderAlphaTest;
 		else
 			ScenePass.Pipelines[i].PixelShader = ScenePass.PixelShader;
+
+		ScenePass.Pipelines[i].PrimitiveTopology = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	}
+
+	// Line pipeline
+	{
+		D3D11_BLEND_DESC blendDesc = {};
+		blendDesc.RenderTarget[0].BlendEnable = TRUE;
+		blendDesc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
+		blendDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+		blendDesc.RenderTarget[0].SrcBlend = D3D11_BLEND_ONE;
+		blendDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
+		blendDesc.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
+		blendDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
+		blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+		result = Device->CreateBlendState(&blendDesc, &ScenePass.LinePipeline.BlendState);
+		ThrowIfFailed(result, "CreateBlendState(ScenePass.LinePipeline.BlendState) failed");
+
+		D3D11_DEPTH_STENCIL_DESC depthStencilDesc = {};
+		depthStencilDesc.DepthEnable = FALSE;
+		depthStencilDesc.DepthFunc = D3D11_COMPARISON_LESS_EQUAL;
+		depthStencilDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
+		result = Device->CreateDepthStencilState(&depthStencilDesc, &ScenePass.LinePipeline.DepthStencilState);
+		ThrowIfFailed(result, "CreateDepthStencilState(ScenePass.LinePipeline.DepthStencilState) failed");
+
+		ScenePass.LinePipeline.PixelShader = ScenePass.PixelShader;
+		ScenePass.LinePipeline.PrimitiveTopology = D3D11_PRIMITIVE_TOPOLOGY_LINELIST;
+	}
+
+	// Point pipeline
+	{
+		D3D11_BLEND_DESC blendDesc = {};
+		blendDesc.RenderTarget[0].BlendEnable = TRUE;
+		blendDesc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
+		blendDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+		blendDesc.RenderTarget[0].SrcBlend = D3D11_BLEND_ONE;
+		blendDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
+		blendDesc.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
+		blendDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
+		blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+		result = Device->CreateBlendState(&blendDesc, &ScenePass.PointPipeline.BlendState);
+		ThrowIfFailed(result, "CreateBlendState(ScenePass.LinePipeline.BlendState) failed");
+
+		D3D11_DEPTH_STENCIL_DESC depthStencilDesc = {};
+		depthStencilDesc.DepthEnable = FALSE;
+		depthStencilDesc.DepthFunc = D3D11_COMPARISON_LESS_EQUAL;
+		depthStencilDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
+		result = Device->CreateDepthStencilState(&depthStencilDesc, &ScenePass.PointPipeline.DepthStencilState);
+		ThrowIfFailed(result, "CreateDepthStencilState(ScenePass.PointPipeline.DepthStencilState) failed");
+
+		ScenePass.PointPipeline.PixelShader = ScenePass.PixelShader;
+		ScenePass.PointPipeline.PrimitiveTopology = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 	}
 
 	D3D11_BUFFER_DESC bufDesc = {};
@@ -712,7 +768,7 @@ void UD3D11RenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane Scr
 	FlashScale = InFlashScale;
 	FlashFog = InFlashFog;
 
-	FLOAT color[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+	FLOAT color[4] = { ScreenClear.X, ScreenClear.Y, ScreenClear.Z, ScreenClear.W };
 	Context->ClearRenderTargetView(SceneBuffers.ColorBufferView, color);
 	Context->ClearDepthStencilView(SceneBuffers.DepthBufferView, D3D11_CLEAR_DEPTH, 1.0f, 0);
 	Context->OMSetRenderTargets(1, &SceneBuffers.ColorBufferView, SceneBuffers.DepthBufferView);
@@ -722,7 +778,6 @@ void UD3D11RenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane Scr
 	Context->IASetVertexBuffers(0, 1, &ScenePass.VertexBuffer, &stride, &offset);
 	Context->IASetIndexBuffer(ScenePass.IndexBuffer, DXGI_FORMAT_R32_UINT, 0);
 	Context->IASetInputLayout(ScenePass.InputLayout);
-	Context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	Context->VSSetShader(ScenePass.VertexShader, nullptr, 0);
 	Context->VSSetConstantBuffers(0, 1, &ScenePass.ConstantBuffer);
 	Context->RSSetState(ScenePass.RasterizerState);
@@ -797,11 +852,22 @@ void UD3D11RenderDevice::Unlock(UBOOL Blit)
 		Context->OMSetBlendState(PresentPass.BlendState, nullptr, 0xffffffff);
 
 		PresentPushConstants pushconstants;
-		pushconstants.InvGamma = 1.0f / (Viewport->GetOuterUClient()->Brightness * 2.0f);
-		pushconstants.Contrast = clamp(D3DContrast, 0.1f, 3.f);
-		pushconstants.Saturation = clamp(D3DSaturation, -1.0f, 1.0f);
-		pushconstants.Brightness = clamp(D3DBrightness, -15.0f, 15.f);
-		pushconstants.GrayFormula = clamp(D3DGrayFormula, 0, 2);
+		if (Viewport->IsOrtho())
+		{
+			pushconstants.InvGamma = 1.0f;
+			pushconstants.Contrast = 1.0f;
+			pushconstants.Saturation = 1.0f;
+			pushconstants.Brightness = 0.0f;
+			pushconstants.GrayFormula = 1;
+		}
+		else
+		{
+			pushconstants.InvGamma = 1.0f / (Viewport->GetOuterUClient()->Brightness * 2.0f);
+			pushconstants.Contrast = clamp(D3DContrast, 0.1f, 3.f);
+			pushconstants.Saturation = clamp(D3DSaturation, -1.0f, 1.0f);
+			pushconstants.Brightness = clamp(D3DBrightness, -15.0f, 15.f);
+			pushconstants.GrayFormula = clamp(D3DGrayFormula, 0, 2);
+		}
 		Context->UpdateSubresource(PresentPass.PresentConstantBuffer, 0, nullptr, &pushconstants, 0, 0);
 
 		Context->Draw(6, 0);
@@ -916,61 +982,72 @@ void UD3D11RenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Sur
 	SetPipeline(Surface.PolyFlags);
 	SetDescriptorSet(Surface.PolyFlags, tex, lightmap, macrotex, detailtex);
 
-	if (!SceneVertices || !SceneIndexes) return;
+	vec4 color(1.0f);
 
-	uint32_t vpos = SceneVertexPos;
-	uint32_t ipos = SceneIndexPos;
-
-	SceneVertex* vptr = SceneVertices + vpos;
-	uint32_t* iptr = SceneIndexes + ipos;
-
-	uint32_t istart = ipos;
-	uint32_t icount = 0;
-
-	for (FSavedPoly* Poly = Facet.Polys; Poly; Poly = Poly->Next)
+	// Draw the surface twice if the editor selected it. Second time highlighted without textures
+	int drawcount = (Surface.PolyFlags & PF_Selected) && GIsEditor ? 2 : 1;
+	while (drawcount-- > 0)
 	{
-		auto pts = Poly->Pts;
-		uint32_t vcount = Poly->NumPts;
-		if (vcount < 3) continue;
+		if (!SceneVertices || !SceneIndexes) return;
 
-		for (uint32_t i = 0; i < vcount; i++)
+		uint32_t vpos = SceneVertexPos;
+		uint32_t ipos = SceneIndexPos;
+
+		SceneVertex* vptr = SceneVertices + vpos;
+		uint32_t* iptr = SceneIndexes + ipos;
+
+		uint32_t istart = ipos;
+		uint32_t icount = 0;
+
+		for (FSavedPoly* Poly = Facet.Polys; Poly; Poly = Poly->Next)
 		{
-			FVector point = pts[i]->Point;
-			FLOAT u = Facet.MapCoords.XAxis | point;
-			FLOAT v = Facet.MapCoords.YAxis | point;
+			auto pts = Poly->Pts;
+			uint32_t vcount = Poly->NumPts;
+			if (vcount < 3) continue;
 
-			vptr->Flags = flags;
-			vptr->Position.x = point.X;
-			vptr->Position.y = point.Y;
-			vptr->Position.z = point.Z;
-			vptr->TexCoord.s = (u - UPan) * UMult;
-			vptr->TexCoord.t = (v - VPan) * VMult;
-			vptr->TexCoord2.s = (u - LMUPan) * LMUMult;
-			vptr->TexCoord2.t = (v - LMVPan) * LMVMult;
-			vptr->TexCoord3.s = (u - MacroUPan) * MacroUMult;
-			vptr->TexCoord3.t = (v - MacroVPan) * MacroVMult;
-			vptr->TexCoord4.s = (u - DetailUPan) * DetailUMult;
-			vptr->TexCoord4.t = (v - DetailVPan) * DetailVMult;
-			vptr->Color.r = 1.0f;
-			vptr->Color.g = 1.0f;
-			vptr->Color.b = 1.0f;
-			vptr->Color.a = 1.0f;
-			vptr++;
+			for (uint32_t i = 0; i < vcount; i++)
+			{
+				FVector point = pts[i]->Point;
+				FLOAT u = Facet.MapCoords.XAxis | point;
+				FLOAT v = Facet.MapCoords.YAxis | point;
+
+				vptr->Flags = flags;
+				vptr->Position.x = point.X;
+				vptr->Position.y = point.Y;
+				vptr->Position.z = point.Z;
+				vptr->TexCoord.s = (u - UPan) * UMult;
+				vptr->TexCoord.t = (v - VPan) * VMult;
+				vptr->TexCoord2.s = (u - LMUPan) * LMUMult;
+				vptr->TexCoord2.t = (v - LMVPan) * LMVMult;
+				vptr->TexCoord3.s = (u - MacroUPan) * MacroUMult;
+				vptr->TexCoord3.t = (v - MacroVPan) * MacroVMult;
+				vptr->TexCoord4.s = (u - DetailUPan) * DetailUMult;
+				vptr->TexCoord4.t = (v - DetailVPan) * DetailVMult;
+				vptr->Color = color;
+				vptr++;
+			}
+
+			for (uint32_t i = vpos + 2; i < vpos + vcount; i++)
+			{
+				*(iptr++) = vpos;
+				*(iptr++) = i - 1;
+				*(iptr++) = i;
+			}
+
+			vpos += vcount;
+			icount += (vcount - 2) * 3;
 		}
 
-		for (uint32_t i = vpos + 2; i < vpos + vcount; i++)
-		{
-			*(iptr++) = vpos;
-			*(iptr++) = i - 1;
-			*(iptr++) = i;
-		}
+		SceneVertexPos = vpos;
+		SceneIndexPos = ipos + icount;
 
-		vpos += vcount;
-		icount += (vcount - 2) * 3;
+		if (drawcount != 0)
+		{
+			SetPipeline(PF_Highlighted);
+			SetDescriptorSet(PF_Highlighted);
+			color = vec4(0.0f, 0.0f, 0.05f, 0.20f);
+		}
 	}
-
-	SceneVertexPos = vpos;
-	SceneIndexPos = ipos + icount;
 
 	unguard;
 }
@@ -1158,13 +1235,28 @@ void UD3D11RenderDevice::Draw3DLine(FSceneNode* Frame, FPlane Color, DWORD LineF
 	}
 	else
 	{
-		/*SetNoTexture(0);
-		SetBlend(PF_Highlighted);
-		glColor3fv(&Color.X);
-		glBegin(GL_LINES);
-		glVertex3fv(&P1.X);
-		glVertex3fv(&P2.X);
-		glEnd();*/
+		auto pipeline = &ScenePass.LinePipeline;
+		if (pipeline != Batch.Pipeline)
+		{
+			DrawBatch();
+			Batch.Pipeline = pipeline;
+		}
+
+		SetDescriptorSet(PF_Highlighted);
+
+		if (!SceneVertices || !SceneIndexes) return;
+
+		SceneVertex* v = &SceneVertices[SceneVertexPos];
+		uint32_t* iptr = &SceneIndexes[SceneIndexPos];
+
+		v[0] = { 0, vec3(P1.X, P1.Y, P1.Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec4(Color.X, Color.Y, Color.Z, 1.0f) };
+		v[1] = { 0, vec3(P2.X, P2.Y, P2.Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec4(Color.X, Color.Y, Color.Z, 1.0f) };
+
+		iptr[0] = SceneVertexPos;
+		iptr[1] = SceneVertexPos + 1;
+
+		SceneVertexPos += 2;
+		SceneIndexPos += 2;
 	}
 
 	unguard;
@@ -1180,27 +1272,71 @@ void UD3D11RenderDevice::Draw2DClippedLine(FSceneNode* Frame, FPlane Color, DWOR
 void UD3D11RenderDevice::Draw2DLine(FSceneNode* Frame, FPlane Color, DWORD LineFlags, FVector P1, FVector P2)
 {
 	guard(UD3D11RenderDevice::Draw2DLine);
-	//SetBlend(PF_Highlighted | PF_Occlude);
-	//glColor3fv( &Color.X );
-	//glBegin(GL_LINES);
-	//glVertex3f( RFX2*P1.Z*(P1.X-Frame->FX2), RFY2*P1.Z*(P1.Y-Frame->FY2), P1.Z );
-	//glVertex3f( RFX2*P2.Z*(P2.X-Frame->FX2), RFY2*P2.Z*(P2.Y-Frame->FY2), P2.Z );
-	//glEnd();
+
+	auto pipeline = &ScenePass.LinePipeline;
+	if (pipeline != Batch.Pipeline)
+	{
+		DrawBatch();
+		Batch.Pipeline = pipeline;
+	}
+
+	SetDescriptorSet(PF_Highlighted);
+
+	if (!SceneVertices || !SceneIndexes) return;
+
+	SceneVertex* v = &SceneVertices[SceneVertexPos];
+	uint32_t* iptr = &SceneIndexes[SceneIndexPos];
+
+	v[0] = { 0, vec3(RFX2 * P1.Z * (P1.X - Frame->FX2), RFY2 * P1.Z * (P1.Y - Frame->FY2), P1.Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec4(Color.X, Color.Y, Color.Z, 1.0f) };
+	v[1] = { 0, vec3(RFX2 * P2.Z * (P2.X - Frame->FX2), RFY2 * P2.Z * (P2.Y - Frame->FY2), P2.Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec4(Color.X, Color.Y, Color.Z, 1.0f) };
+
+	iptr[0] = SceneVertexPos;
+	iptr[1] = SceneVertexPos + 1;
+
+	SceneVertexPos += 2;
+	SceneIndexPos += 2;
+
 	unguard;
 }
 
 void UD3D11RenderDevice::Draw2DPoint(FSceneNode* Frame, FPlane Color, DWORD LineFlags, FLOAT X1, FLOAT Y1, FLOAT X2, FLOAT Y2, FLOAT Z)
 {
 	guard(UD3D11RenderDevice::Draw2DPoint);
-	//SetBlend(PF_Highlighted | PF_Occlude);
-	//SetNoTexture(0);
-	//glColor3fv(&Color.X);
-	//glBegin(GL_TRIANGLE_FAN);
-	//glVertex3f( RFX2*Z*(X1-Frame->FX2), RFY2*Z*(Y1-Frame->FY2), Z );
-	//glVertex3f( RFX2*Z*(X2-Frame->FX2), RFY2*Z*(Y1-Frame->FY2), Z );
-	//glVertex3f( RFX2*Z*(X2-Frame->FX2), RFY2*Z*(Y2-Frame->FY2), Z );
-	//glVertex3f( RFX2*Z*(X1-Frame->FX2), RFY2*Z*(Y2-Frame->FY2), Z );
-	//glEnd();
+
+	auto pipeline = &ScenePass.PointPipeline;
+	if (pipeline != Batch.Pipeline)
+	{
+		DrawBatch();
+		Batch.Pipeline = pipeline;
+	}
+
+	SetDescriptorSet(PF_Highlighted);
+
+	if (!SceneVertices || !SceneIndexes) return;
+
+	SceneVertex* v = &SceneVertices[SceneVertexPos];
+
+	v[0] = { 0, vec3(RFX2 * Z * (X1 - Frame->FX2), RFY2 * Z * (Y1 - Frame->FY2), Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec4(Color.X, Color.Y, Color.Z, 1.0f) };
+	v[1] = { 0, vec3(RFX2 * Z * (X2 - Frame->FX2), RFY2 * Z * (Y1 - Frame->FY2), Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec4(Color.X, Color.Y, Color.Z, 1.0f) };
+	v[2] = { 0, vec3(RFX2 * Z * (X2 - Frame->FX2), RFY2 * Z * (Y2 - Frame->FY2), Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec4(Color.X, Color.Y, Color.Z, 1.0f) };
+	v[3] = { 0, vec3(RFX2 * Z * (X1 - Frame->FX2), RFY2 * Z * (Y2 - Frame->FY2), Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec4(Color.X, Color.Y, Color.Z, 1.0f) };
+
+	size_t vstart = SceneVertexPos;
+	size_t vcount = 4;
+	size_t istart = SceneIndexPos;
+	size_t icount = (vcount - 2) * 3;
+
+	uint32_t* iptr = SceneIndexes + istart;
+	for (uint32_t i = vstart + 2; i < vstart + vcount; i++)
+	{
+		*(iptr++) = vstart;
+		*(iptr++) = i - 1;
+		*(iptr++) = i;
+	}
+
+	SceneVertexPos += vcount;
+	SceneIndexPos += icount;
+
 	unguard;
 }
 
@@ -1407,6 +1543,8 @@ void UD3D11RenderDevice::DrawBatch()
 
 		Context->OMSetBlendState(Batch.Pipeline->BlendState, nullptr, 0xffffffff);
 		Context->OMSetDepthStencilState(Batch.Pipeline->DepthStencilState, 0);
+
+		Context->IASetPrimitiveTopology(Batch.Pipeline->PrimitiveTopology);
 
 		Context->Unmap(ScenePass.VertexBuffer, 0); SceneVertices = nullptr;
 		Context->Unmap(ScenePass.IndexBuffer, 0); SceneIndexes = nullptr;
