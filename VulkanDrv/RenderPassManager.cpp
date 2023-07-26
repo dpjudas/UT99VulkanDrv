@@ -44,13 +44,13 @@ void RenderPassManager::CreatePresentPipelineLayout()
 		.Create(renderer->Device.get());
 }
 
-void RenderPassManager::BeginScene(VulkanCommandBuffer* cmdbuffer)
+void RenderPassManager::BeginScene(VulkanCommandBuffer* cmdbuffer, float r, float g, float b, float a)
 {
 	RenderPassBegin()
 		.RenderPass(SceneRenderPass.get())
 		.Framebuffer(renderer->Framebuffers->sceneFramebuffer.get())
 		.RenderArea(0, 0, renderer->Textures->Scene->width, renderer->Textures->Scene->height)
-		.AddClearColor(0.0f, 0.0f, 0.0f, 1.0f)
+		.AddClearColor(r, g, b, a)
 		.AddClearDepthStencil(1.0f, 0)
 		.Execute(cmdbuffer);
 }

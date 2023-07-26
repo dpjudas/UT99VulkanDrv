@@ -18,7 +18,7 @@ public:
 	void CreatePresentRenderPass();
 	void CreatePresentPipeline();
 
-	void BeginScene(VulkanCommandBuffer* cmdbuffer);
+	void BeginScene(VulkanCommandBuffer* cmdbuffer, float r, float g, float b, float a);
 	void EndScene(VulkanCommandBuffer* cmdbuffer);
 
 	void BeginPresent(VulkanCommandBuffer* cmdbuffer);
