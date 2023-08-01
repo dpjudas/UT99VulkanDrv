@@ -688,14 +688,14 @@ UBOOL UD3D11RenderDevice::Exec(const TCHAR* Cmd, FOutputDevice& Ar)
 	else if (ParseCommand(&Cmd, TEXT("d3d_saturation")))
 	{
 		float value = _wtof(Cmd);
-		D3DSaturation = clamp(value, -1.0f, 1.0f);
+		D3DSaturation = clamp(value, -15.0f, 15.f);
 		SaveConfig();
 		return 1;
 	}
 	else if (ParseCommand(&Cmd, TEXT("d3d_brightness")))
 	{
 		float value = _wtof(Cmd);
-		D3DBrightness = clamp(value, -15.0f, 15.f);
+		D3DBrightness = clamp(value, -0.8f, 0.8f);
 		SaveConfig();
 		return 1;
 	}

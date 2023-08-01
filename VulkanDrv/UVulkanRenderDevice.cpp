@@ -283,14 +283,14 @@ UBOOL UVulkanRenderDevice::Exec(const TCHAR* Cmd, FOutputDevice& Ar)
 	else if (ParseCommand(&Cmd, TEXT("vk_saturation")))
 	{
 		float value = _wtof(Cmd);
-		VkSaturation = clamp(value, -1.0f, 1.0f);
+		VkSaturation = clamp(value, -15.0f, 15.f);
 		SaveConfig();
 		return 1;
 	}
 	else if (ParseCommand(&Cmd, TEXT("vk_brightness")))
 	{
 		float value = _wtof(Cmd);
-		VkBrightness = clamp(value, -15.0f, 15.f);
+		VkBrightness = clamp(value, -0.8f, 0.8f);
 		SaveConfig();
 		return 1;
 	}
