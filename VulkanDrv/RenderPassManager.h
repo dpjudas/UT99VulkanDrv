@@ -26,6 +26,8 @@ public:
 
 	VulkanPipeline* getPipeline(DWORD polyflags, bool bindless);
 	VulkanPipeline* getEndFlashPipeline();
+	VulkanPipeline* getLinePipeline(bool bindless) { return linepipeline[bindless].get(); }
+	VulkanPipeline* getPointPipeline(bool bindless) { return pointpipeline[bindless].get(); }
 
 	std::unique_ptr<VulkanRenderPass> SceneRenderPass;
 
@@ -39,4 +41,6 @@ private:
 
 	UVulkanRenderDevice* renderer = nullptr;
 	std::unique_ptr<VulkanPipeline> pipeline[2][32];
+	std::unique_ptr<VulkanPipeline> linepipeline[2];
+	std::unique_ptr<VulkanPipeline> pointpipeline[2];
 };

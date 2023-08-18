@@ -930,13 +930,39 @@ void UVulkanRenderDevice::Draw3DLine(FSceneNode* Frame, FPlane Color, DWORD Line
 	}
 	else
 	{
-		/*SetNoTexture(0);
-		SetBlend(PF_Highlighted);
-		glColor3fv(&Color.X);
-		glBegin(GL_LINES);
-		glVertex3fv(&P1.X);
-		glVertex3fv(&P2.X);
-		glEnd();*/
+		SetPipeline(RenderPasses->getLinePipeline(UsesBindless));
+
+		ivec4 textureBinds;
+		if (UsesBindless)
+		{
+			textureBinds.x = DescriptorSets->GetTextureArrayIndex(PF_Highlighted, nullptr, true);
+			textureBinds.y = 0.0f;
+			textureBinds.z = 0.0f;
+			textureBinds.w = 0.0f;
+
+			SetDescriptorSet(DescriptorSets->GetBindlessDescriptorSet(), true);
+		}
+		else
+		{
+			textureBinds.x = 0.0f;
+			textureBinds.y = 0.0f;
+			textureBinds.z = 0.0f;
+			textureBinds.w = 0.0f;
+
+			SetDescriptorSet(DescriptorSets->GetTextureDescriptorSet(PF_Highlighted, nullptr, nullptr, nullptr, nullptr, true), false);
+		}
+
+		SceneVertex* v = &Buffers->SceneVertices[SceneVertexPos];
+		uint32_t* iptr = Buffers->SceneIndexes + SceneIndexPos;
+
+		v[0] = { 0, vec3(P1.X, P1.Y, P1.Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec4(Color.X, Color.Y, Color.Z, 1.0f), textureBinds };
+		v[1] = { 0, vec3(P2.X, P2.Y, P2.Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec4(Color.X, Color.Y, Color.Z, 1.0f), textureBinds };
+
+		iptr[0] = SceneVertexPos;
+		iptr[1] = SceneVertexPos + 1;
+
+		SceneVertexPos += 2;
+		SceneIndexPos += 2;
 	}
 
 	unguard;
@@ -952,27 +978,93 @@ void UVulkanRenderDevice::Draw2DClippedLine(FSceneNode* Frame, FPlane Color, DWO
 void UVulkanRenderDevice::Draw2DLine(FSceneNode* Frame, FPlane Color, DWORD LineFlags, FVector P1, FVector P2)
 {
 	guard(UVulkanRenderDevice::Draw2DLine);
-	//SetBlend(PF_Highlighted | PF_Occlude);
-	//glColor3fv( &Color.X );
-	//glBegin(GL_LINES);
-	//glVertex3f( RFX2*P1.Z*(P1.X-Frame->FX2), RFY2*P1.Z*(P1.Y-Frame->FY2), P1.Z );
-	//glVertex3f( RFX2*P2.Z*(P2.X-Frame->FX2), RFY2*P2.Z*(P2.Y-Frame->FY2), P2.Z );
-	//glEnd();
+
+	SetPipeline(RenderPasses->getLinePipeline(UsesBindless));
+
+	ivec4 textureBinds;
+	if (UsesBindless)
+	{
+		textureBinds.x = DescriptorSets->GetTextureArrayIndex(PF_Highlighted, nullptr, true);
+		textureBinds.y = 0.0f;
+		textureBinds.z = 0.0f;
+		textureBinds.w = 0.0f;
+
+		SetDescriptorSet(DescriptorSets->GetBindlessDescriptorSet(), true);
+	}
+	else
+	{
+		textureBinds.x = 0.0f;
+		textureBinds.y = 0.0f;
+		textureBinds.z = 0.0f;
+		textureBinds.w = 0.0f;
+
+		SetDescriptorSet(DescriptorSets->GetTextureDescriptorSet(PF_Highlighted, nullptr, nullptr, nullptr, nullptr, true), false);
+	}
+
+	SceneVertex* v = &Buffers->SceneVertices[SceneVertexPos];
+	uint32_t* iptr = Buffers->SceneIndexes + SceneIndexPos;
+
+	v[0] = { 0, vec3(RFX2 * P1.Z * (P1.X - Frame->FX2), RFY2 * P1.Z * (P1.Y - Frame->FY2), P1.Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec4(Color.X, Color.Y, Color.Z, 1.0f), textureBinds };
+	v[1] = { 0, vec3(RFX2 * P2.Z * (P2.X - Frame->FX2), RFY2 * P2.Z * (P2.Y - Frame->FY2), P2.Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec4(Color.X, Color.Y, Color.Z, 1.0f), textureBinds };
+
+	iptr[0] = SceneVertexPos;
+	iptr[1] = SceneVertexPos + 1;
+
+	SceneVertexPos += 2;
+	SceneIndexPos += 2;
+
 	unguard;
 }
 
 void UVulkanRenderDevice::Draw2DPoint(FSceneNode* Frame, FPlane Color, DWORD LineFlags, FLOAT X1, FLOAT Y1, FLOAT X2, FLOAT Y2, FLOAT Z)
 {
 	guard(UVulkanRenderDevice::Draw2DPoint);
-	//SetBlend(PF_Highlighted | PF_Occlude);
-	//SetNoTexture(0);
-	//glColor3fv(&Color.X);
-	//glBegin(GL_TRIANGLE_FAN);
-	//glVertex3f( RFX2*Z*(X1-Frame->FX2), RFY2*Z*(Y1-Frame->FY2), Z );
-	//glVertex3f( RFX2*Z*(X2-Frame->FX2), RFY2*Z*(Y1-Frame->FY2), Z );
-	//glVertex3f( RFX2*Z*(X2-Frame->FX2), RFY2*Z*(Y2-Frame->FY2), Z );
-	//glVertex3f( RFX2*Z*(X1-Frame->FX2), RFY2*Z*(Y2-Frame->FY2), Z );
-	//glEnd();
+
+	SetPipeline(RenderPasses->getPointPipeline(UsesBindless));
+
+	ivec4 textureBinds;
+	if (UsesBindless)
+	{
+		textureBinds.x = DescriptorSets->GetTextureArrayIndex(PF_Highlighted, nullptr, true);
+		textureBinds.y = 0.0f;
+		textureBinds.z = 0.0f;
+		textureBinds.w = 0.0f;
+
+		SetDescriptorSet(DescriptorSets->GetBindlessDescriptorSet(), true);
+	}
+	else
+	{
+		textureBinds.x = 0.0f;
+		textureBinds.y = 0.0f;
+		textureBinds.z = 0.0f;
+		textureBinds.w = 0.0f;
+
+		SetDescriptorSet(DescriptorSets->GetTextureDescriptorSet(PF_Highlighted, nullptr, nullptr, nullptr, nullptr, true), false);
+	}
+
+	SceneVertex* v = &Buffers->SceneVertices[SceneVertexPos];
+
+	v[0] = { 0, vec3(RFX2 * Z * (X1 - Frame->FX2), RFY2 * Z * (Y1 - Frame->FY2), Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec4(Color.X, Color.Y, Color.Z, 1.0f), textureBinds };
+	v[1] = { 0, vec3(RFX2 * Z * (X2 - Frame->FX2), RFY2 * Z * (Y1 - Frame->FY2), Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec4(Color.X, Color.Y, Color.Z, 1.0f), textureBinds };
+	v[2] = { 0, vec3(RFX2 * Z * (X2 - Frame->FX2), RFY2 * Z * (Y2 - Frame->FY2), Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec4(Color.X, Color.Y, Color.Z, 1.0f), textureBinds };
+	v[3] = { 0, vec3(RFX2 * Z * (X1 - Frame->FX2), RFY2 * Z * (Y2 - Frame->FY2), Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec4(Color.X, Color.Y, Color.Z, 1.0f), textureBinds };
+
+	size_t vstart = SceneVertexPos;
+	size_t vcount = 4;
+	size_t istart = SceneIndexPos;
+	size_t icount = (vcount - 2) * 3;
+
+	uint32_t* iptr = Buffers->SceneIndexes + istart;
+	for (uint32_t i = vstart + 2; i < vstart + vcount; i++)
+	{
+		*(iptr++) = vstart;
+		*(iptr++) = i - 1;
+		*(iptr++) = i;
+	}
+
+	SceneVertexPos += vcount;
+	SceneIndexPos += icount;
+
 	unguard;
 }
 
