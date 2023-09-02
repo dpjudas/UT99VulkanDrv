@@ -34,6 +34,7 @@ CachedTexture* TextureManager::GetTexture(FTextureInfo* info, bool masked)
 		tex.reset(new CachedTexture());
 		renderer->Uploads->UploadTexture(tex.get(), *info, masked);
 	}
+#if defined(OLDUNREAL469SDK)
 	else if (info->bRealtimeChanged && (!info->Texture || info->Texture->RealtimeChangeCount != tex->RealtimeChangeCount))
 	{
 		if (info->Texture)
@@ -41,6 +42,13 @@ CachedTexture* TextureManager::GetTexture(FTextureInfo* info, bool masked)
 		info->bRealtimeChanged = 0;
 		renderer->Uploads->UploadTexture(tex.get(), *info, masked);
 	}
+#else
+	else if (info->bRealtimeChanged)
+	{
+		info->bRealtimeChanged = 0;
+		renderer->Uploads->UploadTexture(tex.get(), *info, masked);
+	}
+#endif
 	return tex.get();
 }
 

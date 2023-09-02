@@ -30,3 +30,7 @@
 
 #include "Engine.h"
 #include "UnRender.h"
+
+#if !defined(UNREALGOLD) && !defined(DEUSEX)
+#define OLDUNREAL469SDK
+#endif

@@ -27,10 +27,12 @@ void UVulkanRenderDevice::StaticConstructor()
 	Multisample = 0;
 	UsePrecache = 0;
 
+#if defined(OLDUNREAL469SDK)
 	UseLightmapAtlas = 0;
 	SupportsUpdateTextureRect = 1;
 	MaxTextureSize = 4096;
 	NeedsMaskedFonts = 0;
+#endif
 
 	VkBrightness = 0.0f;
 	VkContrast = 1.0f;
@@ -44,7 +46,10 @@ void UVulkanRenderDevice::StaticConstructor()
 	OneXBlending = 0;
 	ActorXBlending = 0;
 
+#if defined(OLDUNREAL469SDK)
 	new(GetClass(), TEXT("UseLightmapAtlas"), RF_Public) UBoolProperty(CPP_PROPERTY(UseLightmapAtlas), TEXT("Display"), CPF_Config);
+#endif
+
 	new(GetClass(), TEXT("UseVSync"), RF_Public) UBoolProperty(CPP_PROPERTY(UseVSync), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("UsePrecache"), RF_Public) UBoolProperty(CPP_PROPERTY(UsePrecache), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("Multisample"), RF_Public) UIntProperty(CPP_PROPERTY(Multisample), TEXT("Display"), CPF_Config);
@@ -189,7 +194,11 @@ UBOOL UVulkanRenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL F
 
 	SaveConfig();
 
+#if defined(UNREALGOLD)
+	Flush();
+#else
 	Flush(1);
+#endif
 
 	return 1;
 	unguard;
@@ -234,6 +243,41 @@ void UVulkanRenderDevice::SubmitAndWait(bool present, int presentWidth, int pres
 	SceneIndexPos = 0;
 }
 
+#if defined(UNREALGOLD)
+
+void UVulkanRenderDevice::Flush()
+{
+	guard(UVulkanRenderDevice::Flush);
+
+	if (IsLocked)
+	{
+		DrawBatch(Commands->GetDrawCommands());
+		RenderPasses->EndScene(Commands->GetDrawCommands());
+		SubmitAndWait(false, 0, 0, false);
+
+		ClearTextureCache();
+
+		auto cmdbuffer = Commands->GetDrawCommands();
+		RenderPasses->BeginScene(cmdbuffer, 0.0f, 0.0f, 0.0f, 1.0f);
+
+		VkBuffer vertexBuffers[] = { Buffers->SceneVertexBuffer->buffer };
+		VkDeviceSize offsets[] = { 0 };
+		cmdbuffer->bindVertexBuffers(0, 1, vertexBuffers, offsets);
+		cmdbuffer->bindIndexBuffer(Buffers->SceneIndexBuffer->buffer, 0, VK_INDEX_TYPE_UINT32);
+	}
+	else
+	{
+		ClearTextureCache();
+	}
+
+	if (UsePrecache && !GIsEditor)
+		PrecacheOnFlip = 1;
+
+	unguard;
+}
+
+#else
+
 void UVulkanRenderDevice::Flush(UBOOL AllowPrecache)
 {
 	guard(UVulkanRenderDevice::Flush);
@@ -265,15 +309,19 @@ void UVulkanRenderDevice::Flush(UBOOL AllowPrecache)
 	unguard;
 }
 
+#endif
+
 UBOOL UVulkanRenderDevice::Exec(const TCHAR* Cmd, FOutputDevice& Ar)
 {
 	guard(UVulkanRenderDevice::Exec);
 
+#if !defined(UNREALGOLD)
 	if (URenderDevice::Exec(Cmd, Ar))
 	{
 		return 1;
 	}
-	else if (ParseCommand(&Cmd, TEXT("vk_contrast")))
+#endif
+	if (ParseCommand(&Cmd, TEXT("vk_contrast")))
 	{
 		float value = _wtof(Cmd);
 		VkContrast = clamp(value, 0.1f, 3.f);
@@ -546,6 +594,8 @@ void UVulkanRenderDevice::Unlock(UBOOL Blit)
 	unguard;
 }
 
+#if defined(OLDUNREAL469SDK)
+
 UBOOL UVulkanRenderDevice::SupportsTextureFormat(ETextureFormat Format)
 {
 	guard(UVulkanRenderDevice::SupportsTextureFormat);
@@ -563,6 +613,8 @@ void UVulkanRenderDevice::UpdateTextureRect(FTextureInfo& Info, INT U, INT V, IN
 
 	unguard;
 }
+
+#endif
 
 void UVulkanRenderDevice::DrawBatch(VulkanCommandBuffer* cmdbuffer)
 {
@@ -589,7 +641,11 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 	CachedTexture* detailtex = Textures->GetTexture(Surface.DetailTexture, false);
 	CachedTexture* fogmap = Textures->GetTexture(Surface.FogMap, false);
 
+#if defined(UNREALGOLD)
+	if (Surface.DetailTexture && Surface.FogMap) detailtex = nullptr;
+#else
 	if ((Surface.DetailTexture && Surface.FogMap) || (!DetailTextures)) detailtex = nullptr;
+#endif
 
 	float UDot = Facet.MapCoords.XAxis | Facet.MapCoords.Origin;
 	float VDot = Facet.MapCoords.YAxis | Facet.MapCoords.Origin;

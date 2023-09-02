@@ -14,10 +14,17 @@
 
 class CachedTexture;
 
+#if defined(OLDUNREAL469SDK)
 class UVulkanRenderDevice : public URenderDeviceOldUnreal469
 {
 public:
 	DECLARE_CLASS(UVulkanRenderDevice, URenderDeviceOldUnreal469, CLASS_Config, VulkanDrv)
+#else
+class UVulkanRenderDevice : public URenderDevice
+{
+public:
+	DECLARE_CLASS(UVulkanRenderDevice, URenderDevice, CLASS_Config)
+#endif
 
 	UVulkanRenderDevice();
 	void StaticConstructor();
@@ -25,7 +32,11 @@ public:
 	UBOOL Init(UViewport* InViewport, INT NewX, INT NewY, INT NewColorBytes, UBOOL Fullscreen) override;
 	UBOOL SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fullscreen) override;
 	void Exit() override;
+#if defined(UNREALGOLD)
+	void Flush() override;
+#else
 	void Flush(UBOOL AllowPrecache) override;
+#endif
 	UBOOL Exec(const TCHAR* Cmd, FOutputDevice& Ar);
 	void Lock(FPlane FlashScale, FPlane FlashFog, FPlane ScreenClear, DWORD RenderLockFlags, BYTE* HitData, INT* HitSize) override;
 	void Unlock(UBOOL Blit) override;
@@ -45,10 +56,12 @@ public:
 	void SetSceneNode(FSceneNode* Frame) override;
 	void PrecacheTexture(FTextureInfo& Info, DWORD PolyFlags) override;
 
+#if defined(OLDUNREAL469SDK)
 	// URenderDeviceOldUnreal469 extensions
 	// void DrawGouraudTriangles(const FSceneNode* Frame, const FTextureInfo& Info, FTransTexture* const Pts, INT NumPts, DWORD PolyFlags, DWORD DataFlags, FSpanBuffer* Span) override;
 	UBOOL SupportsTextureFormat(ETextureFormat Format) override;
 	void UpdateTextureRect(FTextureInfo& Info, INT U, INT V, INT UL, INT VL) override;
+#endif
 
 	int InterfacePadding[64]; // For allowing URenderDeviceOldUnreal469 interface to add things
 

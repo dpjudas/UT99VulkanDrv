@@ -28,10 +28,12 @@ void UD3D11RenderDevice::StaticConstructor()
 	Multisample = 0;
 	UsePrecache = 0;
 
+#if defined(OLDUNREAL469SDK)
 	UseLightmapAtlas = 0;
 	SupportsUpdateTextureRect = 1;
 	MaxTextureSize = 4096;
 	NeedsMaskedFonts = 0;
+#endif
 
 	D3DBrightness = 0.0f;
 	D3DContrast = 1.0f;
@@ -42,7 +44,10 @@ void UD3D11RenderDevice::StaticConstructor()
 	OneXBlending = 0;
 	ActorXBlending = 0;
 
+#if defined(OLDUNREAL469SDK)
 	new(GetClass(), TEXT("UseLightmapAtlas"), RF_Public) UBoolProperty(CPP_PROPERTY(UseLightmapAtlas), TEXT("Display"), CPF_Config);
+#endif
+
 	new(GetClass(), TEXT("UseVSync"), RF_Public) UBoolProperty(CPP_PROPERTY(UseVSync), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("UsePrecache"), RF_Public) UBoolProperty(CPP_PROPERTY(UsePrecache), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("Multisample"), RF_Public) UIntProperty(CPP_PROPERTY(Multisample), TEXT("Display"), CPF_Config);
@@ -186,7 +191,11 @@ UBOOL UD3D11RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 
 	SaveConfig();
 
+#if defined(UNREALGOLD)
+	Flush();
+#else
 	Flush(1);
+#endif
 
 	return 1;
 	unguard;
@@ -657,6 +666,23 @@ void UD3D11RenderDevice::CreatePresentPass()
 	ThrowIfFailed(result, "CreateRasterizerState(PresentPass.RasterizerState) failed");
 }
 
+#if defined(UNREALGOLD)
+
+void UD3D11RenderDevice::Flush()
+{
+	guard(UD3D11RenderDevice::Flush);
+
+	DrawBatch();
+	ClearTextureCache();
+
+	if (UsePrecache && !GIsEditor)
+		PrecacheOnFlip = 1;
+
+	unguard;
+}
+
+#else
+
 void UD3D11RenderDevice::Flush(UBOOL AllowPrecache)
 {
 	guard(UD3D11RenderDevice::Flush);
@@ -670,15 +696,19 @@ void UD3D11RenderDevice::Flush(UBOOL AllowPrecache)
 	unguard;
 }
 
+#endif
+
 UBOOL UD3D11RenderDevice::Exec(const TCHAR* Cmd, FOutputDevice& Ar)
 {
 	guard(UD3D11RenderDevice::Exec);
 
+#if !defined(UNREALGOLD)
 	if (URenderDevice::Exec(Cmd, Ar))
 	{
 		return 1;
 	}
-	else if (ParseCommand(&Cmd, TEXT("d3d_contrast")))
+#endif
+	if (ParseCommand(&Cmd, TEXT("d3d_contrast")))
 	{
 		float value = _wtof(Cmd);
 		D3DContrast = clamp(value, 0.1f, 3.f);
@@ -912,6 +942,8 @@ void UD3D11RenderDevice::Unlock(UBOOL Blit)
 	unguard;
 }
 
+#if defined(OLDUNREAL469SDK)
+
 UBOOL UD3D11RenderDevice::SupportsTextureFormat(ETextureFormat Format)
 {
 	guard(UD3D11RenderDevice::SupportsTextureFormat);
@@ -930,6 +962,8 @@ void UD3D11RenderDevice::UpdateTextureRect(FTextureInfo& Info, INT U, INT V, INT
 	unguard;
 }
 
+#endif
+
 void UD3D11RenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Surface, FSurfaceFacet& Facet)
 {
 	guard(UD3D11RenderDevice::DrawComplexSurface);
@@ -940,7 +974,11 @@ void UD3D11RenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Sur
 	CachedTexture* detailtex = Textures->GetTexture(Surface.DetailTexture, false);
 	CachedTexture* fogmap = Textures->GetTexture(Surface.FogMap, false);
 
+#if defined(UNREALGOLD)
+	if (Surface.DetailTexture && Surface.FogMap) detailtex = nullptr;
+#else
 	if ((Surface.DetailTexture && Surface.FogMap) || (!DetailTextures)) detailtex = nullptr;
+#endif
 
 	float UDot = Facet.MapCoords.XAxis | Facet.MapCoords.Origin;
 	float VDot = Facet.MapCoords.YAxis | Facet.MapCoords.Origin;

@@ -8,6 +8,16 @@ TextureUploader* TextureUploader::GetUploader(ETextureFormat format)
 	static std::map<ETextureFormat, std::unique_ptr<TextureUploader>> Uploaders;
 	if (Uploaders.empty())
 	{
+#if !defined(OLDUNREAL469SDK)
+
+		Uploaders[TEXF_P8].reset(new TextureUploader_P8());
+		Uploaders[TEXF_RGBA7].reset(new TextureUploader_BGRA8_LM());
+		Uploaders[TEXF_RGB16].reset(new TextureUploader_Simple(DXGI_FORMAT_B5G6R5_UNORM, 2));
+		Uploaders[TEXF_DXT1].reset(new TextureUploader_4x4Block(DXGI_FORMAT_BC1_UNORM, 8));
+		Uploaders[TEXF_RGB8].reset(new TextureUploader_RGB8());
+		Uploaders[TEXF_RGBA8].reset(new TextureUploader_Simple(DXGI_FORMAT_B8G8R8A8_UNORM, 4));
+
+#else
 		// Original.
 		Uploaders[TEXF_P8].reset(new TextureUploader_P8());
 		Uploaders[TEXF_BGRA8_LM].reset(new TextureUploader_BGRA8_LM());
@@ -162,6 +172,7 @@ TextureUploader* TextureUploader::GetUploader(ETextureFormat format)
 		//Uploaders[TEXF_RG64_F].reset(new TextureUploader_RG64_F());
 		//Uploaders[TEXF_RGB64_F].reset(new TextureUploader_RGB64_F());
 		//Uploaders[TEXF_RGBA64_F].reset(new TextureUploader_RGBA64_F());
+#endif
 	}
 
 	auto it = Uploaders.find(format);

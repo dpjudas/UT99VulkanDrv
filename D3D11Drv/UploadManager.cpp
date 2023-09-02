@@ -39,7 +39,11 @@ void UploadManager::UploadTexture(CachedTexture* tex, const FTextureInfo& Info, 
 
 	if (!tex->Texture)
 	{
+#if defined(OLDUNREAL469SDK)
 		INT MinSize = Info.Format == TEXF_BC1 || (Info.Format >= TEXF_BC2 && Info.Format <= TEXF_BC6H) ? 4 : 0;
+#else
+		INT MinSize = Info.Format == TEXF_DXT1 ? 4 : 0;
+#endif
 		D3D11_TEXTURE2D_DESC texDesc = {};
 		texDesc.Usage = D3D11_USAGE_DEFAULT;
 		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
