@@ -176,6 +176,9 @@ UBOOL UVulkanRenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL F
 {
 	guard(UVulkanRenderDevice::SetRes);
 
+	if (NewX == 0 || NewY == 0)
+		return 1;
+
 	if (!Viewport->ResizeViewport(Fullscreen ? (BLIT_Fullscreen | BLIT_OpenGL) : (BLIT_HardwarePaint | BLIT_OpenGL), NewX, NewY, NewColorBytes))
 		return 0;
 

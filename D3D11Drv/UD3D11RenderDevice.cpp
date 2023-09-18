@@ -179,7 +179,8 @@ UBOOL UD3D11RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 		return FALSE;
 	}
 
-	ResizeSceneBuffers(NewX, NewY);
+	if (NewX && NewY)
+		ResizeSceneBuffers(NewX, NewY);
 
 	result = SwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**)&BackBuffer);
 	if (FAILED(result))
