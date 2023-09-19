@@ -120,40 +120,50 @@ UBOOL UVulkanRenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT N
 
 		UsesBindless = SupportsBindless;
 
+		const auto& props = Device->PhysicalDevice.Properties.Properties;
+
+		FString deviceType;
+		switch (props.deviceType)
+		{
+		case VK_PHYSICAL_DEVICE_TYPE_OTHER: deviceType = TEXT("other"); break;
+		case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU: deviceType = TEXT("integrated gpu"); break;
+		case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU: deviceType = TEXT("discrete gpu"); break;
+		case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU: deviceType = TEXT("virtual gpu"); break;
+		case VK_PHYSICAL_DEVICE_TYPE_CPU: deviceType = TEXT("cpu"); break;
+		default: deviceType = FString::Printf(TEXT("%d"), (int)props.deviceType); break;
+		}
+
+		FString apiVersion, driverVersion;
+		apiVersion = FString::Printf(TEXT("%d.%d.%d"), VK_VERSION_MAJOR(props.apiVersion), VK_VERSION_MINOR(props.apiVersion), VK_VERSION_PATCH(props.apiVersion));
+		driverVersion = FString::Printf(TEXT("%d.%d.%d"), VK_VERSION_MAJOR(props.driverVersion), VK_VERSION_MINOR(props.driverVersion), VK_VERSION_PATCH(props.driverVersion));
+
+		debugf(TEXT("Vulkan device: %s"), to_utf16(props.deviceName).c_str());
+		debugf(TEXT("Vulkan device type: %s"), *deviceType);
+		debugf(TEXT("Vulkan version: %s (api) %s (driver)"), *apiVersion, *driverVersion);
+
 		if (VkDebug)
 		{
-			const auto& props = Device->PhysicalDevice.Properties.Properties;
-
-			FString deviceType;
-			switch (props.deviceType)
-			{
-			case VK_PHYSICAL_DEVICE_TYPE_OTHER: deviceType = TEXT("other"); break;
-			case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU: deviceType = TEXT("integrated gpu"); break;
-			case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU: deviceType = TEXT("discrete gpu"); break;
-			case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU: deviceType = TEXT("virtual gpu"); break;
-			case VK_PHYSICAL_DEVICE_TYPE_CPU: deviceType = TEXT("cpu"); break;
-			default: deviceType = FString::Printf(TEXT("%d"), (int)props.deviceType); break;
-			}
-
-			FString apiVersion, driverVersion;
-			apiVersion = FString::Printf(TEXT("%d.%d.%d"), VK_VERSION_MAJOR(props.apiVersion), VK_VERSION_MINOR(props.apiVersion), VK_VERSION_PATCH(props.apiVersion));
-			driverVersion = FString::Printf(TEXT("%d.%d.%d"), VK_VERSION_MAJOR(props.driverVersion), VK_VERSION_MINOR(props.driverVersion), VK_VERSION_PATCH(props.driverVersion));
-
-			debugf(TEXT("Vulkan device: %s"), to_utf16(props.deviceName).c_str());
-			debugf(TEXT("Vulkan device type: %s"), *deviceType);
-			debugf(TEXT("Vulkan version: %s (api) %s (driver)"), *apiVersion, *driverVersion);
-
 			debugf(TEXT("Vulkan extensions:"));
 			for (const VkExtensionProperties& p : Device->PhysicalDevice.Extensions)
 			{
 				debugf(TEXT(" %s"), to_utf16(p.extensionName).c_str());
 			}
-
-			const auto& limits = props.limits;
-			debugf(TEXT("Max. texture size: %d"), limits.maxImageDimension2D);
-			debugf(TEXT("Max. uniform buffer range: %d"), limits.maxUniformBufferRange);
-			debugf(TEXT("Min. uniform buffer offset alignment: %llu"), limits.minUniformBufferOffsetAlignment);
 		}
+
+		const auto& limits = props.limits;
+		debugf(TEXT("Max. texture size: %d"), limits.maxImageDimension2D);
+		debugf(TEXT("Max. uniform buffer range: %d"), limits.maxUniformBufferRange);
+		debugf(TEXT("Min. uniform buffer offset alignment: %llu"), limits.minUniformBufferOffsetAlignment);
+
+		if (SupportsBindless)
+			debugf(TEXT("GPU supports bindless textures"));
+		else
+			debugf(TEXT("GPU does not support bindless textures"));
+
+		if (UsesBindless)
+			debugf(TEXT("Vulkan driver is using bindless textures"));
+		else
+			debugf(TEXT("Vulkan driver is not using bindless textures"));
 	}
 	catch (const std::exception& e)
 	{
