@@ -183,6 +183,7 @@ public:
 	FLOAT D3DContrast;
 	FLOAT D3DSaturation;
 	INT D3DGrayFormula;
+	BITFIELD D3DHdr;
 
 	FLOAT LODBias;
 	BITFIELD OneXBlending;

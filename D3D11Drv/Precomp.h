@@ -8,6 +8,8 @@
 #pragma pack(push, 8)
 #include <Windows.h>
 #include <D3D11.h>
+#include <dxgi1_2.h>
+#include <dxgi1_4.h>
 #include <d3dcompiler.h>
 #undef min
 #undef max
