@@ -39,16 +39,27 @@ void UploadManager::UploadTexture(CachedTexture* tex, const FTextureInfo& Info, 
 
 	if (!tex->Texture)
 	{
+		// Base texture must use complete 4x4 compression blocks in Direct3D 11 or some drivers crash
 #if defined(OLDUNREAL469SDK)
-		INT MinSize = Info.Format == TEXF_BC1 || (Info.Format >= TEXF_BC2 && Info.Format <= TEXF_BC6H) ? 4 : 0;
+		INT blockSize = Info.Format == TEXF_BC1 || (Info.Format >= TEXF_BC2 && Info.Format <= TEXF_BC6H) ? 4 : 1;
 #else
-		INT MinSize = Info.Format == TEXF_DXT1 ? 4 : 0;
+		INT blockSize = Info.Format == TEXF_DXT1 ? 4 : 1;
 #endif
+		int blockWidth = (width + blockSize - 1) / blockSize * blockSize;
+		int blockHeight = (height + blockSize - 1) / blockSize * blockSize;
+		if (blockWidth != width || blockHeight != height)
+		{
+			if (blockWidth != width) width = blockWidth * 2;
+			if (blockHeight != height) height = blockHeight * 2;
+			mipcount++;
+			tex->IgnoreBaseMipmap = true;
+		}
+
 		D3D11_TEXTURE2D_DESC texDesc = {};
 		texDesc.Usage = D3D11_USAGE_DEFAULT;
 		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-		texDesc.Width = Max(MinSize, width);
-		texDesc.Height = Max(MinSize, height);
+		texDesc.Width = width;
+		texDesc.Height = height;
 		texDesc.MipLevels = mipcount;
 		texDesc.ArraySize = 1;
 		texDesc.Format = format;
@@ -62,7 +73,7 @@ void UploadManager::UploadTexture(CachedTexture* tex, const FTextureInfo& Info, 
 	}
 
 	if (uploader)
-		UploadData(tex->Texture, Info, masked, uploader);
+		UploadData(tex->Texture, Info, masked, uploader, tex->IgnoreBaseMipmap);
 	else
 		UploadWhite(tex->Texture);
 }
@@ -90,7 +101,7 @@ void UploadManager::UploadTextureRect(CachedTexture* tex, const FTextureInfo& In
 	renderer->Context->UpdateSubresource(tex->Texture, D3D11CalcSubresource(0, 0, Info.NumMips), &box, data, pitch, 0);
 }
 
-void UploadManager::UploadData(ID3D11Texture2D* image, const FTextureInfo& Info, bool masked, TextureUploader* uploader)
+void UploadManager::UploadData(ID3D11Texture2D* image, const FTextureInfo& Info, bool masked, TextureUploader* uploader, bool ignoreBaseMipmap)
 {
 	for (INT level = 0; level < Info.NumMips; level++)
 	{
@@ -112,7 +123,9 @@ void UploadManager::UploadData(ID3D11Texture2D* image, const FTextureInfo& Info,
 			box.right = mipwidth;
 			box.bottom = mipheight;
 			box.back = 1;
-			renderer->Context->UpdateSubresource(image, D3D11CalcSubresource(level, 0, Info.NumMips), &box, data, pitch, 0);
+
+			UINT subresource = ignoreBaseMipmap ? D3D11CalcSubresource(level + 1, 0, Info.NumMips + 1) : D3D11CalcSubresource(level, 0, Info.NumMips);
+			renderer->Context->UpdateSubresource(image, subresource, &box, data, pitch, 0);
 		}
 	}
 }

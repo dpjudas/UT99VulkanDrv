@@ -5,6 +5,7 @@
 
 #include "TextureManager.h"
 #include "UploadManager.h"
+#include "CachedTexture.h"
 
 struct SceneVertex
 {
@@ -132,7 +133,7 @@ public:
 		ID3D11RasterizerState* RasterizerState = nullptr;
 		ID3D11PixelShader* PixelShader = {};
 		ID3D11PixelShader* PixelShaderAlphaTest = {};
-		ID3D11SamplerState* Samplers[4] = {};
+		ID3D11SamplerState* Samplers[8] = {};
 		ScenePipelineState Pipelines[32];
 		ScenePipelineState LinePipeline;
 		ScenePipelineState PointPipeline;
@@ -146,10 +147,12 @@ public:
 		size_t SceneIndexStart = 0;
 		ScenePipelineState* Pipeline = nullptr;
 		CachedTexture* Tex = nullptr;
-		uint32_t TexSamplerMode = 0;
 		CachedTexture* Lightmap = nullptr;
 		CachedTexture* Detailtex = nullptr;
 		CachedTexture* Macrotex = nullptr;
+		uint32_t TexSamplerMode = 0;
+		uint32_t DetailtexSamplerMode = 0;
+		uint32_t MacrotexSamplerMode = 0;
 	} Batch;
 
 	SceneVertex* SceneVertices = nullptr;
@@ -254,8 +257,11 @@ inline void UD3D11RenderDevice::SetDescriptorSet(DWORD PolyFlags, CachedTexture*
 	uint32_t samplermode = 0;
 	if (PolyFlags & PF_NoSmooth) samplermode |= 1;
 	if (clamp) samplermode |= 2;
+	if (tex && tex->IgnoreBaseMipmap) samplermode |= 4;
+	int detailsamplermode = (detailtex && detailtex->IgnoreBaseMipmap) ? 4 : 0;
+	int macrosamplermode = (macrotex && macrotex->IgnoreBaseMipmap) ? 4 : 0;
 
-	if (Batch.Tex != tex || Batch.TexSamplerMode != samplermode || Batch.Lightmap != lightmap || Batch.Detailtex != detailtex || Batch.Macrotex != macrotex)
+	if (Batch.Tex != tex || Batch.TexSamplerMode != samplermode || Batch.Lightmap != lightmap || Batch.Detailtex != detailtex || Batch.DetailtexSamplerMode != detailsamplermode || Batch.Macrotex != macrotex || Batch.MacrotexSamplerMode != macrosamplermode)
 	{
 		DrawBatch();
 		Batch.Tex = tex;

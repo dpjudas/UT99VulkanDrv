@@ -22,4 +22,5 @@ public:
 	ID3D11Texture2D* Texture = nullptr;
 	ID3D11ShaderResourceView* View = nullptr;
 	int RealtimeChangeCount = 0;
+	bool IgnoreBaseMipmap = false;
 };
