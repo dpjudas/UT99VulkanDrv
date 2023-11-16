@@ -938,10 +938,11 @@ void UD3D11RenderDevice::Unlock(UBOOL Blit)
 {
 	guard(UD3D11RenderDevice::Unlock);
 
-	if (Blit)
-	{
+	if (Blit || HitData)
 		DrawBatch();
 
+	if (Blit)
+	{
 		if (Multisample > 1)
 		{
 			Context->ResolveSubresource(SceneBuffers.PPImage, 0, SceneBuffers.ColorBuffer, 0, DXGI_FORMAT_R16G16B16A16_FLOAT);
@@ -1032,6 +1033,8 @@ void UD3D11RenderDevice::Unlock(UBOOL Blit)
 		// Resolve multisampling
 		if (Multisample > 1)
 		{
+			Context->OMSetRenderTargets(1, &SceneBuffers.PPHitBufferView, nullptr);
+
 			D3D11_VIEWPORT viewport = {};
 			viewport.TopLeftX = box.left;
 			viewport.TopLeftY = box.top;
@@ -1051,7 +1054,6 @@ void UD3D11RenderDevice::Unlock(UBOOL Blit)
 			Context->PSSetShaderResources(0, 1, &SceneBuffers.HitBufferShaderView);
 			Context->OMSetDepthStencilState(PresentPass.DepthStencilState, 0);
 			Context->OMSetBlendState(PresentPass.BlendState, nullptr, 0xffffffff);
-			Context->OMSetRenderTargets(1, &SceneBuffers.PPHitBufferView, nullptr);
 
 			Context->Draw(6, 0);
 		}
