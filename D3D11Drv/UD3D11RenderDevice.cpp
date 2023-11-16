@@ -6,6 +6,7 @@
 #include "FileResource.h"
 #include "halffloat.h"
 #include <set>
+#include <emmintrin.h>
 
 IMPLEMENT_CLASS(UD3D11RenderDevice);
 
@@ -180,7 +181,17 @@ UBOOL UD3D11RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 	}
 
 	if (NewX && NewY)
-		ResizeSceneBuffers(NewX, NewY);
+	{
+		try
+		{
+			ResizeSceneBuffers(NewX, NewY);
+		}
+		catch (const std::exception& e)
+		{
+			debugf(TEXT("Could not resize scene buffers: %s"), to_utf16(e.what()).c_str());
+			return FALSE;
+		}
+	}
 
 	result = SwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**)&BackBuffer);
 	if (FAILED(result))
@@ -223,6 +234,7 @@ void UD3D11RenderDevice::Exit()
 	ReleaseObject(PresentPass.PPStepLayout);
 	ReleaseObject(PresentPass.PPStep);
 	ReleaseObject(PresentPass.PPStepVertexBuffer);
+	ReleaseObject(PresentPass.HitResolve);
 	ReleaseObject(PresentPass.Present);
 	ReleaseObject(PresentPass.PresentConstantBuffer);
 	ReleaseObject(PresentPass.DitherTextureView);
@@ -251,10 +263,16 @@ void UD3D11RenderDevice::Exit()
 	ReleaseObject(ScenePass.PointPipeline.BlendState);
 	ReleaseObject(ScenePass.PointPipeline.DepthStencilState);
 	ReleaseObject(SceneBuffers.ColorBufferView);
+	ReleaseObject(SceneBuffers.HitBufferView);
+	ReleaseObject(SceneBuffers.HitBufferShaderView);
+	ReleaseObject(SceneBuffers.PPHitBufferView);
 	ReleaseObject(SceneBuffers.DepthBufferView);
 	ReleaseObject(SceneBuffers.PPImageShaderView);
 	ReleaseObject(SceneBuffers.PPImageView);
 	ReleaseObject(SceneBuffers.ColorBuffer);
+	ReleaseObject(SceneBuffers.StagingHitBuffer);
+	ReleaseObject(SceneBuffers.PPHitBuffer);
+	ReleaseObject(SceneBuffers.HitBuffer);
 	ReleaseObject(SceneBuffers.DepthBuffer);
 	ReleaseObject(SceneBuffers.PPImage);
 	ReleaseObject(BackBufferView);
@@ -268,14 +286,20 @@ void UD3D11RenderDevice::Exit()
 
 void UD3D11RenderDevice::ResizeSceneBuffers(int width, int height)
 {
-	if (SceneBuffers.Width == width && SceneBuffers.Height == height && !SceneBuffers.ColorBuffer && !SceneBuffers.DepthBuffer && !SceneBuffers.PPImage)
+	if (SceneBuffers.Width == width && SceneBuffers.Height == height && !SceneBuffers.ColorBuffer && !SceneBuffers.HitBuffer && !SceneBuffers.PPHitBuffer && !SceneBuffers.StagingHitBuffer && !SceneBuffers.DepthBuffer && !SceneBuffers.PPImage)
 		return;
 
 	ReleaseObject(SceneBuffers.ColorBufferView);
+	ReleaseObject(SceneBuffers.HitBufferView);
+	ReleaseObject(SceneBuffers.HitBufferShaderView);
+	ReleaseObject(SceneBuffers.PPHitBufferView);
 	ReleaseObject(SceneBuffers.DepthBufferView);
 	ReleaseObject(SceneBuffers.PPImageShaderView);
 	ReleaseObject(SceneBuffers.PPImageView);
 	ReleaseObject(SceneBuffers.ColorBuffer);
+	ReleaseObject(SceneBuffers.StagingHitBuffer);
+	ReleaseObject(SceneBuffers.PPHitBuffer);
+	ReleaseObject(SceneBuffers.HitBuffer);
 	ReleaseObject(SceneBuffers.DepthBuffer);
 	ReleaseObject(SceneBuffers.PPImage);
 
@@ -294,6 +318,46 @@ void UD3D11RenderDevice::ResizeSceneBuffers(int width, int height)
 	texDesc.SampleDesc.Quality = Multisample > 1 ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0;
 	HRESULT result = Device->CreateTexture2D(&texDesc, nullptr, &SceneBuffers.ColorBuffer);
 	ThrowIfFailed(result, "CreateTexture2D(ColorBuffer) failed");
+
+	texDesc = {};
+	texDesc.Usage = D3D11_USAGE_DEFAULT;
+	texDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+	texDesc.Width = SceneBuffers.Width;
+	texDesc.Height = SceneBuffers.Height;
+	texDesc.MipLevels = 1;
+	texDesc.ArraySize = 1;
+	texDesc.Format = DXGI_FORMAT_R32_UINT;
+	texDesc.SampleDesc.Count = std::max(Multisample, 1);
+	texDesc.SampleDesc.Quality = Multisample > 1 ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0;
+	result = Device->CreateTexture2D(&texDesc, nullptr, &SceneBuffers.HitBuffer);
+	ThrowIfFailed(result, "CreateTexture2D(HitBuffer) failed");
+
+	texDesc = {};
+	texDesc.Usage = D3D11_USAGE_DEFAULT;
+	texDesc.BindFlags = D3D11_BIND_RENDER_TARGET;
+	texDesc.Width = SceneBuffers.Width;
+	texDesc.Height = SceneBuffers.Height;
+	texDesc.MipLevels = 1;
+	texDesc.ArraySize = 1;
+	texDesc.Format = DXGI_FORMAT_R32_UINT;
+	texDesc.SampleDesc.Count = 1;
+	texDesc.SampleDesc.Quality = 0;
+	result = Device->CreateTexture2D(&texDesc, nullptr, &SceneBuffers.PPHitBuffer);
+	ThrowIfFailed(result, "CreateTexture2D(PPHitBuffer) failed");
+
+	texDesc = {};
+	texDesc.Usage = D3D11_USAGE_STAGING;
+	texDesc.BindFlags = 0;
+	texDesc.Width = SceneBuffers.Width;
+	texDesc.Height = SceneBuffers.Height;
+	texDesc.MipLevels = 1;
+	texDesc.ArraySize = 1;
+	texDesc.Format = DXGI_FORMAT_R32_UINT;
+	texDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+	texDesc.SampleDesc.Count = 1;
+	texDesc.SampleDesc.Quality = 0;
+	result = Device->CreateTexture2D(&texDesc, nullptr, &SceneBuffers.StagingHitBuffer);
+	ThrowIfFailed(result, "CreateTexture2D(StagingHitBuffer) failed");
 
 	texDesc = {};
 	texDesc.Usage = D3D11_USAGE_DEFAULT;
@@ -323,6 +387,15 @@ void UD3D11RenderDevice::ResizeSceneBuffers(int width, int height)
 
 	result = Device->CreateRenderTargetView(SceneBuffers.ColorBuffer, nullptr, &SceneBuffers.ColorBufferView);
 	ThrowIfFailed(result, "CreateRenderTargetView(ColorBuffer) failed");
+
+	result = Device->CreateRenderTargetView(SceneBuffers.HitBuffer, nullptr, &SceneBuffers.HitBufferView);
+	ThrowIfFailed(result, "CreateRenderTargetView(HitBuffer) failed");
+
+	result = Device->CreateShaderResourceView(SceneBuffers.HitBuffer, nullptr, &SceneBuffers.HitBufferShaderView);
+	ThrowIfFailed(result, "CreateShaderResourceView(HitBuffer) failed");
+
+	result = Device->CreateRenderTargetView(SceneBuffers.PPHitBuffer, nullptr, &SceneBuffers.PPHitBufferView);
+	ThrowIfFailed(result, "CreateRenderTargetView(PPHitBuffer) failed");
 
 	result = Device->CreateDepthStencilView(SceneBuffers.DepthBuffer, nullptr, &SceneBuffers.DepthBufferView);
 	ThrowIfFailed(result, "CreateDepthStencilView(DepthBuffer) failed");
@@ -396,6 +469,7 @@ void UD3D11RenderDevice::CreateScenePass()
 	for (int i = 0; i < 32; i++)
 	{
 		D3D11_BLEND_DESC blendDesc = {};
+		blendDesc.IndependentBlendEnable = TRUE;
 		blendDesc.RenderTarget[0].BlendEnable = TRUE;
 		switch (i & 3)
 		{
@@ -436,6 +510,8 @@ void UD3D11RenderDevice::CreateScenePass()
 			blendDesc.RenderTarget[0].RenderTargetWriteMask = 0;
 		else
 			blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+		blendDesc.RenderTarget[1].BlendEnable = FALSE;
+		blendDesc.RenderTarget[1].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 		result = Device->CreateBlendState(&blendDesc, &ScenePass.Pipelines[i].BlendState);
 		ThrowIfFailed(result, "CreateBlendState(ScenePass.Pipelines.BlendState) failed");
 
@@ -460,6 +536,7 @@ void UD3D11RenderDevice::CreateScenePass()
 	// Line pipeline
 	{
 		D3D11_BLEND_DESC blendDesc = {};
+		blendDesc.IndependentBlendEnable = TRUE;
 		blendDesc.RenderTarget[0].BlendEnable = TRUE;
 		blendDesc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
 		blendDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
@@ -468,6 +545,8 @@ void UD3D11RenderDevice::CreateScenePass()
 		blendDesc.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
 		blendDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
 		blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+		blendDesc.RenderTarget[1].BlendEnable = FALSE;
+		blendDesc.RenderTarget[1].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 		result = Device->CreateBlendState(&blendDesc, &ScenePass.LinePipeline.BlendState);
 		ThrowIfFailed(result, "CreateBlendState(ScenePass.LinePipeline.BlendState) failed");
 
@@ -485,6 +564,7 @@ void UD3D11RenderDevice::CreateScenePass()
 	// Point pipeline
 	{
 		D3D11_BLEND_DESC blendDesc = {};
+		blendDesc.IndependentBlendEnable = TRUE;
 		blendDesc.RenderTarget[0].BlendEnable = TRUE;
 		blendDesc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
 		blendDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
@@ -493,6 +573,8 @@ void UD3D11RenderDevice::CreateScenePass()
 		blendDesc.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
 		blendDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
 		blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+		blendDesc.RenderTarget[1].BlendEnable = FALSE;
+		blendDesc.RenderTarget[1].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 		result = Device->CreateBlendState(&blendDesc, &ScenePass.PointPipeline.BlendState);
 		ThrowIfFailed(result, "CreateBlendState(ScenePass.LinePipeline.BlendState) failed");
 
@@ -610,6 +692,10 @@ void UD3D11RenderDevice::CreatePresentPass()
 	std::vector<uint8_t> present = CompileHlsl("shaders/Present.frag", "ps");
 	result = Device->CreatePixelShader(present.data(), present.size(), nullptr, &PresentPass.Present);
 	ThrowIfFailed(result, "CreatePixelShader(PresentPass.Present) failed");
+
+	std::vector<uint8_t> hitresolve = CompileHlsl("shaders/HitResolve.frag", "ps");
+	result = Device->CreatePixelShader(hitresolve.data(), hitresolve.size(), nullptr, &PresentPass.HitResolve);
+	ThrowIfFailed(result, "CreatePixelShader(PresentPass.HitResolve) failed");
 
 	std::vector<D3D11_INPUT_ELEMENT_DESC> elements =
 	{
@@ -800,9 +886,12 @@ void UD3D11RenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane Scr
 	FlashFog = InFlashFog;
 
 	FLOAT color[4] = { ScreenClear.X, ScreenClear.Y, ScreenClear.Z, ScreenClear.W };
+	FLOAT zero[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	ID3D11RenderTargetView* views[2] = { SceneBuffers.ColorBufferView, SceneBuffers.HitBufferView };
 	Context->ClearRenderTargetView(SceneBuffers.ColorBufferView, color);
+	Context->ClearRenderTargetView(SceneBuffers.HitBufferView, zero);
 	Context->ClearDepthStencilView(SceneBuffers.DepthBufferView, D3D11_CLEAR_DEPTH, 1.0f, 0);
-	Context->OMSetRenderTargets(1, &SceneBuffers.ColorBufferView, SceneBuffers.DepthBufferView);
+	Context->OMSetRenderTargets(2, views, SceneBuffers.DepthBufferView);
 
 	UINT stride = sizeof(SceneVertex);
 	UINT offset = 0;
@@ -837,6 +926,8 @@ void UD3D11RenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane Scr
 			SceneIndexes = (uint32_t*)mappedIndexBuffer.pData;
 		}
 	}
+
+	SceneConstants.HitIndex = 0;
 
 	IsLocked = true;
 
@@ -928,17 +1019,125 @@ void UD3D11RenderDevice::Unlock(UBOOL Blit)
 		SceneIndexPos = 0;
 	}
 
-	Context->OMSetRenderTargets(0, nullptr, nullptr);
-
 	if (HitData)
 	{
-		*HitSize = 0;
+		D3D11_BOX box = {};
+		box.left = Viewport->HitX;
+		box.right = Viewport->HitX + Viewport->HitXL;
+		box.top = SceneBuffers.Height - Viewport->HitY - Viewport->HitYL;
+		box.bottom = SceneBuffers.Height - Viewport->HitY;
+		box.front = 0;
+		box.back = 1;
+
+		// Resolve multisampling
+		if (Multisample > 1)
+		{
+			D3D11_VIEWPORT viewport = {};
+			viewport.TopLeftX = box.left;
+			viewport.TopLeftY = box.top;
+			viewport.Width = box.right - box.left;
+			viewport.Height = box.bottom - box.top;
+			viewport.MaxDepth = 1.0f;
+			Context->RSSetViewports(1, &viewport);
+
+			UINT stride = sizeof(vec2);
+			UINT offset = 0;
+			Context->IASetVertexBuffers(0, 1, &PresentPass.PPStepVertexBuffer, &stride, &offset);
+			Context->IASetInputLayout(PresentPass.PPStepLayout);
+			Context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+			Context->VSSetShader(PresentPass.PPStep, nullptr, 0);
+			Context->RSSetState(PresentPass.RasterizerState);
+			Context->PSSetShader(PresentPass.HitResolve, nullptr, 0);
+			Context->PSSetShaderResources(0, 1, &SceneBuffers.HitBufferShaderView);
+			Context->OMSetDepthStencilState(PresentPass.DepthStencilState, 0);
+			Context->OMSetBlendState(PresentPass.BlendState, nullptr, 0xffffffff);
+			Context->OMSetRenderTargets(1, &SceneBuffers.PPHitBufferView, nullptr);
+
+			Context->Draw(6, 0);
+		}
+		else
+		{
+			Context->CopySubresourceRegion(SceneBuffers.PPHitBuffer, 0, box.left, box.top, 0, SceneBuffers.HitBuffer, 0, &box);
+		}
+
+		// Copy the hit buffer to a mappable texture, but only the part we want to examine
+		Context->CopySubresourceRegion(SceneBuffers.StagingHitBuffer, 0, 0, 0, 0, SceneBuffers.PPHitBuffer, 0, &box);
+
+		// Lock the buffer and look for the last hit
+		int hit = 0;
+		D3D11_MAPPED_SUBRESOURCE mapping = {};
+		HRESULT result = Context->Map(SceneBuffers.StagingHitBuffer, 0, D3D11_MAP_READ, 0, &mapping);
+		if (SUCCEEDED(result))
+		{
+			int width = Viewport->HitXL;
+			int height = Viewport->HitYL;
+			for (int y = 0; y < height; y++)
+			{
+				const INT* line = (const INT*)(((const char*)mapping.pData) + y * mapping.RowPitch);
+				for (int x = 0; x < width; x++)
+				{
+					hit = std::max(hit, line[x]);
+				}
+			}
+			Context->Unmap(SceneBuffers.StagingHitBuffer, 0);
+		}
+		hit--;
+
+		if (hit >= 0 && hit < (int)HitQueries.size())
+		{
+			const HitQuery& query = HitQueries[hit];
+			memcpy(HitData, HitBuffer.data() + query.Start, query.Count);
+			*HitSize = query.Count;
+		}
+		else
+		{
+			*HitSize = 0;
+		}
 	}
 
+	Context->OMSetRenderTargets(0, nullptr, nullptr);
+
+	HitQueryStack.clear();
+	HitQueries.clear();
+	HitBuffer.clear();
 	HitData = nullptr;
 	HitSize = nullptr;
 
 	IsLocked = false;
+
+	unguard;
+}
+
+void UD3D11RenderDevice::PushHit(const BYTE* Data, INT Count)
+{
+	guard(UD3D11RenderDevice::PushHit);
+
+	if (Count <= 0) return;
+	HitQueryStack.insert(HitQueryStack.end(), Data, Data + Count);
+
+	DrawBatch();
+
+	INT index = HitQueries.size();
+
+	HitQuery query;
+	query.Start = HitBuffer.size();
+	query.Count = HitQueryStack.size();
+	HitQueries.push_back(query);
+
+	HitBuffer.insert(HitBuffer.end(), HitQueryStack.begin(), HitQueryStack.end());
+
+	SceneConstants.HitIndex = index + 1;
+	Context->UpdateSubresource(ScenePass.ConstantBuffer, 0, nullptr, &SceneConstants, 0, 0);
+
+	unguard;
+}
+
+void UD3D11RenderDevice::PopHit(INT Count, UBOOL bForce)
+{
+	guard(UD3D11RenderDevice::PopHit);
+
+	if (Count <= 0) return;
+	HitQueryStack.resize(HitQueryStack.size() - Count);
 
 	unguard;
 }
@@ -1390,18 +1589,6 @@ void UD3D11RenderDevice::ClearZ(FSceneNode* Frame)
 	unguard;
 }
 
-void UD3D11RenderDevice::PushHit(const BYTE* Data, INT Count)
-{
-	guard(UD3D11RenderDevice::PushHit);
-	unguard;
-}
-
-void UD3D11RenderDevice::PopHit(INT Count, UBOOL bForce)
-{
-	guard(UD3D11RenderDevice::PopHit);
-	unguard;
-}
-
 void UD3D11RenderDevice::GetStats(TCHAR* Result)
 {
 	guard(UD3D11RenderDevice::GetStats);
@@ -1471,9 +1658,8 @@ void UD3D11RenderDevice::EndFlash()
 	{
 		DrawBatch();
 
-		ScenePushConstants pushconstants;
-		pushconstants.objectToProjection = mat4::identity();
-		Context->UpdateSubresource(ScenePass.ConstantBuffer, 0, nullptr, &pushconstants, 0, 0);
+		SceneConstants.ObjectToProjection = mat4::identity();
+		Context->UpdateSubresource(ScenePass.ConstantBuffer, 0, nullptr, &SceneConstants, 0, 0);
 
 		Batch.Pipeline = &ScenePass.Pipelines[2];
 		SetDescriptorSet(0);
@@ -1536,9 +1722,8 @@ void UD3D11RenderDevice::SetSceneNode(FSceneNode* Frame)
 	viewport.MaxDepth = 1.0f;
 	Context->RSSetViewports(1, &viewport);
 
-	ScenePushConstants pushconstants;
-	pushconstants.objectToProjection = mat4::frustum(-RProjZ, RProjZ, -Aspect * RProjZ, Aspect * RProjZ, 1.0f, 32768.0f, handedness::left, clipzrange::zero_positive_w);
-	Context->UpdateSubresource(ScenePass.ConstantBuffer, 0, nullptr, &pushconstants, 0, 0);
+	SceneConstants.ObjectToProjection = mat4::frustum(-RProjZ, RProjZ, -Aspect * RProjZ, Aspect * RProjZ, 1.0f, 32768.0f, handedness::left, clipzrange::zero_positive_w);
+	Context->UpdateSubresource(ScenePass.ConstantBuffer, 0, nullptr, &SceneConstants, 0, 0);
 
 	unguard;
 }

@@ -19,7 +19,9 @@ struct SceneVertex
 
 struct ScenePushConstants
 {
-	mat4 objectToProjection;
+	mat4 ObjectToProjection;
+	int HitIndex;
+	int Padding1, Padding2, Padding3;
 };
 
 struct PresentPushConstants
@@ -96,11 +98,17 @@ public:
 	struct
 	{
 		ID3D11Texture2D* ColorBuffer = nullptr;
+		ID3D11Texture2D* HitBuffer = nullptr;
 		ID3D11Texture2D* DepthBuffer = nullptr;
 		ID3D11Texture2D* PPImage = nullptr;
+		ID3D11Texture2D* PPHitBuffer = nullptr;
+		ID3D11Texture2D* StagingHitBuffer = nullptr;
 		ID3D11RenderTargetView* ColorBufferView = nullptr;
+		ID3D11RenderTargetView* HitBufferView = nullptr;
 		ID3D11DepthStencilView* DepthBufferView = nullptr;
+		ID3D11RenderTargetView* PPHitBufferView = nullptr;
 		ID3D11RenderTargetView* PPImageView = nullptr;
+		ID3D11ShaderResourceView* HitBufferShaderView = nullptr;
 		ID3D11ShaderResourceView* PPImageShaderView = nullptr;
 		int Width = 0;
 		int Height = 0;
@@ -155,6 +163,7 @@ public:
 		ID3D11VertexShader* PPStep = nullptr;
 		ID3D11InputLayout* PPStepLayout = nullptr;
 		ID3D11Buffer* PPStepVertexBuffer = nullptr;
+		ID3D11PixelShader* HitResolve = nullptr;
 		ID3D11PixelShader* Present = nullptr;
 		ID3D11Buffer* PresentConstantBuffer = nullptr;
 		ID3D11Texture2D* DitherTexture = nullptr;
@@ -204,9 +213,19 @@ private:
 	float RProjZ;
 	float RFX2;
 	float RFY2;
+	ScenePushConstants SceneConstants = {};
+
+	struct HitQuery
+	{
+		INT Start = 0;
+		INT Count = 0;
+	};
 
 	BYTE* HitData = nullptr;
 	INT* HitSize = nullptr;
+	std::vector<BYTE> HitQueryStack;
+	std::vector<HitQuery> HitQueries;
+	std::vector<BYTE> HitBuffer;
 
 	bool IsLocked = false;
 };

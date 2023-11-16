@@ -29,23 +29,27 @@ std::string FileResource::readAllText(const std::string& filename)
 				float2 texCoord3 : PixelTexCoordThree;
 				float2 texCoord4 : PixelTexCoordFour;
 				float4 color : PixelColor;
+				uint hitIndex : PixelHitIndex;
 			};
 
 			cbuffer Uniforms
 			{
-				float4x4 objectToProjection;
+				float4x4 ObjectToProjection;
+				uint HitIndex;
+				uint Padding1, Padding2, Padding3;
 			}
 
 			Output main(Input input)
 			{
 				Output output;
-				output.pos = mul(objectToProjection, float4(input.Position, 1.0));
+				output.pos = mul(ObjectToProjection, float4(input.Position, 1.0));
 				output.flags = input.Flags;
 				output.texCoord = input.TexCoord;
 				output.texCoord2 = input.TexCoord2;
 				output.texCoord3 = input.TexCoord3;
 				output.texCoord4 = input.TexCoord4;
 				output.color = input.Color;
+				output.hitIndex = HitIndex;
 				return output;
 			}
 		)";
@@ -62,11 +66,13 @@ std::string FileResource::readAllText(const std::string& filename)
 				float2 texCoord3 : PixelTexCoordThree;
 				float2 texCoord4 : PixelTexCoordFour;
 				float4 color : PixelColor;
+				uint hitIndex : PixelHitIndex;
 			};
 
 			struct Output
 			{
-				float4 outColor : SV_Target;
+				float4 outColor : SV_Target0;
+				uint outHitIndex : SV_Target1;
 			};
 
 			SamplerState samplerTex;
@@ -133,6 +139,7 @@ std::string FileResource::readAllText(const std::string& filename)
 				#endif
 
 				output.outColor = clamp(output.outColor, 0.0, 1.0);
+				output.outHitIndex = input.hitIndex;
 				return output;
 			}
 		)";
@@ -242,6 +249,30 @@ std::string FileResource::readAllText(const std::string& filename)
 			}
 		)";
 	}
+	else if (filename == "shaders/HitResolve.frag")
+	{
+		return R"(
+			struct Input
+			{
+				float4 fragCoord : SV_Position;
+				float2 texCoord : PixelTexCoord;
+			};
+
+			struct Output
+			{
+				uint outHitIndex : SV_Target;
+			};
+
+			Texture2DMS<uint> tex;
+
+			Output main(Input input)
+			{
+				Output output;
+				output.outHitIndex = tex.Load(int2(input.fragCoord.xy), 0);
+				return output;
+			}
+		)";
+		}
 
 	return {};
 }
