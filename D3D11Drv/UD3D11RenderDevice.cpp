@@ -999,6 +999,7 @@ void UD3D11RenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane Scr
 	}
 
 	SceneConstants.HitIndex = 0;
+	ForceHitIndex = -1;
 
 	IsLocked = true;
 
@@ -1157,6 +1158,9 @@ void UD3D11RenderDevice::Unlock(UBOOL Blit)
 		}
 		hit--;
 
+		if (hit < ForceHitIndex)
+			hit = ForceHitIndex;
+
 		if (hit >= 0 && hit < (int)HitQueries.size())
 		{
 			const HitQuery& query = HitQueries[hit];
@@ -1210,7 +1214,17 @@ void UD3D11RenderDevice::PopHit(INT Count, UBOOL bForce)
 {
 	guard(UD3D11RenderDevice::PopHit);
 
-	if (Count <= 0) return;
+	if (bForce)
+	{
+		ForceHitIndex = HitQueries.size();
+
+		HitQuery query;
+		query.Start = HitBuffer.size();
+		query.Count = HitQueryStack.size();
+		HitQueries.push_back(query);
+		HitBuffer.insert(HitBuffer.end(), HitQueryStack.begin(), HitQueryStack.end());
+	}
+
 	HitQueryStack.resize(HitQueryStack.size() - Count);
 
 	unguard;

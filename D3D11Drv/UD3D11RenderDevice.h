@@ -228,6 +228,9 @@ private:
 	std::vector<HitQuery> HitQueries;
 	std::vector<BYTE> HitBuffer;
 
+	int ForceHitIndex = -1;
+	HitQuery ForceHit;
+
 	bool IsLocked = false;
 };
 
