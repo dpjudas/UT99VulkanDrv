@@ -1062,6 +1062,7 @@ void UD3D11RenderDevice::Unlock(UBOOL Blit)
 			pushconstants.Brightness = clamp(D3DBrightness, -15.0f, 15.f);
 			pushconstants.GrayFormula = clamp(D3DGrayFormula, 0, 2);
 		}
+		pushconstants.HdrMode = D3DHdr ? 1 : 0;
 		Context->UpdateSubresource(PresentPass.PresentConstantBuffer, 0, nullptr, &pushconstants, 0, 0);
 
 		Context->Draw(6, 0);

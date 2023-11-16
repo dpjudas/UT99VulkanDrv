@@ -188,7 +188,7 @@ std::string FileResource::readAllText(const std::string& filename)
 				float Saturation;
 				float Brightness;
 				int GrayFormula;
-				int Padding1;
+				int HdrMode;
 				int Padding2;
 				int Padding3;
 			}
@@ -218,6 +218,11 @@ std::string FileResource::readAllText(const std::string& filename)
 				return floor(c.rgb * 255.0 + threshold) / 255.0;
 			}
 
+			float3 linearHdr(float3 c)
+			{
+				return c;//return pow(c, float3(2.2, 2.2, 2.2)) * 1.2;
+			}
+
 			float3 applyGamma(float3 c)
 			{
 				float3 valgray;
@@ -244,7 +249,14 @@ std::string FileResource::readAllText(const std::string& filename)
 			Output main(Input input)
 			{
 				Output output;
-				output.outColor = float4(dither(applyGamma(tex.Sample(samplerTex, input.texCoord).rgb), input.fragCoord), 1.0f);
+				if (HdrMode == 0)
+				{
+					output.outColor = float4(dither(applyGamma(tex.Sample(samplerTex, input.texCoord).rgb), input.fragCoord), 1.0f);
+				}
+				else
+				{
+					output.outColor = float4(linearHdr(applyGamma(tex.Sample(samplerTex, input.texCoord).rgb)), 1.0f);
+				}
 				return output;
 			}
 		)";
