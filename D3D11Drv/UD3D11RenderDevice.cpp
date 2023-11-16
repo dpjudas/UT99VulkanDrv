@@ -622,7 +622,7 @@ void UD3D11RenderDevice::CreateScenePass()
 		ThrowIfFailed(result, "CreateBlendState(ScenePass.LinePipeline.BlendState) failed");
 
 		D3D11_DEPTH_STENCIL_DESC depthStencilDesc = {};
-		depthStencilDesc.DepthEnable = FALSE;
+		depthStencilDesc.DepthEnable = TRUE;
 		depthStencilDesc.DepthFunc = D3D11_COMPARISON_LESS_EQUAL;
 		depthStencilDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
 		result = Device->CreateDepthStencilState(&depthStencilDesc, &ScenePass.LinePipeline.DepthStencilState);
