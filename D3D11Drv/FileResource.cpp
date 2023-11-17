@@ -92,7 +92,7 @@ std::string FileResource::readAllText(const std::string& filename)
 				return float4(clamp((c.rgb - cutoff) / (1.0 - cutoff), 0.0, 1.0), c.a);
 			}
 
-			float4 textureTex(float2 uv) { return tex.SampleBias(samplerTex, uv, 0.0f); }
+			float4 textureTex(float2 uv) { return tex.Sample(samplerTex, uv); }
 			float4 textureMacro(float2 uv) { return texMacro.Sample(samplerTexMacro, uv); }
 			float4 textureLightmap(float2 uv) { return texLightmap.Sample(samplerTexLightmap, uv); }
 			float4 textureDetail(float2 uv) { return texDetail.Sample(samplerTexDetail, uv); }
