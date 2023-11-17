@@ -503,12 +503,13 @@ void UD3D11RenderDevice::CreateScenePass()
 	result = Device->CreatePixelShader(pscodeAT.data(), pscodeAT.size(), nullptr, &ScenePass.PixelShaderAlphaTest);
 	ThrowIfFailed(result, "CreatePixelShader(ScenePass.PixelShaderAlphaTest) failed");
 
-	for (int i = 0; i < 8; i++)
+	for (int i = 0; i < 16; i++)
 	{
+		int dummyMipmapCount = (i >> 2) & 3;
 		D3D11_FILTER filter = (i & 1) ? D3D11_FILTER_MIN_MAG_MIP_POINT : D3D11_FILTER_ANISOTROPIC;
 		D3D11_TEXTURE_ADDRESS_MODE addressmode = (i & 2) ? D3D11_TEXTURE_ADDRESS_CLAMP : D3D11_TEXTURE_ADDRESS_WRAP;
 		D3D11_SAMPLER_DESC samplerDesc = {};
-		samplerDesc.MinLOD = (i & 4) ? 1 : 0;
+		samplerDesc.MinLOD = dummyMipmapCount;
 		samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
 		samplerDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
 		samplerDesc.BorderColor[0] = 1.0f;
@@ -516,7 +517,7 @@ void UD3D11RenderDevice::CreateScenePass()
 		samplerDesc.BorderColor[2] = 1.0f;
 		samplerDesc.BorderColor[3] = 1.0f;
 		samplerDesc.MaxAnisotropy = 8.0f;
-		samplerDesc.MipLODBias = (i & 4) ? 1.0f + LODBias : LODBias;
+		samplerDesc.MipLODBias = (float)dummyMipmapCount + LODBias;
 		samplerDesc.Filter = filter;
 		samplerDesc.AddressU = addressmode;
 		samplerDesc.AddressV = addressmode;

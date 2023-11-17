@@ -134,7 +134,7 @@ public:
 		ID3D11RasterizerState* RasterizerState = nullptr;
 		ID3D11PixelShader* PixelShader = {};
 		ID3D11PixelShader* PixelShaderAlphaTest = {};
-		ID3D11SamplerState* Samplers[8] = {};
+		ID3D11SamplerState* Samplers[16] = {};
 		ScenePipelineState Pipelines[32];
 		ScenePipelineState LinePipeline;
 		ScenePipelineState PointPipeline;
@@ -258,17 +258,19 @@ inline void UD3D11RenderDevice::SetDescriptorSet(DWORD PolyFlags, CachedTexture*
 	uint32_t samplermode = 0;
 	if (PolyFlags & PF_NoSmooth) samplermode |= 1;
 	if (clamp) samplermode |= 2;
-	if (tex && tex->IgnoreBaseMipmap) samplermode |= 4;
-	int detailsamplermode = (detailtex && detailtex->IgnoreBaseMipmap) ? 4 : 0;
-	int macrosamplermode = (macrotex && macrotex->IgnoreBaseMipmap) ? 4 : 0;
+	if (tex) samplermode |= (tex->DummyMipmapCount << 2);
+	int detailsamplermode = detailtex ? (detailtex->DummyMipmapCount << 2) : 0;
+	int macrosamplermode = macrotex ? (macrotex->DummyMipmapCount << 2) : 0;
 
 	if (Batch.Tex != tex || Batch.TexSamplerMode != samplermode || Batch.Lightmap != lightmap || Batch.Detailtex != detailtex || Batch.DetailtexSamplerMode != detailsamplermode || Batch.Macrotex != macrotex || Batch.MacrotexSamplerMode != macrosamplermode)
 	{
 		DrawBatch();
 		Batch.Tex = tex;
-		Batch.TexSamplerMode = samplermode;
 		Batch.Lightmap = lightmap;
 		Batch.Detailtex = detailtex;
 		Batch.Macrotex = macrotex;
+		Batch.TexSamplerMode = samplermode;
+		Batch.DetailtexSamplerMode = detailsamplermode;
+		Batch.MacrotexSamplerMode = macrosamplermode;
 	}
 }

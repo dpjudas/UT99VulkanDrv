@@ -22,7 +22,7 @@ public:
 	void UploadWhite(ID3D11Texture2D* image);
 
 private:
-	void UploadData(ID3D11Texture2D* image, const FTextureInfo& Info, bool masked, TextureUploader* uploader, bool ignoreBaseMipmap);
+	void UploadData(ID3D11Texture2D* image, const FTextureInfo& Info, bool masked, TextureUploader* uploader, int dummyMipmapCount, INT minSize);
 
 	uint8_t* GetUploadBuffer(size_t size);
 

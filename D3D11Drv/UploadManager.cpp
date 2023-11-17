@@ -37,22 +37,34 @@ void UploadManager::UploadTexture(CachedTexture* tex, const FTextureInfo& Info, 
 
 	DXGI_FORMAT format = uploader ? uploader->GetDxgiFormat() : DXGI_FORMAT_R8G8B8A8_UNORM;
 
+	// Base texture must use complete 4x4 compression blocks in Direct3D 11 or some drivers crash.
+	// 
+	// We fix this by creating 1 or 2 additional mipmap levels that are empty.
+
+#if defined(OLDUNREAL469SDK)
+	INT minSize = Info.Format == TEXF_BC1 || (Info.Format >= TEXF_BC2 && Info.Format <= TEXF_BC6H) ? 4 : 0;
+#else
+	INT minSize = Info.Format == TEXF_DXT1 ? 4 : 0;
+#endif
+
 	if (!tex->Texture)
 	{
-		// Base texture must use complete 4x4 compression blocks in Direct3D 11 or some drivers crash
-#if defined(OLDUNREAL469SDK)
-		INT blockSize = Info.Format == TEXF_BC1 || (Info.Format >= TEXF_BC2 && Info.Format <= TEXF_BC6H) ? 4 : 1;
-#else
-		INT blockSize = Info.Format == TEXF_DXT1 ? 4 : 1;
-#endif
-		int blockWidth = (width + blockSize - 1) / blockSize * blockSize;
-		int blockHeight = (height + blockSize - 1) / blockSize * blockSize;
-		if (blockWidth != width || blockHeight != height)
+		if (width < minSize || height < minSize)
 		{
-			if (blockWidth != width) width = blockWidth * 2;
-			if (blockHeight != height) height = blockHeight * 2;
-			mipcount++;
-			tex->IgnoreBaseMipmap = true;
+			if (width == 1 || height == 1)
+			{
+				width *= 4;
+				height *= 4;
+				mipcount += 2;
+				tex->DummyMipmapCount = 2;
+			}
+			else
+			{
+				width *= 2;
+				height *= 2;
+				mipcount += 1;
+				tex->DummyMipmapCount = 1;
+			}
 		}
 
 		D3D11_TEXTURE2D_DESC texDesc = {};
@@ -65,15 +77,24 @@ void UploadManager::UploadTexture(CachedTexture* tex, const FTextureInfo& Info, 
 		texDesc.Format = format;
 		texDesc.SampleDesc.Count = 1;
 		texDesc.SampleDesc.Quality = 0;
+		//texDesc.MiscFlags = tex->DummyMipmapCount > 0 ? D3D11_RESOURCE_MISC_RESOURCE_CLAMP : 0;
 		HRESULT result = renderer->Device->CreateTexture2D(&texDesc, nullptr, &tex->Texture);
 		ThrowIfFailed(result, "CreateTexture2D(GameTexture) failed");
 
-		result = renderer->Device->CreateShaderResourceView(tex->Texture, nullptr, &tex->View);
+		//if (tex->DummyMipmapCount > 0)
+		//	renderer->Context->SetResourceMinLOD(tex->Texture, (float)tex->DummyMipmapCount);
+
+		//D3D11_SHADER_RESOURCE_VIEW_DESC viewDesc = {};
+		//viewDesc.Format = format;
+		//viewDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+		//viewDesc.Texture2D.MostDetailedMip = tex->DummyMipmapCount;
+		//viewDesc.Texture2D.MipLevels = -1;
+		result = renderer->Device->CreateShaderResourceView(tex->Texture, nullptr/*&viewDesc*/, &tex->View);
 		ThrowIfFailed(result, "CreateShaderResourceView(GameTexture) failed");
 	}
 
 	if (uploader)
-		UploadData(tex->Texture, Info, masked, uploader, tex->IgnoreBaseMipmap);
+		UploadData(tex->Texture, Info, masked, uploader, tex->DummyMipmapCount, minSize);
 	else
 		UploadWhite(tex->Texture);
 }
@@ -101,21 +122,21 @@ void UploadManager::UploadTextureRect(CachedTexture* tex, const FTextureInfo& In
 	renderer->Context->UpdateSubresource(tex->Texture, D3D11CalcSubresource(0, 0, Info.NumMips), &box, data, pitch, 0);
 }
 
-void UploadManager::UploadData(ID3D11Texture2D* image, const FTextureInfo& Info, bool masked, TextureUploader* uploader, bool ignoreBaseMipmap)
+void UploadManager::UploadData(ID3D11Texture2D* image, const FTextureInfo& Info, bool masked, TextureUploader* uploader, int dummyMipmapCount, INT minSize)
 {
 	for (INT level = 0; level < Info.NumMips; level++)
 	{
 		FMipmapBase* Mip = Info.Mips[level];
 		if (Mip->DataPtr)
 		{
-			INT mipsize = uploader->GetUploadSize(0, 0, Mip->USize, Mip->VSize);
+			uint32_t mipwidth = Max(Mip->USize, minSize);
+			uint32_t mipheight = Max(Mip->VSize, minSize);
+
+			INT mipsize = uploader->GetUploadSize(0, 0, mipwidth, mipheight);
 			mipsize = (mipsize + 15) / 16 * 16; // memory alignment
 
-			uint32_t mipwidth = Mip->USize;
-			uint32_t mipheight = Mip->VSize;
-
 			auto data = (uint32_t*)GetUploadBuffer(mipsize);
-			uploader->UploadRect(data, Mip, 0, 0, Mip->USize, Mip->VSize, Info.Palette, masked);
+			uploader->UploadRect(data, Mip, 0, 0, mipwidth, mipheight, Info.Palette, masked);
 
 			UINT pitch = uploader->GetUploadSize(0, 0, mipwidth, 1);
 
@@ -124,7 +145,7 @@ void UploadManager::UploadData(ID3D11Texture2D* image, const FTextureInfo& Info,
 			box.bottom = mipheight;
 			box.back = 1;
 
-			UINT subresource = ignoreBaseMipmap ? D3D11CalcSubresource(level + 1, 0, Info.NumMips + 1) : D3D11CalcSubresource(level, 0, Info.NumMips);
+			UINT subresource = D3D11CalcSubresource(level + dummyMipmapCount, 0, Info.NumMips + dummyMipmapCount);
 			renderer->Context->UpdateSubresource(image, subresource, &box, data, pitch, 0);
 		}
 	}
