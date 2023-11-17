@@ -32,5 +32,5 @@ private:
 	void CreateDitherTexture();
 
 	UVulkanRenderDevice* renderer = nullptr;
-	std::map<QWORD, std::unique_ptr<CachedTexture>> TextureCache[2];
+	std::unordered_map<QWORD, std::unique_ptr<CachedTexture>> TextureCache[2];
 };

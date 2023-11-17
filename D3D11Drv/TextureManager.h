@@ -1,6 +1,6 @@
 #pragma once
 
-#include <map>
+#include <unordered_map>
 
 struct FTextureInfo;
 class UD3D11RenderDevice;
@@ -22,6 +22,6 @@ public:
 
 private:
 	UD3D11RenderDevice* renderer = nullptr;
-	std::map<QWORD, std::unique_ptr<CachedTexture>> TextureCache[2];
+	std::unordered_map<QWORD, std::unique_ptr<CachedTexture>> TextureCache[2];
 	std::unique_ptr<CachedTexture> NullTexture;
 };
