@@ -228,7 +228,7 @@ UBOOL UD3D11RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 		DXGI_MODE_DESC modeDesc = {};
 		modeDesc.Width = NewX;
 		modeDesc.Height = NewY;
-		modeDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		modeDesc.Format = D3DHdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM;
 		result = SwapChain->ResizeTarget(&modeDesc);
 		if (FAILED(result))
 		{
@@ -243,11 +243,22 @@ UBOOL UD3D11RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 		return FALSE;
 	}
 
-	result = SwapChain->ResizeBuffers(2, NewX, NewY, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
+	result = SwapChain->ResizeBuffers(2, NewX, NewY, D3DHdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
 	if (FAILED(result))
 	{
 		debugf(TEXT("SwapChain.ResizeBuffers failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
 		return FALSE;
+	}
+
+	if (D3DHdr)
+	{
+		IDXGISwapChain3* swapChain3 = nullptr;
+		HRESULT result = SwapChain->QueryInterface(__uuidof(IDXGISwapChain3), (void**)&swapChain3);
+		if (SUCCEEDED(result))
+		{
+			result = swapChain3->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709);
+			ReleaseObject(swapChain3);
+		}
 	}
 
 	if (NewX && NewY)

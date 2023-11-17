@@ -220,7 +220,7 @@ std::string FileResource::readAllText(const std::string& filename)
 
 			float3 linearHdr(float3 c)
 			{
-				return c;//return pow(c, float3(2.2, 2.2, 2.2)) * 1.2;
+				return pow(c, float3(2.2, 2.2, 2.2)) * 1.2;
 			}
 
 			float3 applyGamma(float3 c)
