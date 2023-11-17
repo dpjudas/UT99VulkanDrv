@@ -84,60 +84,57 @@ UBOOL UD3D11RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 			D3D_FEATURE_LEVEL_10_0
 		};
 
-		// For HDR, first try use a more recent create function for D3D11
-		if (D3DHdr)
+		// First try use a more recent way of creating the device and swap chain
+		HRESULT result = D3D11CreateDevice(
+			nullptr,
+			D3D_DRIVER_TYPE_HARDWARE,
+			0,
+			D3D11_CREATE_DEVICE_SINGLETHREADED | D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+			featurelevels.data(), (UINT)featurelevels.size(),
+			D3D11_SDK_VERSION,
+			&Device,
+			&FeatureLevel,
+			&Context);
+
+		// Wonderful API you got here, Microsoft. Good job.
+		IDXGIDevice2* dxgiDevice = nullptr;
+		IDXGIAdapter* dxgiAdapter = nullptr;
+		IDXGIFactory2* dxgiFactory = nullptr;
+		if (SUCCEEDED(result))
+			result = Device->QueryInterface(__uuidof(IDXGIDevice2), (void**)&dxgiDevice);
+		if (SUCCEEDED(result))
+			result = dxgiDevice->GetParent(__uuidof(IDXGIAdapter), (void**)&dxgiAdapter);
+		if (SUCCEEDED(result))
+			result = dxgiAdapter->GetParent(__uuidof(IDXGIFactory2), (void**)&dxgiFactory);
+		if (SUCCEEDED(result))
 		{
-			HRESULT result = D3D11CreateDevice(
-				nullptr,
-				D3D_DRIVER_TYPE_HARDWARE,
-				0,
-				D3D11_CREATE_DEVICE_SINGLETHREADED | D3D11_CREATE_DEVICE_BGRA_SUPPORT,
-				featurelevels.data(), (UINT)featurelevels.size(),
-				D3D11_SDK_VERSION,
-				&Device,
-				&FeatureLevel,
-				&Context);
-
-			// Wonderful API you got here, Microsoft. Good job.
-			IDXGIDevice2* dxgiDevice = nullptr;
-			IDXGIAdapter* dxgiAdapter = nullptr;
-			IDXGIFactory2* dxgiFactory = nullptr;
-			IDXGISwapChain1* swapChain1 = nullptr;
-			if (SUCCEEDED(result))
-				result = Device->QueryInterface(__uuidof(IDXGIDevice2), (void**)&dxgiDevice);
-			if (SUCCEEDED(result))
-				result = dxgiDevice->GetParent(__uuidof(IDXGIAdapter), (void**)&dxgiAdapter);
-			if (SUCCEEDED(result))
-				result = dxgiAdapter->GetParent(__uuidof(IDXGIFactory2), (void**)&dxgiFactory);
-			if (SUCCEEDED(result))
-			{
-				DXGI_SWAP_CHAIN_DESC1 swapDesc = {};
-				swapDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-				swapDesc.Width = NewX;
-				swapDesc.Height = NewY;
-				swapDesc.Format = D3DHdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM;
-				swapDesc.BufferCount = 2;
-				swapDesc.SampleDesc.Count = 1;
-				swapDesc.Scaling = DXGI_SCALING_STRETCH;
-				swapDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-				swapDesc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
-				swapDesc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
-				result = dxgiFactory->CreateSwapChainForHwnd(Device, (HWND)Viewport->GetWindow(), &swapDesc, nullptr, nullptr, &swapChain1);
-			}
-			if (SUCCEEDED(result))
-			{
-				SwapChain = swapChain1;
-			}
-			else
-			{
-				ReleaseObject(Context);
-				ReleaseObject(Device);
-			}
-			ReleaseObject(dxgiFactory);
-			ReleaseObject(dxgiAdapter);
-			ReleaseObject(dxgiDevice);
+			DXGI_SWAP_CHAIN_DESC1 swapDesc = {};
+			swapDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+			swapDesc.Width = NewX;
+			swapDesc.Height = NewY;
+			swapDesc.Format = D3DHdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM;
+			swapDesc.BufferCount = UseVSync ? 2 : 3;
+			swapDesc.SampleDesc.Count = 1;
+			swapDesc.Scaling = DXGI_SCALING_STRETCH;
+			swapDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+			swapDesc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
+			swapDesc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
+			result = dxgiFactory->CreateSwapChainForHwnd(Device, (HWND)Viewport->GetWindow(), &swapDesc, nullptr, nullptr, &SwapChain1);
 		}
+		if (SUCCEEDED(result))
+		{
+			SwapChain = SwapChain1;
+		}
+		else
+		{
+			ReleaseObject(Context);
+			ReleaseObject(Device);
+		}
+		ReleaseObject(dxgiFactory);
+		ReleaseObject(dxgiAdapter);
+		ReleaseObject(dxgiDevice);
 
+		// We still don't have a swap chain. Let's try the older Windows 7 API
 		if (!SwapChain)
 		{
 			DXGI_SWAP_CHAIN_DESC swapDesc = {};
@@ -1068,7 +1065,15 @@ void UD3D11RenderDevice::Unlock(UBOOL Blit)
 
 		Context->Draw(6, 0);
 
-		SwapChain->Present(UseVSync ? 1 : 0, 0);
+		if (SwapChain1)
+		{
+			DXGI_PRESENT_PARAMETERS presentParams = {};
+			SwapChain1->Present1(UseVSync ? 1 : 0, 0, &presentParams);
+		}
+		else
+		{
+			SwapChain->Present(UseVSync ? 1 : 0, 0);
+		}
 
 		Batch.Pipeline = nullptr;
 		Batch.Tex = nullptr;

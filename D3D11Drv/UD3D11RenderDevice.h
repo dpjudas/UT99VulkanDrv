@@ -93,6 +93,7 @@ public:
 	D3D_FEATURE_LEVEL FeatureLevel = {};
 	ID3D11DeviceContext* Context = nullptr;
 	IDXGISwapChain* SwapChain = nullptr;
+	IDXGISwapChain1* SwapChain1 = nullptr;
 	ID3D11Texture2D* BackBuffer = nullptr;
 	ID3D11RenderTargetView* BackBufferView = nullptr;
 
