@@ -188,6 +188,7 @@ public:
 	FLOAT D3DSaturation;
 	INT D3DGrayFormula;
 	BITFIELD D3DHdr;
+	BITFIELD D3DOccludeLines;
 
 	FLOAT LODBias;
 	BITFIELD OneXBlending;

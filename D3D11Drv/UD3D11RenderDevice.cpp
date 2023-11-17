@@ -42,6 +42,7 @@ void UD3D11RenderDevice::StaticConstructor()
 	D3DGrayFormula = 1;
 
 	D3DHdr = 0;
+	D3DOccludeLines = 0;
 
 	LODBias = -0.5f;
 	OneXBlending = 0;
@@ -60,6 +61,7 @@ void UD3D11RenderDevice::StaticConstructor()
 	new(GetClass(), TEXT("D3DSaturation"), RF_Public) UFloatProperty(CPP_PROPERTY(D3DSaturation), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("D3DGrayFormula"), RF_Public) UIntProperty(CPP_PROPERTY(D3DGrayFormula), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("D3DHdr"), RF_Public) UBoolProperty(CPP_PROPERTY(D3DHdr), TEXT("Display"), CPF_Config);
+	new(GetClass(), TEXT("D3DOccludeLines"), RF_Public) UBoolProperty(CPP_PROPERTY(D3DOccludeLines), TEXT("Display"), CPF_Config);
 
 	new(GetClass(), TEXT("LODBias"), RF_Public) UFloatProperty(CPP_PROPERTY(LODBias), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("OneXBlending"), RF_Public) UBoolProperty(CPP_PROPERTY(OneXBlending), TEXT("Display"), CPF_Config);
@@ -620,7 +622,7 @@ void UD3D11RenderDevice::CreateScenePass()
 		ThrowIfFailed(result, "CreateBlendState(ScenePass.LinePipeline.BlendState) failed");
 
 		D3D11_DEPTH_STENCIL_DESC depthStencilDesc = {};
-		depthStencilDesc.DepthEnable = TRUE;
+		depthStencilDesc.DepthEnable = D3DOccludeLines ? TRUE : FALSE;
 		depthStencilDesc.DepthFunc = D3D11_COMPARISON_LESS_EQUAL;
 		depthStencilDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
 		result = Device->CreateDepthStencilState(&depthStencilDesc, &ScenePass.LinePipeline.DepthStencilState);
