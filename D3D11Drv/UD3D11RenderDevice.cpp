@@ -1695,6 +1695,9 @@ void UD3D11RenderDevice::Draw2DPoint(FSceneNode* Frame, FPlane Color, DWORD Line
 {
 	guard(UD3D11RenderDevice::Draw2DPoint);
 
+	// Hack to fix UED selection problem with selection brush
+	if (GIsEditor) Z = 1.0f;
+
 	auto pipeline = &ScenePass.PointPipeline;
 	if (pipeline != Batch.Pipeline)
 	{
