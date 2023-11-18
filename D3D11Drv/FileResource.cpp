@@ -138,7 +138,10 @@ std::string FileResource::readAllText(const std::string& filename)
 				if (output.outColor.a < 0.5) discard;
 				#endif
 
-				output.outColor = clamp(output.outColor, 0.0, 1.0);
+				// Clamp if it isn't a lightmap texture (we want lightmap textures to go overbright so the HDR mode can pick it up)
+				if ((input.flags & 1) == 0)
+					output.outColor = clamp(output.outColor, 0.0, 1.0);
+
 				output.outHitIndex = input.hitIndex;
 				return output;
 			}
