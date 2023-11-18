@@ -86,6 +86,8 @@ UBOOL UD3D11RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 	guard(UD3D11RenderDevice::Init);
 
 	Viewport = InViewport;
+	ActiveHdr = D3DHdr;
+	ActiveMultisample = Max(Multisample, 1);
 
 	try
 	{
@@ -125,7 +127,7 @@ UBOOL UD3D11RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 			swapDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 			swapDesc.Width = NewX;
 			swapDesc.Height = NewY;
-			swapDesc.Format = D3DHdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM;
+			swapDesc.Format = ActiveHdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM;
 			swapDesc.BufferCount = UseVSync ? 2 : 3;
 			swapDesc.SampleDesc.Count = 1;
 			swapDesc.Scaling = DXGI_SCALING_STRETCH;
@@ -154,7 +156,7 @@ UBOOL UD3D11RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 			swapDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 			swapDesc.BufferDesc.Width = NewX;
 			swapDesc.BufferDesc.Height = NewY;
-			swapDesc.BufferDesc.Format = D3DHdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM;
+			swapDesc.BufferDesc.Format = ActiveHdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM;
 			swapDesc.BufferCount = 2;
 			swapDesc.SampleDesc.Count = 1;
 			swapDesc.OutputWindow = (HWND)Viewport->GetWindow();
@@ -185,7 +187,7 @@ UBOOL UD3D11RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 			ThrowIfFailed(result, "D3D11CreateDeviceAndSwapChain failed");
 		}
 
-		if (D3DHdr)
+		if (ActiveHdr)
 		{
 			IDXGISwapChain3* swapChain3 = nullptr;
 			HRESULT result = SwapChain->QueryInterface(__uuidof(IDXGISwapChain3), (void**)&swapChain3);
@@ -239,7 +241,7 @@ UBOOL UD3D11RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 		DXGI_MODE_DESC modeDesc = {};
 		modeDesc.Width = NewX;
 		modeDesc.Height = NewY;
-		modeDesc.Format = D3DHdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM;
+		modeDesc.Format = ActiveHdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM;
 		result = SwapChain->ResizeTarget(&modeDesc);
 		if (FAILED(result))
 		{
@@ -254,14 +256,14 @@ UBOOL UD3D11RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 		return FALSE;
 	}
 
-	result = SwapChain->ResizeBuffers(2, NewX, NewY, D3DHdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
+	result = SwapChain->ResizeBuffers(2, NewX, NewY, ActiveHdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
 	if (FAILED(result))
 	{
 		debugf(TEXT("SwapChain.ResizeBuffers failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
 		return FALSE;
 	}
 
-	if (D3DHdr)
+	if (ActiveHdr)
 	{
 		IDXGISwapChain3* swapChain3 = nullptr;
 		HRESULT result = SwapChain->QueryInterface(__uuidof(IDXGISwapChain3), (void**)&swapChain3);
@@ -406,8 +408,8 @@ void UD3D11RenderDevice::ResizeSceneBuffers(int width, int height)
 	texDesc.MipLevels = 1;
 	texDesc.ArraySize = 1;
 	texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
-	texDesc.SampleDesc.Count = std::max(Multisample, 1);
-	texDesc.SampleDesc.Quality = Multisample > 1 ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0;
+	texDesc.SampleDesc.Count = std::max(ActiveMultisample, 1);
+	texDesc.SampleDesc.Quality = ActiveMultisample > 1 ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0;
 	HRESULT result = Device->CreateTexture2D(&texDesc, nullptr, &SceneBuffers.ColorBuffer);
 	ThrowIfFailed(result, "CreateTexture2D(ColorBuffer) failed");
 
@@ -419,8 +421,8 @@ void UD3D11RenderDevice::ResizeSceneBuffers(int width, int height)
 	texDesc.MipLevels = 1;
 	texDesc.ArraySize = 1;
 	texDesc.Format = DXGI_FORMAT_R32_UINT;
-	texDesc.SampleDesc.Count = std::max(Multisample, 1);
-	texDesc.SampleDesc.Quality = Multisample > 1 ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0;
+	texDesc.SampleDesc.Count = std::max(ActiveMultisample, 1);
+	texDesc.SampleDesc.Quality = ActiveMultisample > 1 ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0;
 	result = Device->CreateTexture2D(&texDesc, nullptr, &SceneBuffers.HitBuffer);
 	ThrowIfFailed(result, "CreateTexture2D(HitBuffer) failed");
 
@@ -459,8 +461,8 @@ void UD3D11RenderDevice::ResizeSceneBuffers(int width, int height)
 	texDesc.MipLevels = 1;
 	texDesc.ArraySize = 1;
 	texDesc.Format = DXGI_FORMAT_D32_FLOAT;
-	texDesc.SampleDesc.Count = std::max(Multisample, 1);
-	texDesc.SampleDesc.Quality = Multisample > 1 ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0;
+	texDesc.SampleDesc.Count = std::max(ActiveMultisample, 1);
+	texDesc.SampleDesc.Quality = ActiveMultisample > 1 ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0;
 	result = Device->CreateTexture2D(&texDesc, nullptr, &SceneBuffers.DepthBuffer);
 	ThrowIfFailed(result, "CreateTexture2D(DepthBuffer) failed");
 
@@ -555,7 +557,7 @@ void UD3D11RenderDevice::CreateScenePass()
 	rasterizerDesc.CullMode = D3D11_CULL_NONE;
 	rasterizerDesc.FrontCounterClockwise = FALSE;
 	rasterizerDesc.DepthClipEnable = FALSE; // Avoid clipping the weapon. The UE1 engine clips the geometry anyway.
-	rasterizerDesc.MultisampleEnable = Multisample > 1 ? TRUE : FALSE;
+	rasterizerDesc.MultisampleEnable = ActiveMultisample > 1 ? TRUE : FALSE;
 	result = Device->CreateRasterizerState(&rasterizerDesc, &ScenePass.RasterizerState);
 	ThrowIfFailed(result, "CreateRasterizerState(ScenePass.Pipelines.RasterizerState) failed");
 
@@ -1048,7 +1050,7 @@ void UD3D11RenderDevice::Unlock(UBOOL Blit)
 
 	if (Blit)
 	{
-		if (Multisample > 1)
+		if (ActiveMultisample > 1)
 		{
 			Context->ResolveSubresource(SceneBuffers.PPImage, 0, SceneBuffers.ColorBuffer, 0, DXGI_FORMAT_R16G16B16A16_FLOAT);
 		}
@@ -1100,7 +1102,7 @@ void UD3D11RenderDevice::Unlock(UBOOL Blit)
 
 		// Select present shader based on what the user is actually using
 		int presentShader = 0;
-		if (D3DHdr) presentShader |= 1;
+		if (ActiveHdr) presentShader |= 1;
 		if (GammaMode == 1) presentShader |= 2;
 		if (pushconstants.Brightness != 0.0f || pushconstants.Contrast != 1.0f || pushconstants.Saturation != 1.0f) presentShader |= (Clamp(D3DGrayFormula, 0, 2) + 1) << 2;
 
@@ -1164,7 +1166,7 @@ void UD3D11RenderDevice::Unlock(UBOOL Blit)
 		box.back = 1;
 
 		// Resolve multisampling
-		if (Multisample > 1)
+		if (ActiveMultisample > 1)
 		{
 			Context->OMSetRenderTargets(1, &SceneBuffers.PPHitBufferView, nullptr);
 
@@ -1567,7 +1569,7 @@ void UD3D11RenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT X
 	}
 	a = 1.0f;
 
-	if (Multisample > 0)
+	if (ActiveMultisample > 1)
 	{
 		XL = std::floor(X + XL + 0.5f);
 		YL = std::floor(Y + YL + 0.5f);

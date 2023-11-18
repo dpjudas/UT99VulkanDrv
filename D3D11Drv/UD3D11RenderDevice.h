@@ -239,6 +239,8 @@ private:
 	HitQuery ForceHit;
 
 	bool IsLocked = false;
+	INT ActiveMultisample = 0;
+	bool ActiveHdr = false;
 };
 
 inline void ThrowIfFailed(HRESULT result, const char* msg) { if (FAILED(result)) throw std::runtime_error(msg); }
