@@ -1531,6 +1531,12 @@ void UD3D11RenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT X
 {
 	guard(UD3D11RenderDevice::DrawTile);
 
+	// stijn: fix for invisible actor icons in ortho viewports
+	if (GIsEditor && Frame->Viewport->Actor && (Frame->Viewport->IsOrtho() || Abs(Z) <= SMALL_NUMBER))
+	{
+		Z = 1.f;
+	}
+
 	if ((PolyFlags & (PF_Modulated)) == (PF_Modulated) && Info.Format == TEXF_P8)
 		PolyFlags = PF_Modulated;
 
