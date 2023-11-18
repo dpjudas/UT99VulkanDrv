@@ -27,14 +27,11 @@ struct ScenePushConstants
 
 struct PresentPushConstants
 {
-	float InvGamma;
 	float Contrast;
 	float Saturation;
 	float Brightness;
-	int GrayFormula;
-	int HdrMode;
-	int32_t padding2;
-	int32_t padding3;
+	float Padding;
+	vec4 GammaCorrection;
 };
 
 #if defined(OLDUNREAL469SDK)
@@ -168,7 +165,7 @@ public:
 		ID3D11InputLayout* PPStepLayout = nullptr;
 		ID3D11Buffer* PPStepVertexBuffer = nullptr;
 		ID3D11PixelShader* HitResolve = nullptr;
-		ID3D11PixelShader* Present = nullptr;
+		ID3D11PixelShader* Present[16] = {};
 		ID3D11Buffer* PresentConstantBuffer = nullptr;
 		ID3D11Texture2D* DitherTexture = nullptr;
 		ID3D11ShaderResourceView* DitherTextureView = nullptr;
@@ -183,7 +180,11 @@ public:
 	// Configuration.
 	BITFIELD UseVSync;
 	INT Multisample;
+	INT GammaMode;
 	FLOAT GammaOffset;
+	FLOAT GammaOffsetRed;
+	FLOAT GammaOffsetGreen;
+	FLOAT GammaOffsetBlue;
 	FLOAT D3DBrightness;
 	FLOAT D3DContrast;
 	FLOAT D3DSaturation;

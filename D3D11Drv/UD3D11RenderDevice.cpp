@@ -36,7 +36,12 @@ void UD3D11RenderDevice::StaticConstructor()
 	NeedsMaskedFonts = 0;
 #endif
 
+	GammaMode = 0;
 	GammaOffset = 0.0f;
+	GammaOffsetRed = 0.0f;
+	GammaOffsetGreen = 0.0f;
+	GammaOffsetBlue = 0.0f;
+
 	D3DBrightness = 0.0f;
 	D3DContrast = 1.0f;
 	D3DSaturation = 1.0f;
@@ -57,7 +62,11 @@ void UD3D11RenderDevice::StaticConstructor()
 	new(GetClass(), TEXT("UsePrecache"), RF_Public) UBoolProperty(CPP_PROPERTY(UsePrecache), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("Multisample"), RF_Public) UIntProperty(CPP_PROPERTY(Multisample), TEXT("Display"), CPF_Config);
 
+	new(GetClass(), TEXT("GammaMode"), RF_Public) UIntProperty(CPP_PROPERTY(GammaMode), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("GammaOffset"), RF_Public) UFloatProperty(CPP_PROPERTY(GammaOffset), TEXT("Display"), CPF_Config);
+	new(GetClass(), TEXT("GammaOffsetRed"), RF_Public) UFloatProperty(CPP_PROPERTY(GammaOffsetRed), TEXT("Display"), CPF_Config);
+	new(GetClass(), TEXT("GammaOffsetGreen"), RF_Public) UFloatProperty(CPP_PROPERTY(GammaOffsetGreen), TEXT("Display"), CPF_Config);
+	new(GetClass(), TEXT("GammaOffsetBlue"), RF_Public) UFloatProperty(CPP_PROPERTY(GammaOffsetBlue), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("D3DBrightness"), RF_Public) UFloatProperty(CPP_PROPERTY(D3DBrightness), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("D3DContrast"), RF_Public) UFloatProperty(CPP_PROPERTY(D3DContrast), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("D3DSaturation"), RF_Public) UFloatProperty(CPP_PROPERTY(D3DSaturation), TEXT("Display"), CPF_Config);
@@ -318,7 +327,7 @@ void UD3D11RenderDevice::Exit()
 	ReleaseObject(PresentPass.PPStep);
 	ReleaseObject(PresentPass.PPStepVertexBuffer);
 	ReleaseObject(PresentPass.HitResolve);
-	ReleaseObject(PresentPass.Present);
+	for (auto& shader : PresentPass.Present) ReleaseObject(shader);
 	ReleaseObject(PresentPass.PresentConstantBuffer);
 	ReleaseObject(PresentPass.DitherTextureView);
 	ReleaseObject(PresentPass.DitherTexture);
@@ -773,9 +782,20 @@ void UD3D11RenderDevice::CreatePresentPass()
 	result = Device->CreateVertexShader(ppstep.data(), ppstep.size(), nullptr, &PresentPass.PPStep);
 	ThrowIfFailed(result, "CreateVertexShader(PresentPass.PPStep) failed");
 
-	std::vector<uint8_t> present = CompileHlsl("shaders/Present.frag", "ps");
-	result = Device->CreatePixelShader(present.data(), present.size(), nullptr, &PresentPass.Present);
-	ThrowIfFailed(result, "CreatePixelShader(PresentPass.Present) failed");
+	static const char* transferFunctions[2] = { nullptr, "HDR_MODE" };
+	static const char* gammaModes[2] = { "GAMMA_MODE_D3D9", "GAMMA_MODE_XOPENGL" };
+	static const char* colorModes[4] = { nullptr, "COLOR_CORRECT_MODE0", "COLOR_CORRECT_MODE1", "COLOR_CORRECT_MODE2" };
+	for (int i = 0; i < 16; i++)
+	{
+		std::vector<std::string> defines;
+		if (transferFunctions[i & 1]) defines.push_back(transferFunctions[i & 1]);
+		if (gammaModes[(i >> 1) & 1]) defines.push_back(gammaModes[(i >> 1) & 1]);
+		if (colorModes[(i >> 2) & 3]) defines.push_back(colorModes[(i >> 2) & 3]);
+
+		std::vector<uint8_t> present = CompileHlsl("shaders/Present.frag", "ps", defines);
+		result = Device->CreatePixelShader(present.data(), present.size(), nullptr, &PresentPass.Present[i]);
+		ThrowIfFailed(result, "CreatePixelShader(PresentPass.Present) failed");
+	}
 
 	std::vector<uint8_t> hitresolve = CompileHlsl("shaders/HitResolve.frag", "ps");
 	result = Device->CreatePixelShader(hitresolve.data(), hitresolve.size(), nullptr, &PresentPass.HitResolve);
@@ -1045,6 +1065,45 @@ void UD3D11RenderDevice::Unlock(UBOOL Blit)
 		viewport.MaxDepth = 1.0f;
 		Context->RSSetViewports(1, &viewport);
 
+		PresentPushConstants pushconstants;
+		if (Viewport->IsOrtho())
+		{
+			pushconstants.GammaCorrection = { 1.0f };
+			pushconstants.Contrast = 1.0f;
+			pushconstants.Saturation = 1.0f;
+			pushconstants.Brightness = 0.0f;
+		}
+		else
+		{
+			float brightness = GIsEditor ? 1.0f : Clamp(Viewport->GetOuterUClient()->Brightness * 2.0, 0.05, 2.99);
+
+			if (GammaMode == 0)
+			{
+				float invGammaRed = 1.0f / Max(brightness + GammaOffset + GammaOffsetRed, 0.001f);
+				float invGammaGreen = 1.0f / Max(brightness + GammaOffset + GammaOffsetGreen, 0.001f);
+				float invGammaBlue = 1.0f / Max(brightness + GammaOffset + GammaOffsetBlue, 0.001f);
+				pushconstants.GammaCorrection = vec4(invGammaRed, invGammaGreen, invGammaBlue, 0.0f);
+			}
+			else
+			{
+				float invGammaRed = (GammaOffset + GammaOffsetRed + 2.0f) > 0.0f ? 1.0f / (GammaOffset + GammaOffsetRed + 1.0f) : 1.0f;
+				float invGammaGreen = (GammaOffset + GammaOffsetGreen + 2.0f) > 0.0f ? 1.0f / (GammaOffset + GammaOffsetGreen + 1.0f) : 1.0f;
+				float invGammaBlue = (GammaOffset + GammaOffsetBlue + 2.0f) > 0.0f ? 1.0f / (GammaOffset + GammaOffsetBlue + 1.0f) : 1.0f;
+				pushconstants.GammaCorrection = vec4(invGammaRed, invGammaGreen, invGammaBlue, brightness);
+			}
+
+			pushconstants.GammaCorrection = 1.0f / (Max(Viewport->GetOuterUClient()->Brightness + GammaOffset, 0.001f) * 2.0f);
+			pushconstants.Contrast = clamp(D3DContrast, 0.1f, 3.f);
+			pushconstants.Saturation = clamp(D3DSaturation, -1.0f, 1.0f);
+			pushconstants.Brightness = clamp(D3DBrightness, -15.0f, 15.f);
+		}
+
+		// Select present shader based on what the user is actually using
+		int presentShader = 0;
+		if (D3DHdr) presentShader |= 1;
+		if (GammaMode == 1) presentShader |= 2;
+		if (pushconstants.Brightness != 0.0f || pushconstants.Contrast != 1.0f || pushconstants.Saturation != 1.0f) presentShader |= (Clamp(D3DGrayFormula, 0, 2) + 1) << 2;
+
 		UINT stride = sizeof(vec2);
 		UINT offset = 0;
 		ID3D11ShaderResourceView* psResources[] = { SceneBuffers.PPImageShaderView, PresentPass.DitherTextureView };
@@ -1053,32 +1112,12 @@ void UD3D11RenderDevice::Unlock(UBOOL Blit)
 		Context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 		Context->VSSetShader(PresentPass.PPStep, nullptr, 0);
 		Context->RSSetState(PresentPass.RasterizerState);
-		Context->PSSetShader(PresentPass.Present, nullptr, 0);
+		Context->PSSetShader(PresentPass.Present[presentShader], nullptr, 0);
 		Context->PSSetConstantBuffers(0, 1, &PresentPass.PresentConstantBuffer);
 		Context->PSSetShaderResources(0, 2, psResources);
 		Context->OMSetDepthStencilState(PresentPass.DepthStencilState, 0);
 		Context->OMSetBlendState(PresentPass.BlendState, nullptr, 0xffffffff);
-
-		PresentPushConstants pushconstants;
-		if (Viewport->IsOrtho())
-		{
-			pushconstants.InvGamma = 1.0f;
-			pushconstants.Contrast = 1.0f;
-			pushconstants.Saturation = 1.0f;
-			pushconstants.Brightness = 0.0f;
-			pushconstants.GrayFormula = 1;
-		}
-		else
-		{
-			pushconstants.InvGamma = 1.0f / (Max(Viewport->GetOuterUClient()->Brightness + GammaOffset, 0.001f) * 2.0f);
-			pushconstants.Contrast = clamp(D3DContrast, 0.1f, 3.f);
-			pushconstants.Saturation = clamp(D3DSaturation, -1.0f, 1.0f);
-			pushconstants.Brightness = clamp(D3DBrightness, -15.0f, 15.f);
-			pushconstants.GrayFormula = clamp(D3DGrayFormula, 0, 2);
-		}
-		pushconstants.HdrMode = D3DHdr ? 1 : 0;
 		Context->UpdateSubresource(PresentPass.PresentConstantBuffer, 0, nullptr, &pushconstants, 0, 0);
-
 		Context->Draw(6, 0);
 
 		if (SwapChain1)

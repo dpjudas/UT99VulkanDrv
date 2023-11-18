@@ -183,14 +183,11 @@ std::string FileResource::readAllText(const std::string& filename)
 
 			cbuffer PresentPushConstants
 			{
-				float InvGamma;
 				float Contrast;
 				float Saturation;
 				float Brightness;
-				int GrayFormula;
-				int HdrMode;
-				int Padding2;
-				int Padding3;
+				float Padding;
+				float4 GammaCorrection;
 			}
 
 			SamplerState samplerTex
@@ -223,40 +220,93 @@ std::string FileResource::readAllText(const std::string& filename)
 				return pow(c, float3(2.2, 2.2, 2.2)) * 1.2;
 			}
 
-			float3 applyGamma(float3 c)
+			#if defined(GAMMA_MODE_D3D9)
+
+			float3 gammaCorrect(float3 c)
 			{
-				float3 valgray;
-				if (GrayFormula == 0)
+				return pow(c, GammaCorrection.xyz);
+			}
+
+			#elif defined(GAMMA_MODE_XOPENGL)
+
+			// Returns maximum of first 3 components
+			float max3( float3 v)
+			{
+				return max(max(v.x, v.y), v.z);
+			}
+			float max3( float4 v)
+			{
+				return max(max(v.x, v.y), v.z);
+			}
+
+			// Returns square of argument
+			float square_f( float f)
+			{
+				return f*f;
+			}
+
+			float3 gammaCorrect(float3 c)
+			{
+				if (GammaCorrection.w > 1.0)
 				{
-					float v = c.r + c.g + c.b;
-					valgray = float3(v, v, v) * (1 - Saturation) / 3 + c * Saturation;
+					// Obtains a multiplier required to offset value according to the following
+					// formula: ((1 - (2 * value - 1)^2) * 0.25)
+					// It has the shape of a parabola with roots in 0,1 and maximum at f(x=0.5)=0.25
+					float CCValue = max(max3(c), 0.001);
+					float CC = (1.0 - square_f(2.0 * CCValue - 1.0)) * 0.25  * (GammaCorrection.w - 1.0);
+					c = clamp( c * ((CCValue+CC) / CCValue), 0.0, 1.0);
 				}
-				else if (GrayFormula == 2)	// new formula
+				else if (GammaCorrection.w < 1.0)
 				{
-					float v = pow(dot(pow(c, float3(2.2, 2.2, 2.2)), float3(0.2126, 0.7152, 0.0722)), 1.0/2.2);
-					valgray = lerp(float3(v, v, v), c, Saturation);
+					// Downscale brightness
+					c *= GammaCorrection.w;
 				}
-				else
-				{
-					float v = dot(c, float3(0.3, 0.56, 0.14));
-					valgray = lerp(float3(v, v, v), c, Saturation);
-				}
+
+				return pow(c, GammaCorrection.xyz);
+			}
+
+			#endif
+
+			#if defined(COLOR_CORRECT_MODE0)
+			float3 colorCorrect(float3 c)
+			{
+				float v = c.r + c.g + c.b;
+				float3 valgray = float3(v, v, v) * (1 - Saturation) / 3 + c * Saturation;
 				float3 val = valgray * Contrast - (Contrast - 1.0) * 0.5;
 				val += Brightness * 0.5;
-				val = pow(max(val, float3(0.0, 0.0, 0.0)), float3(InvGamma, InvGamma, InvGamma));
-				return val;
+				return max(val, float3(0.0, 0.0, 0.0));
 			}
+			#elif defined(COLOR_CORRECT_MODE1)
+			float3 colorCorrect(float3 c)
+			{
+				float v = dot(c, float3(0.3, 0.56, 0.14));
+				float3 valgray = lerp(float3(v, v, v), c, Saturation);
+				float3 val = valgray * Contrast - (Contrast - 1.0) * 0.5;
+				val += Brightness * 0.5;
+				return max(val, float3(0.0, 0.0, 0.0));
+			}
+			#elif defined(COLOR_CORRECT_MODE2)
+			float3 colorCorrect(float3 c)
+			{
+				float v = pow(dot(pow(c, float3(2.2, 2.2, 2.2)), float3(0.2126, 0.7152, 0.0722)), 1.0/2.2);
+				float3 valgray = lerp(float3(v, v, v), c, Saturation);
+				float3 val = valgray * Contrast - (Contrast - 1.0) * 0.5;
+				val += Brightness * 0.5;
+				return max(val, float3(0.0, 0.0, 0.0));
+			}
+			#else
+			float3 colorCorrect(float3 c) { return c; }
+			#endif
+
 			Output main(Input input)
 			{
 				Output output;
-				if (HdrMode == 0)
-				{
-					output.outColor = float4(dither(applyGamma(tex.Sample(samplerTex, input.texCoord).rgb), input.fragCoord), 1.0f);
-				}
-				else
-				{
-					output.outColor = float4(linearHdr(applyGamma(tex.Sample(samplerTex, input.texCoord).rgb)), 1.0f);
-				}
+				float3 color = gammaCorrect(colorCorrect(tex.Sample(samplerTex, input.texCoord).rgb));
+			#if defined(HDR_MODE)
+				output.outColor = float4(linearHdr(color), 1.0f);
+			#else
+				output.outColor = float4(dither(color, input.fragCoord), 1.0f);
+			#endif
 				return output;
 			}
 		)";
