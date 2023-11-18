@@ -890,6 +890,12 @@ void UVulkanRenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT 
 {
 	guard(UVulkanRenderDevice::DrawTile);
 
+	// stijn: fix for invisible actor icons in ortho viewports
+	if (GIsEditor && Frame->Viewport->Actor && (Frame->Viewport->IsOrtho() || Abs(Z) <= SMALL_NUMBER))
+	{
+		Z = 1.f;
+	}
+
 	if ((PolyFlags & (PF_Modulated)) == (PF_Modulated) && Info.Format == TEXF_P8)
 		PolyFlags = PF_Modulated;
 
@@ -1088,6 +1094,9 @@ void UVulkanRenderDevice::Draw2DLine(FSceneNode* Frame, FPlane Color, DWORD Line
 void UVulkanRenderDevice::Draw2DPoint(FSceneNode* Frame, FPlane Color, DWORD LineFlags, FLOAT X1, FLOAT Y1, FLOAT X2, FLOAT Y2, FLOAT Z)
 {
 	guard(UVulkanRenderDevice::Draw2DPoint);
+
+	// Hack to fix UED selection problem with selection brush
+	if (GIsEditor) Z = 1.0f;
 
 	SetPipeline(RenderPasses->getPointPipeline(UsesBindless));
 
