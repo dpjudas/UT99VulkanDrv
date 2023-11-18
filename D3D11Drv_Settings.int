@@ -20,6 +20,7 @@ Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=D3DGrayFormula,Title="Gra
 Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=LODBias,Title="Texture LOD Bias",Description="Changes the level of detail for textures applied to distant surfaces and objects. Higher values increase the level of detail. Lower values decrease it. We recommend keeping the default setting.")
 
 Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=UsePrecache,Title="Precaching",Description="If checked, all textures will be precached onto video memory.")
+Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=DetailTextures,Title="Detail Texturing",Description="If checked, enables Detail Texturing.")
 Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=HighDetailActors,Title="High Detail Actors",Description="HighDetailActors")
 Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=Coronas,Title="Coronas",Description="Coronas")
 Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=ShinySurfaces,Title="Shiny Surfaces",Description="ShinySurfaces")
