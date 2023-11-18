@@ -1070,7 +1070,7 @@ void UD3D11RenderDevice::Unlock(UBOOL Blit)
 		}
 		else
 		{
-			pushconstants.InvGamma = 1.0f / ((Viewport->GetOuterUClient()->Brightness + GammaOffset) * 2.0f);
+			pushconstants.InvGamma = 1.0f / (Max(Viewport->GetOuterUClient()->Brightness + GammaOffset, 0.001f) * 2.0f);
 			pushconstants.Contrast = clamp(D3DContrast, 0.1f, 3.f);
 			pushconstants.Saturation = clamp(D3DSaturation, -1.0f, 1.0f);
 			pushconstants.Brightness = clamp(D3DBrightness, -15.0f, 15.f);
