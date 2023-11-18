@@ -36,6 +36,7 @@ void UD3D11RenderDevice::StaticConstructor()
 	NeedsMaskedFonts = 0;
 #endif
 
+	GammaOffset = 0.0f;
 	D3DBrightness = 0.0f;
 	D3DContrast = 1.0f;
 	D3DSaturation = 1.0f;
@@ -56,6 +57,7 @@ void UD3D11RenderDevice::StaticConstructor()
 	new(GetClass(), TEXT("UsePrecache"), RF_Public) UBoolProperty(CPP_PROPERTY(UsePrecache), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("Multisample"), RF_Public) UIntProperty(CPP_PROPERTY(Multisample), TEXT("Display"), CPF_Config);
 
+	new(GetClass(), TEXT("GammaOffset"), RF_Public) UFloatProperty(CPP_PROPERTY(GammaOffset), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("D3DBrightness"), RF_Public) UFloatProperty(CPP_PROPERTY(D3DBrightness), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("D3DContrast"), RF_Public) UFloatProperty(CPP_PROPERTY(D3DContrast), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("D3DSaturation"), RF_Public) UFloatProperty(CPP_PROPERTY(D3DSaturation), TEXT("Display"), CPF_Config);
@@ -1068,7 +1070,7 @@ void UD3D11RenderDevice::Unlock(UBOOL Blit)
 		}
 		else
 		{
-			pushconstants.InvGamma = 1.0f / (Viewport->GetOuterUClient()->Brightness * 2.0f);
+			pushconstants.InvGamma = 1.0f / ((Viewport->GetOuterUClient()->Brightness + GammaOffset) * 2.0f);
 			pushconstants.Contrast = clamp(D3DContrast, 0.1f, 3.f);
 			pushconstants.Saturation = clamp(D3DSaturation, -1.0f, 1.0f);
 			pushconstants.Brightness = clamp(D3DBrightness, -15.0f, 15.f);

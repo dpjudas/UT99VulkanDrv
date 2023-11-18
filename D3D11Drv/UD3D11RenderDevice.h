@@ -183,6 +183,7 @@ public:
 	// Configuration.
 	BITFIELD UseVSync;
 	INT Multisample;
+	FLOAT GammaOffset;
 	FLOAT D3DBrightness;
 	FLOAT D3DContrast;
 	FLOAT D3DSaturation;
