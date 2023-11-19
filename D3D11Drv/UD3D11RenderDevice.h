@@ -206,6 +206,8 @@ private:
 	void SetDescriptorSet(DWORD polyflags, CachedTexture* tex = nullptr, CachedTexture* lightmap = nullptr, CachedTexture* macrotex = nullptr, CachedTexture* detailtex = nullptr, bool clamp = false);
 	void DrawBatch();
 
+	void NextSceneBuffers();
+
 	ScenePipelineState* GetPipeline(DWORD PolyFlags);
 
 	std::vector<uint8_t> CompileHlsl(const std::string& filename, const std::string& shadertype, const std::vector<std::string> defines = {});

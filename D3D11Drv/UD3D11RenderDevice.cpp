@@ -1248,6 +1248,44 @@ void UD3D11RenderDevice::Unlock(UBOOL Blit)
 	unguard;
 }
 
+void UD3D11RenderDevice::NextSceneBuffers()
+{
+	if (SceneVertices)
+	{
+		Context->Unmap(ScenePass.VertexBuffer, 0);
+		SceneVertices = nullptr;
+	}
+
+	if (SceneIndexes)
+	{
+		Context->Unmap(ScenePass.IndexBuffer, 0);
+		SceneIndexes = nullptr;
+	}
+
+	SceneVertexPos = 0;
+	SceneIndexPos = 0;
+
+	if (!SceneVertices)
+	{
+		D3D11_MAPPED_SUBRESOURCE mappedVertexBuffer = {};
+		HRESULT result = Context->Map(ScenePass.VertexBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedVertexBuffer);
+		if (SUCCEEDED(result))
+		{
+			SceneVertices = (SceneVertex*)mappedVertexBuffer.pData;
+		}
+	}
+
+	if (!SceneIndexes)
+	{
+		D3D11_MAPPED_SUBRESOURCE mappedIndexBuffer = {};
+		HRESULT result = Context->Map(ScenePass.IndexBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedIndexBuffer);
+		if (SUCCEEDED(result))
+		{
+			SceneIndexes = (uint32_t*)mappedIndexBuffer.pData;
+		}
+	}
+}
+
 void UD3D11RenderDevice::PushHit(const BYTE* Data, INT Count)
 {
 	guard(UD3D11RenderDevice::PushHit);
@@ -1318,7 +1356,7 @@ void UD3D11RenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Sur
 {
 	guard(UD3D11RenderDevice::DrawComplexSurface);
 
-	if (SceneVertexPos + 1000 > SceneVertexBufferSize || SceneIndexPos + 1000 > SceneIndexBufferSize) return;
+	if (SceneVertexPos + 1000 > SceneVertexBufferSize || SceneIndexPos + 1000 > SceneIndexBufferSize) NextSceneBuffers();
 
 	CachedTexture* tex = Textures->GetTexture(Surface.Texture, !!(Surface.PolyFlags & PF_Masked));
 	CachedTexture* lightmap = Textures->GetTexture(Surface.LightMap, false);
@@ -1447,7 +1485,7 @@ void UD3D11RenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& Inf
 	guard(UD3D11RenderDevice::DrawGouraudPolygon);
 
 	if (NumPts < 3) return; // This can apparently happen!!
-	if (SceneVertexPos + 1000 > SceneVertexBufferSize || SceneIndexPos + 1000 > SceneIndexBufferSize) return;
+	if (SceneVertexPos + 1000 > SceneVertexBufferSize || SceneIndexPos + 1000 > SceneIndexBufferSize) NextSceneBuffers();
 
 	CachedTexture* tex = Textures->GetTexture(&Info, !!(PolyFlags & PF_Masked));
 
@@ -1536,7 +1574,7 @@ void UD3D11RenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT X
 {
 	guard(UD3D11RenderDevice::DrawTile);
 
-	if (SceneVertexPos + 1000 > SceneVertexBufferSize || SceneIndexPos + 1000 > SceneIndexBufferSize) return;
+	if (SceneVertexPos + 1000 > SceneVertexBufferSize || SceneIndexPos + 1000 > SceneIndexBufferSize) NextSceneBuffers();
 
 	// stijn: fix for invisible actor icons in ortho viewports
 	if (GIsEditor && Frame->Viewport->Actor && (Frame->Viewport->IsOrtho() || Abs(Z) <= SMALL_NUMBER))
@@ -1683,7 +1721,7 @@ void UD3D11RenderDevice::Draw2DLine(FSceneNode* Frame, FPlane Color, DWORD LineF
 	SetDescriptorSet(PF_Highlighted);
 
 	if (!SceneVertices || !SceneIndexes) return;
-	if (SceneVertexPos + 1000 > SceneVertexBufferSize || SceneIndexPos + 1000 > SceneIndexBufferSize) return;
+	if (SceneVertexPos + 1000 > SceneVertexBufferSize || SceneIndexPos + 1000 > SceneIndexBufferSize) NextSceneBuffers();
 
 	SceneVertex* v = &SceneVertices[SceneVertexPos];
 	uint32_t* iptr = &SceneIndexes[SceneIndexPos];
@@ -1717,7 +1755,7 @@ void UD3D11RenderDevice::Draw2DPoint(FSceneNode* Frame, FPlane Color, DWORD Line
 	SetDescriptorSet(PF_Highlighted);
 
 	if (!SceneVertices || !SceneIndexes) return;
-	if (SceneVertexPos + 1000 > SceneVertexBufferSize || SceneIndexPos + 1000 > SceneIndexBufferSize) return;
+	if (SceneVertexPos + 1000 > SceneVertexBufferSize || SceneIndexPos + 1000 > SceneIndexBufferSize) NextSceneBuffers();
 
 	SceneVertex* v = &SceneVertices[SceneVertexPos];
 
