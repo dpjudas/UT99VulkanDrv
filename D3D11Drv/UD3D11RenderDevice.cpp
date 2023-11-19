@@ -1673,6 +1673,10 @@ void UD3D11RenderDevice::DrawGouraudTriangles(const FSceneNode* Frame, const FTe
 	uint32_t* iptr = SceneIndexes + istart;
 	for (uint32_t i = 2; i < vcount; i += 3)
 	{
+		// If outcoded, skip it.
+		if (Pts[icount].Flags & Pts[icount + 1].Flags & Pts[icount + 2].Flags)
+			continue;
+
 		bool backface = (PolyFlags & PF_TwoSided) && FTriple(Pts[icount].Point, Pts[icount + 1].Point, Pts[icount + 2].Point) <= 0.0;
 		if (mirror) backface = !backface;
 		if (!backface)
