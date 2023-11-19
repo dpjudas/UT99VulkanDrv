@@ -1681,8 +1681,8 @@ void UD3D11RenderDevice::Draw3DLine(FSceneNode* Frame, FPlane Color, DWORD LineF
 
 		SetDescriptorSet(PF_Highlighted);
 
+		if (SceneVertexPos + 1000 > SceneVertexBufferSize || SceneIndexPos + 1000 > SceneIndexBufferSize) NextSceneBuffers();
 		if (!SceneVertices || !SceneIndexes) return;
-		if (SceneVertexPos + 1000 > SceneVertexBufferSize || SceneIndexPos + 1000 > SceneIndexBufferSize) return;
 
 		SceneVertex* v = &SceneVertices[SceneVertexPos];
 		uint32_t* iptr = &SceneIndexes[SceneIndexPos];
@@ -1720,8 +1720,8 @@ void UD3D11RenderDevice::Draw2DLine(FSceneNode* Frame, FPlane Color, DWORD LineF
 
 	SetDescriptorSet(PF_Highlighted);
 
-	if (!SceneVertices || !SceneIndexes) return;
 	if (SceneVertexPos + 1000 > SceneVertexBufferSize || SceneIndexPos + 1000 > SceneIndexBufferSize) NextSceneBuffers();
+	if (!SceneVertices || !SceneIndexes) return;
 
 	SceneVertex* v = &SceneVertices[SceneVertexPos];
 	uint32_t* iptr = &SceneIndexes[SceneIndexPos];
@@ -1754,8 +1754,8 @@ void UD3D11RenderDevice::Draw2DPoint(FSceneNode* Frame, FPlane Color, DWORD Line
 
 	SetDescriptorSet(PF_Highlighted);
 
-	if (!SceneVertices || !SceneIndexes) return;
 	if (SceneVertexPos + 1000 > SceneVertexBufferSize || SceneIndexPos + 1000 > SceneIndexBufferSize) NextSceneBuffers();
+	if (!SceneVertices || !SceneIndexes) return;
 
 	SceneVertex* v = &SceneVertices[SceneVertexPos];
 
