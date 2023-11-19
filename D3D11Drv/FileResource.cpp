@@ -30,11 +30,13 @@ std::string FileResource::readAllText(const std::string& filename)
 				float2 texCoord4 : PixelTexCoordFour;
 				float4 color : PixelColor;
 				uint hitIndex : PixelHitIndex;
+				float nearClipDistance : SV_ClipDistance0;
 			};
 
 			cbuffer Uniforms
 			{
 				float4x4 ObjectToProjection;
+				float4 NearClip;
 				uint HitIndex;
 				uint Padding1, Padding2, Padding3;
 			}
@@ -43,6 +45,7 @@ std::string FileResource::readAllText(const std::string& filename)
 			{
 				Output output;
 				output.pos = mul(ObjectToProjection, float4(input.Position, 1.0));
+				output.nearClipDistance = dot(NearClip, float4(input.Position, 1.0));
 				output.flags = input.Flags;
 				output.texCoord = input.TexCoord;
 				output.texCoord2 = input.TexCoord2;

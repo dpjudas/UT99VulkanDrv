@@ -21,6 +21,7 @@ struct SceneVertex
 struct ScenePushConstants
 {
 	mat4 ObjectToProjection;
+	vec4 NearClip;
 	int HitIndex;
 	int Padding1, Padding2, Padding3;
 };
@@ -78,7 +79,7 @@ public:
 
 #if defined(OLDUNREAL469SDK)
 	// URenderDeviceOldUnreal469 extensions
-	// void DrawGouraudTriangles(const FSceneNode* Frame, const FTextureInfo& Info, FTransTexture* const Pts, INT NumPts, DWORD PolyFlags, DWORD DataFlags, FSpanBuffer* Span) override;
+	void DrawGouraudTriangles(const FSceneNode* Frame, const FTextureInfo& Info, FTransTexture* const Pts, INT NumPts, DWORD PolyFlags, DWORD DataFlags, FSpanBuffer* Span) override;
 	UBOOL SupportsTextureFormat(ETextureFormat Format) override;
 	void UpdateTextureRect(FTextureInfo& Info, INT U, INT V, INT UL, INT VL) override;
 #endif

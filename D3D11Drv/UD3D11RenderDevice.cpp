@@ -1570,6 +1570,135 @@ void UD3D11RenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& Inf
 	unguard;
 }
 
+#if defined(OLDUNREAL469SDK)
+
+static void EnviroMap(const FSceneNode* Frame, FTransTexture& P, FLOAT UScale, FLOAT VScale)
+{
+	FVector T = P.Point.UnsafeNormal().MirrorByVector(P.Normal).TransformVectorBy(Frame->Uncoords);
+	P.U = (T.X + 1.0f) * 0.5f * 256.0f * UScale;
+	P.V = (T.Y + 1.0f) * 0.5f * 256.0f * VScale;
+}
+
+void UD3D11RenderDevice::DrawGouraudTriangles(const FSceneNode* Frame, const FTextureInfo& Info, FTransTexture* const Pts, INT NumPts, DWORD PolyFlags, DWORD DataFlags, FSpanBuffer* Span)
+{
+	guard(UD3D11RenderDevice::DrawGouraudTriangles);
+
+	// URenderDeviceOldUnreal469::DrawGouraudTriangles(Frame, Info, Pts, NumPts, PolyFlags, DataFlags, Span); return;
+
+	if (NumPts < 3) return; // This can apparently happen!!
+	if (SceneVertexPos + 1000 > SceneVertexBufferSize || SceneIndexPos + 1000 > SceneIndexBufferSize) NextSceneBuffers();
+
+	CachedTexture* tex = Textures->GetTexture(const_cast<FTextureInfo*>(&Info), !!(PolyFlags & PF_Masked));
+
+	SetPipeline(PolyFlags);
+	SetDescriptorSet(PolyFlags, tex);
+
+	if (!SceneVertices || !SceneIndexes) return;
+
+	float UMult = GetUMult(Info);
+	float VMult = GetVMult(Info);
+	int flags = (PolyFlags & (PF_RenderFog | PF_Translucent | PF_Modulated)) == PF_RenderFog ? 16 : 0;
+
+	if ((PolyFlags & (PF_Translucent | PF_Modulated)) == 0 && ActorXBlending) flags |= 32;
+
+	if (PolyFlags & PF_Environment)
+	{
+		FLOAT UScale = Info.UScale * Info.USize * (1.0f / 256.0f);
+		FLOAT VScale = Info.VScale * Info.VSize * (1.0f / 256.0f);
+
+		for (INT i = 0; i < NumPts; i++)
+			::EnviroMap(Frame, Pts[i], UScale, VScale);
+	}
+
+	// To do: set up clipping plane for Frame->NearClip (maybe we can always just do this in SetFrame?)
+
+	if (PolyFlags & PF_Modulated)
+	{
+		SceneVertex* vertex = &SceneVertices[SceneVertexPos];
+		for (INT i = 0; i < NumPts; i++)
+		{
+			FTransTexture* P = &Pts[i];
+			vertex->Flags = flags;
+			vertex->Position.x = P->Point.X;
+			vertex->Position.y = P->Point.Y;
+			vertex->Position.z = P->Point.Z;
+			vertex->TexCoord.s = P->U * UMult;
+			vertex->TexCoord.t = P->V * VMult;
+			vertex->TexCoord2.s = P->Fog.X;
+			vertex->TexCoord2.t = P->Fog.Y;
+			vertex->TexCoord3.s = P->Fog.Z;
+			vertex->TexCoord3.t = P->Fog.W;
+			vertex->TexCoord4.s = 0.0f;
+			vertex->TexCoord4.t = 0.0f;
+			vertex->Color.r = 1.0f;
+			vertex->Color.g = 1.0f;
+			vertex->Color.b = 1.0f;
+			vertex->Color.a = 1.0f;
+			vertex++;
+		}
+	}
+	else
+	{
+		SceneVertex* vertex = &SceneVertices[SceneVertexPos];
+		for (INT i = 0; i < NumPts; i++)
+		{
+			FTransTexture* P = &Pts[i];
+			vertex->Flags = flags;
+			vertex->Position.x = P->Point.X;
+			vertex->Position.y = P->Point.Y;
+			vertex->Position.z = P->Point.Z;
+			vertex->TexCoord.s = P->U * UMult;
+			vertex->TexCoord.t = P->V * VMult;
+			vertex->TexCoord2.s = P->Fog.X;
+			vertex->TexCoord2.t = P->Fog.Y;
+			vertex->TexCoord3.s = P->Fog.Z;
+			vertex->TexCoord3.t = P->Fog.W;
+			vertex->TexCoord4.s = 0.0f;
+			vertex->TexCoord4.t = 0.0f;
+			vertex->Color.r = P->Light.X;
+			vertex->Color.g = P->Light.Y;
+			vertex->Color.b = P->Light.Z;
+			vertex->Color.a = 1.0f;
+			vertex++;
+		}
+	}
+
+	bool mirror = (Frame->Mirror == -1.0);
+
+	size_t vstart = SceneVertexPos;
+	size_t vcount = NumPts;
+	size_t istart = SceneIndexPos;
+	size_t icount = 0;
+
+	uint32_t* iptr = SceneIndexes + istart;
+	for (uint32_t i = 2; i < vcount; i += 3)
+	{
+		bool backface = (PolyFlags & PF_TwoSided) && FTriple(Pts[icount].Point, Pts[icount + 1].Point, Pts[icount + 2].Point) <= 0.0;
+		if (mirror) backface = !backface;
+		if (!backface)
+		{
+			*(iptr++) = vstart + i - 2;
+			*(iptr++) = vstart + i - 1;
+			*(iptr++) = vstart + i;
+			icount += 3;
+		}
+		else if (PolyFlags & PF_TwoSided)
+		{
+			*(iptr++) = vstart + i;
+			*(iptr++) = vstart + i - 1;
+			*(iptr++) = vstart + i - 2;
+			icount += 3;
+		}
+	}
+
+	SceneVertexPos += vcount;
+	SceneIndexPos += icount;
+
+	unguard;
+}
+
+#endif
+
 void UD3D11RenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT X, FLOAT Y, FLOAT XL, FLOAT YL, FLOAT U, FLOAT V, FLOAT UL, FLOAT VL, class FSpanBuffer* Span, FLOAT Z, FPlane Color, FPlane Fog, DWORD PolyFlags)
 {
 	guard(UD3D11RenderDevice::DrawTile);
@@ -1864,6 +1993,7 @@ void UD3D11RenderDevice::EndFlash()
 		DrawBatch();
 
 		SceneConstants.ObjectToProjection = mat4::identity();
+		SceneConstants.NearClip = vec4(0.0f, 0.0f, 0.0f, 1.0f);
 		Context->UpdateSubresource(ScenePass.ConstantBuffer, 0, nullptr, &SceneConstants, 0, 0);
 
 		Batch.Pipeline = &ScenePass.Pipelines[2];
@@ -1928,6 +2058,8 @@ void UD3D11RenderDevice::SetSceneNode(FSceneNode* Frame)
 	Context->RSSetViewports(1, &viewport);
 
 	SceneConstants.ObjectToProjection = mat4::frustum(-RProjZ, RProjZ, -Aspect * RProjZ, Aspect * RProjZ, 1.0f, 32768.0f, handedness::left, clipzrange::zero_positive_w);
+	SceneConstants.NearClip = vec4(Frame->NearClip.X, Frame->NearClip.Y, Frame->NearClip.Z, Frame->NearClip.W);
+
 	Context->UpdateSubresource(ScenePass.ConstantBuffer, 0, nullptr, &SceneConstants, 0, 0);
 
 	unguard;
