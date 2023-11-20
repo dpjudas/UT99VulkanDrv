@@ -26,8 +26,13 @@ void UD3D11RenderDevice::StaticConstructor()
 	SupportsLazyTextures = 0;
 	PrefersDeferredLoad = 0;
 	UseVSync = 1;
-	Multisample = 0;
-	UsePrecache = 0;
+	AntialiasMode = 0;
+	UsePrecache = 1;
+	Coronas = 1;
+	ShinySurfaces = 1;
+	DetailTextures = 1;
+	HighDetailActors = 1;
+	VolumetricLighting = 1;
 
 #if defined(OLDUNREAL469SDK)
 	UseLightmapAtlas = 0;
@@ -42,17 +47,16 @@ void UD3D11RenderDevice::StaticConstructor()
 	GammaOffsetGreen = 0.0f;
 	GammaOffsetBlue = 0.0f;
 
-	D3DBrightness = 0.0f;
-	D3DContrast = 1.0f;
-	D3DSaturation = 1.0f;
-	D3DGrayFormula = 1;
+	LinearBrightness = 128; // 0.0f;
+	Contrast = 128; // 1.0f;
+	Saturation = 255; // 1.0f;
+	GrayFormula = 1;
 
-	D3DHdr = 0;
-	D3DOccludeLines = 0;
+	Hdr = 0;
+	OccludeLines = 0;
 
 	LODBias = -0.5f;
-	OneXBlending = 0;
-	ActorXBlending = 0;
+	LightMode = 0;
 
 #if defined(OLDUNREAL469SDK)
 	new(GetClass(), TEXT("UseLightmapAtlas"), RF_Public) UBoolProperty(CPP_PROPERTY(UseLightmapAtlas), TEXT("Display"), CPF_Config);
@@ -60,25 +64,47 @@ void UD3D11RenderDevice::StaticConstructor()
 
 	new(GetClass(), TEXT("UseVSync"), RF_Public) UBoolProperty(CPP_PROPERTY(UseVSync), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("UsePrecache"), RF_Public) UBoolProperty(CPP_PROPERTY(UsePrecache), TEXT("Display"), CPF_Config);
-	new(GetClass(), TEXT("Multisample"), RF_Public) UIntProperty(CPP_PROPERTY(Multisample), TEXT("Display"), CPF_Config);
-
-	new(GetClass(), TEXT("GammaMode"), RF_Public) UIntProperty(CPP_PROPERTY(GammaMode), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("GammaOffset"), RF_Public) UFloatProperty(CPP_PROPERTY(GammaOffset), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("GammaOffsetRed"), RF_Public) UFloatProperty(CPP_PROPERTY(GammaOffsetRed), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("GammaOffsetGreen"), RF_Public) UFloatProperty(CPP_PROPERTY(GammaOffsetGreen), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("GammaOffsetBlue"), RF_Public) UFloatProperty(CPP_PROPERTY(GammaOffsetBlue), TEXT("Display"), CPF_Config);
-	new(GetClass(), TEXT("D3DBrightness"), RF_Public) UFloatProperty(CPP_PROPERTY(D3DBrightness), TEXT("Display"), CPF_Config);
-	new(GetClass(), TEXT("D3DContrast"), RF_Public) UFloatProperty(CPP_PROPERTY(D3DContrast), TEXT("Display"), CPF_Config);
-	new(GetClass(), TEXT("D3DSaturation"), RF_Public) UFloatProperty(CPP_PROPERTY(D3DSaturation), TEXT("Display"), CPF_Config);
-	new(GetClass(), TEXT("D3DGrayFormula"), RF_Public) UIntProperty(CPP_PROPERTY(D3DGrayFormula), TEXT("Display"), CPF_Config);
-	new(GetClass(), TEXT("D3DHdr"), RF_Public) UBoolProperty(CPP_PROPERTY(D3DHdr), TEXT("Display"), CPF_Config);
-	new(GetClass(), TEXT("D3DOccludeLines"), RF_Public) UBoolProperty(CPP_PROPERTY(D3DOccludeLines), TEXT("Display"), CPF_Config);
-
+	new(GetClass(), TEXT("LinearBrightness"), RF_Public) UByteProperty(CPP_PROPERTY(LinearBrightness), TEXT("Display"), CPF_Config);
+	new(GetClass(), TEXT("Contrast"), RF_Public) UByteProperty(CPP_PROPERTY(Contrast), TEXT("Display"), CPF_Config);
+	new(GetClass(), TEXT("Saturation"), RF_Public) UByteProperty(CPP_PROPERTY(Saturation), TEXT("Display"), CPF_Config);
+	new(GetClass(), TEXT("GrayFormula"), RF_Public) UIntProperty(CPP_PROPERTY(GrayFormula), TEXT("Display"), CPF_Config);
+	new(GetClass(), TEXT("Hdr"), RF_Public) UBoolProperty(CPP_PROPERTY(Hdr), TEXT("Display"), CPF_Config);
+	new(GetClass(), TEXT("OccludeLines"), RF_Public) UBoolProperty(CPP_PROPERTY(OccludeLines), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("LODBias"), RF_Public) UFloatProperty(CPP_PROPERTY(LODBias), TEXT("Display"), CPF_Config);
-	new(GetClass(), TEXT("OneXBlending"), RF_Public) UBoolProperty(CPP_PROPERTY(OneXBlending), TEXT("Display"), CPF_Config);
-	new(GetClass(), TEXT("ActorXBlending"), RF_Public) UBoolProperty(CPP_PROPERTY(ActorXBlending), TEXT("Display"), CPF_Config);
+
+	UEnum* AntialiasModes = new(GetClass(), TEXT("AntialiasModes"))UEnum(nullptr);
+	new(AntialiasModes->Names)FName(TEXT("Off"));
+	new(AntialiasModes->Names)FName(TEXT("MSAA_2x"));
+	new(AntialiasModes->Names)FName(TEXT("MSAA_4x"));
+	new(GetClass(), TEXT("AntialiasMode"), RF_Public) UByteProperty(CPP_PROPERTY(AntialiasMode), TEXT("Display"), CPF_Config, AntialiasModes);
+
+	UEnum* GammaModes = new(GetClass(), TEXT("GammaModes"))UEnum(nullptr);
+	new(GammaModes->Names)FName(TEXT("D3D9"));
+	new(GammaModes->Names)FName(TEXT("XOpenGL"));
+	new(GetClass(), TEXT("GammaMode"), RF_Public) UByteProperty(CPP_PROPERTY(GammaMode), TEXT("Display"), CPF_Config, GammaModes);
+
+	UEnum* LightModes = new(GetClass(), TEXT("LightModes"))UEnum(nullptr);
+	new(LightModes->Names)FName(TEXT("Normal"));
+	new(LightModes->Names)FName(TEXT("OneXBlending"));
+	new(LightModes->Names)FName(TEXT("BrighterActors"));
+	new(GetClass(), TEXT("LightMode"), RF_Public) UByteProperty(CPP_PROPERTY(LightMode), TEXT("Display"), CPF_Config, LightModes);
 
 	unguard;
+}
+
+int UD3D11RenderDevice::GetSettingsMultisample()
+{
+	switch (AntialiasMode)
+	{
+	default:
+	case 0: return 0;
+	case 1: return 2;
+	case 2: return 4;
+	}
 }
 
 UBOOL UD3D11RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT NewColorBytes, UBOOL Fullscreen)
@@ -86,8 +112,7 @@ UBOOL UD3D11RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 	guard(UD3D11RenderDevice::Init);
 
 	Viewport = InViewport;
-	ActiveHdr = D3DHdr;
-	ActiveMultisample = Max(Multisample, 1);
+	ActiveHdr = Hdr;
 
 	try
 	{
@@ -278,7 +303,7 @@ UBOOL UD3D11RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 	{
 		try
 		{
-			ResizeSceneBuffers(NewX, NewY);
+			ResizeSceneBuffers(NewX, NewY, GetSettingsMultisample());
 		}
 		catch (const std::exception& e)
 		{
@@ -340,7 +365,8 @@ void UD3D11RenderDevice::Exit()
 	ReleaseObject(ScenePass.VertexBuffer);
 	ReleaseObject(ScenePass.IndexBuffer);
 	ReleaseObject(ScenePass.ConstantBuffer);
-	ReleaseObject(ScenePass.RasterizerState);
+	ReleaseObject(ScenePass.RasterizerState[0]);
+	ReleaseObject(ScenePass.RasterizerState[1]);
 	ReleaseObject(ScenePass.PixelShader);
 	ReleaseObject(ScenePass.PixelShaderAlphaTest);
 	for (auto& sampler : ScenePass.Samplers)
@@ -352,8 +378,11 @@ void UD3D11RenderDevice::Exit()
 		ReleaseObject(pipeline.BlendState);
 		ReleaseObject(pipeline.DepthStencilState);
 	}
-	ReleaseObject(ScenePass.LinePipeline.BlendState);
-	ReleaseObject(ScenePass.LinePipeline.DepthStencilState);
+	for (int i = 0; i < 2; i++)
+	{
+		ReleaseObject(ScenePass.LinePipeline[i].BlendState);
+		ReleaseObject(ScenePass.LinePipeline[i].DepthStencilState);
+	}
 	ReleaseObject(ScenePass.PointPipeline.BlendState);
 	ReleaseObject(ScenePass.PointPipeline.DepthStencilState);
 	ReleaseObject(SceneBuffers.ColorBufferView);
@@ -378,9 +407,11 @@ void UD3D11RenderDevice::Exit()
 	unguard;
 }
 
-void UD3D11RenderDevice::ResizeSceneBuffers(int width, int height)
+void UD3D11RenderDevice::ResizeSceneBuffers(int width, int height, int multisample)
 {
-	if (SceneBuffers.Width == width && SceneBuffers.Height == height && !SceneBuffers.ColorBuffer && !SceneBuffers.HitBuffer && !SceneBuffers.PPHitBuffer && !SceneBuffers.StagingHitBuffer && !SceneBuffers.DepthBuffer && !SceneBuffers.PPImage)
+	multisample = std::max(multisample, 1);
+
+	if (SceneBuffers.Width == width && SceneBuffers.Height == height && multisample == SceneBuffers.Multisample && SceneBuffers.ColorBuffer && SceneBuffers.HitBuffer && SceneBuffers.PPHitBuffer && SceneBuffers.StagingHitBuffer && SceneBuffers.DepthBuffer && SceneBuffers.PPImage)
 		return;
 
 	ReleaseObject(SceneBuffers.ColorBufferView);
@@ -399,6 +430,7 @@ void UD3D11RenderDevice::ResizeSceneBuffers(int width, int height)
 
 	SceneBuffers.Width = width;
 	SceneBuffers.Height = height;
+	SceneBuffers.Multisample = multisample;
 
 	D3D11_TEXTURE2D_DESC texDesc = {};
 	texDesc.Usage = D3D11_USAGE_DEFAULT;
@@ -408,8 +440,8 @@ void UD3D11RenderDevice::ResizeSceneBuffers(int width, int height)
 	texDesc.MipLevels = 1;
 	texDesc.ArraySize = 1;
 	texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
-	texDesc.SampleDesc.Count = std::max(ActiveMultisample, 1);
-	texDesc.SampleDesc.Quality = ActiveMultisample > 1 ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0;
+	texDesc.SampleDesc.Count = SceneBuffers.Multisample;
+	texDesc.SampleDesc.Quality = SceneBuffers.Multisample > 1 ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0;
 	HRESULT result = Device->CreateTexture2D(&texDesc, nullptr, &SceneBuffers.ColorBuffer);
 	ThrowIfFailed(result, "CreateTexture2D(ColorBuffer) failed");
 
@@ -421,8 +453,8 @@ void UD3D11RenderDevice::ResizeSceneBuffers(int width, int height)
 	texDesc.MipLevels = 1;
 	texDesc.ArraySize = 1;
 	texDesc.Format = DXGI_FORMAT_R32_UINT;
-	texDesc.SampleDesc.Count = std::max(ActiveMultisample, 1);
-	texDesc.SampleDesc.Quality = ActiveMultisample > 1 ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0;
+	texDesc.SampleDesc.Count = SceneBuffers.Multisample;
+	texDesc.SampleDesc.Quality = SceneBuffers.Multisample > 1 ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0;
 	result = Device->CreateTexture2D(&texDesc, nullptr, &SceneBuffers.HitBuffer);
 	ThrowIfFailed(result, "CreateTexture2D(HitBuffer) failed");
 
@@ -461,8 +493,8 @@ void UD3D11RenderDevice::ResizeSceneBuffers(int width, int height)
 	texDesc.MipLevels = 1;
 	texDesc.ArraySize = 1;
 	texDesc.Format = DXGI_FORMAT_D32_FLOAT;
-	texDesc.SampleDesc.Count = std::max(ActiveMultisample, 1);
-	texDesc.SampleDesc.Quality = ActiveMultisample > 1 ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0;
+	texDesc.SampleDesc.Count = SceneBuffers.Multisample;
+	texDesc.SampleDesc.Quality = SceneBuffers.Multisample > 1 ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0;
 	result = Device->CreateTexture2D(&texDesc, nullptr, &SceneBuffers.DepthBuffer);
 	ThrowIfFailed(result, "CreateTexture2D(DepthBuffer) failed");
 
@@ -552,14 +584,17 @@ void UD3D11RenderDevice::CreateScenePass()
 		ThrowIfFailed(result, "CreateSamplerState(ScenePass.Samplers) failed");
 	}
 
-	D3D11_RASTERIZER_DESC rasterizerDesc = {};
-	rasterizerDesc.FillMode = D3D11_FILL_SOLID;
-	rasterizerDesc.CullMode = D3D11_CULL_NONE;
-	rasterizerDesc.FrontCounterClockwise = FALSE;
-	rasterizerDesc.DepthClipEnable = FALSE; // Avoid clipping the weapon. The UE1 engine clips the geometry anyway.
-	rasterizerDesc.MultisampleEnable = ActiveMultisample > 1 ? TRUE : FALSE;
-	result = Device->CreateRasterizerState(&rasterizerDesc, &ScenePass.RasterizerState);
-	ThrowIfFailed(result, "CreateRasterizerState(ScenePass.Pipelines.RasterizerState) failed");
+	for (int i = 0; i < 2; i++)
+	{
+		D3D11_RASTERIZER_DESC rasterizerDesc = {};
+		rasterizerDesc.FillMode = D3D11_FILL_SOLID;
+		rasterizerDesc.CullMode = D3D11_CULL_NONE;
+		rasterizerDesc.FrontCounterClockwise = FALSE;
+		rasterizerDesc.DepthClipEnable = FALSE; // Avoid clipping the weapon. The UE1 engine clips the geometry anyway.
+		rasterizerDesc.MultisampleEnable = i == 1 ? TRUE : FALSE;
+		result = Device->CreateRasterizerState(&rasterizerDesc, &ScenePass.RasterizerState[i]);
+		ThrowIfFailed(result, "CreateRasterizerState(ScenePass.Pipelines.RasterizerState) failed");
+	}
 
 	for (int i = 0; i < 32; i++)
 	{
@@ -629,6 +664,7 @@ void UD3D11RenderDevice::CreateScenePass()
 	}
 
 	// Line pipeline
+	for (int i = 0; i < 2; i++)
 	{
 		D3D11_BLEND_DESC blendDesc = {};
 		blendDesc.IndependentBlendEnable = TRUE;
@@ -642,18 +678,18 @@ void UD3D11RenderDevice::CreateScenePass()
 		blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 		blendDesc.RenderTarget[1].BlendEnable = FALSE;
 		blendDesc.RenderTarget[1].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
-		result = Device->CreateBlendState(&blendDesc, &ScenePass.LinePipeline.BlendState);
+		result = Device->CreateBlendState(&blendDesc, &ScenePass.LinePipeline[i].BlendState);
 		ThrowIfFailed(result, "CreateBlendState(ScenePass.LinePipeline.BlendState) failed");
 
 		D3D11_DEPTH_STENCIL_DESC depthStencilDesc = {};
-		depthStencilDesc.DepthEnable = D3DOccludeLines ? TRUE : FALSE;
+		depthStencilDesc.DepthEnable = i ? TRUE : FALSE;
 		depthStencilDesc.DepthFunc = D3D11_COMPARISON_LESS_EQUAL;
 		depthStencilDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
-		result = Device->CreateDepthStencilState(&depthStencilDesc, &ScenePass.LinePipeline.DepthStencilState);
+		result = Device->CreateDepthStencilState(&depthStencilDesc, &ScenePass.LinePipeline[i].DepthStencilState);
 		ThrowIfFailed(result, "CreateDepthStencilState(ScenePass.LinePipeline.DepthStencilState) failed");
 
-		ScenePass.LinePipeline.PixelShader = ScenePass.PixelShader;
-		ScenePass.LinePipeline.PrimitiveTopology = D3D11_PRIMITIVE_TOPOLOGY_LINELIST;
+		ScenePass.LinePipeline[i].PixelShader = ScenePass.PixelShader;
+		ScenePass.LinePipeline[i].PrimitiveTopology = D3D11_PRIMITIVE_TOPOLOGY_LINELIST;
 	}
 
 	// Point pipeline
@@ -901,35 +937,7 @@ UBOOL UD3D11RenderDevice::Exec(const TCHAR* Cmd, FOutputDevice& Ar)
 		return 1;
 	}
 #endif
-	if (ParseCommand(&Cmd, TEXT("d3d_contrast")))
-	{
-		float value = _wtof(Cmd);
-		D3DContrast = clamp(value, 0.1f, 3.f);
-		SaveConfig();
-		return 1;
-	}
-	else if (ParseCommand(&Cmd, TEXT("d3d_saturation")))
-	{
-		float value = _wtof(Cmd);
-		D3DSaturation = clamp(value, -15.0f, 15.f);
-		SaveConfig();
-		return 1;
-	}
-	else if (ParseCommand(&Cmd, TEXT("d3d_brightness")))
-	{
-		float value = _wtof(Cmd);
-		D3DBrightness = clamp(value, -0.8f, 0.8f);
-		SaveConfig();
-		return 1;
-	}
-	else if (ParseCommand(&Cmd, TEXT("d3d_grayformula")))
-	{
-		int value = _wtoi(Cmd);
-		D3DGrayFormula = clamp(value, 0, 2);
-		SaveConfig();
-		return 1;
-	}
-	else if (ParseCommand(&Cmd, TEXT("DGL")))
+	if (ParseCommand(&Cmd, TEXT("DGL")))
 	{
 		if (ParseCommand(&Cmd, TEXT("BUFFERTRIS")))
 		{
@@ -985,6 +993,19 @@ void UD3D11RenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane Scr
 {
 	guard(UD3D11RenderDevice::Lock);
 
+	if (Viewport->SizeX && Viewport->SizeY)
+	{
+		try
+		{
+			ResizeSceneBuffers(SceneBuffers.Width, SceneBuffers.Height, GetSettingsMultisample());
+		}
+		catch (const std::exception& e)
+		{
+			debugf(TEXT("Could not resize scene buffers: %s"), to_utf16(e.what()).c_str());
+			return;
+		}
+	}
+
 	HitData = InHitData;
 	HitSize = InHitSize;
 
@@ -1006,7 +1027,7 @@ void UD3D11RenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane Scr
 	Context->IASetInputLayout(ScenePass.InputLayout);
 	Context->VSSetShader(ScenePass.VertexShader, nullptr, 0);
 	Context->VSSetConstantBuffers(0, 1, &ScenePass.ConstantBuffer);
-	Context->RSSetState(ScenePass.RasterizerState);
+	Context->RSSetState(ScenePass.RasterizerState[SceneBuffers.Multisample > 1]);
 
 	D3D11_RECT box = {};
 	box.right = Viewport->SizeX;
@@ -1050,7 +1071,7 @@ void UD3D11RenderDevice::Unlock(UBOOL Blit)
 
 	if (Blit)
 	{
-		if (ActiveMultisample > 1)
+		if (SceneBuffers.Multisample > 1)
 		{
 			Context->ResolveSubresource(SceneBuffers.PPImage, 0, SceneBuffers.ColorBuffer, 0, DXGI_FORMAT_R16G16B16A16_FLOAT);
 		}
@@ -1094,17 +1115,35 @@ void UD3D11RenderDevice::Unlock(UBOOL Blit)
 				pushconstants.GammaCorrection = vec4(invGammaRed, invGammaGreen, invGammaBlue, brightness);
 			}
 
-			pushconstants.GammaCorrection = 1.0f / (Max(Viewport->GetOuterUClient()->Brightness + GammaOffset, 0.001f) * 2.0f);
-			pushconstants.Contrast = clamp(D3DContrast, 0.1f, 3.f);
-			pushconstants.Saturation = clamp(D3DSaturation, -1.0f, 1.0f);
-			pushconstants.Brightness = clamp(D3DBrightness, -15.0f, 15.f);
+			// pushconstants.Contrast = clamp(Contrast, 0.1f, 3.f);
+			if (Contrast >= 128)
+			{
+				pushconstants.Contrast = 1.0f + (Contrast - 128) / 127.0f * 3.0f;
+			}
+			else
+			{
+				pushconstants.Contrast = Max(Contrast / 128.0f, 0.1f);
+			}
+
+			// pushconstants.Saturation = clamp(Saturation, -1.0f, 1.0f);
+			pushconstants.Saturation = 1.0f - 2.0f * (255 - Saturation) / 255.0f;
+
+			// pushconstants.Brightness = clamp(LinearBrightness, -1.8f, 1.8f);
+			if (LinearBrightness >= 128)
+			{
+				pushconstants.Brightness = (LinearBrightness - 128) / 127.0f * 1.8f;
+			}
+			else
+			{
+				pushconstants.Brightness = (128 - LinearBrightness) / 128.0f * -1.8f;
+			}
 		}
 
 		// Select present shader based on what the user is actually using
 		int presentShader = 0;
 		if (ActiveHdr) presentShader |= 1;
 		if (GammaMode == 1) presentShader |= 2;
-		if (pushconstants.Brightness != 0.0f || pushconstants.Contrast != 1.0f || pushconstants.Saturation != 1.0f) presentShader |= (Clamp(D3DGrayFormula, 0, 2) + 1) << 2;
+		if (pushconstants.Brightness != 0.0f || pushconstants.Contrast != 1.0f || pushconstants.Saturation != 1.0f) presentShader |= (Clamp(GrayFormula, 0, 2) + 1) << 2;
 
 		UINT stride = sizeof(vec2);
 		UINT offset = 0;
@@ -1166,7 +1205,7 @@ void UD3D11RenderDevice::Unlock(UBOOL Blit)
 		box.back = 1;
 
 		// Resolve multisampling
-		if (ActiveMultisample > 1)
+		if (SceneBuffers.Multisample > 1)
 		{
 			Context->OMSetRenderTargets(1, &SceneBuffers.PPHitBufferView, nullptr);
 
@@ -1396,7 +1435,7 @@ void UD3D11RenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Sur
 	if (detailtex && !fogmap) flags |= 4;
 	if (fogmap) flags |= 8;
 
-	if (OneXBlending) flags |= 64;
+	if (LightMode == 1) flags |= 64;
 
 	if (fogmap) // if Surface.FogMap exists, use instead of detail texture
 	{
@@ -1498,7 +1537,7 @@ void UD3D11RenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& Inf
 	float VMult = GetVMult(Info);
 	int flags = (PolyFlags & (PF_RenderFog | PF_Translucent | PF_Modulated)) == PF_RenderFog ? 16 : 0;
 
-	if ((PolyFlags & (PF_Translucent | PF_Modulated)) == 0 && ActorXBlending) flags |= 32;
+	if ((PolyFlags & (PF_Translucent | PF_Modulated)) == 0 && LightMode == 2) flags |= 32;
 
 	if (PolyFlags & PF_Modulated)
 	{
@@ -1599,7 +1638,7 @@ void UD3D11RenderDevice::DrawGouraudTriangles(const FSceneNode* Frame, const FTe
 	float VMult = GetVMult(Info);
 	int flags = (PolyFlags & (PF_RenderFog | PF_Translucent | PF_Modulated)) == PF_RenderFog ? 16 : 0;
 
-	if ((PolyFlags & (PF_Translucent | PF_Modulated)) == 0 && ActorXBlending) flags |= 32;
+	if ((PolyFlags & (PF_Translucent | PF_Modulated)) == 0 && LightMode == 2) flags |= 32;
 
 	if (PolyFlags & PF_Environment)
 	{
@@ -1609,8 +1648,6 @@ void UD3D11RenderDevice::DrawGouraudTriangles(const FSceneNode* Frame, const FTe
 		for (INT i = 0; i < NumPts; i++)
 			::EnviroMap(Frame, Pts[i], UScale, VScale);
 	}
-
-	// To do: set up clipping plane for Frame->NearClip (maybe we can always just do this in SetFrame?)
 
 	if (PolyFlags & PF_Modulated)
 	{
@@ -1745,7 +1782,7 @@ void UD3D11RenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT X
 	}
 	a = 1.0f;
 
-	if (ActiveMultisample > 1)
+	if (SceneBuffers.Multisample > 1)
 	{
 		XL = std::floor(X + XL + 0.5f);
 		YL = std::floor(Y + YL + 0.5f);
@@ -1805,7 +1842,7 @@ void UD3D11RenderDevice::Draw3DLine(FSceneNode* Frame, FPlane Color, DWORD LineF
 	}
 	else
 	{
-		auto pipeline = &ScenePass.LinePipeline;
+		auto pipeline = &ScenePass.LinePipeline[OccludeLines];
 		if (pipeline != Batch.Pipeline)
 		{
 			DrawBatch();
@@ -1844,7 +1881,7 @@ void UD3D11RenderDevice::Draw2DLine(FSceneNode* Frame, FPlane Color, DWORD LineF
 {
 	guard(UD3D11RenderDevice::Draw2DLine);
 
-	auto pipeline = &ScenePass.LinePipeline;
+	auto pipeline = &ScenePass.LinePipeline[OccludeLines];
 	if (pipeline != Batch.Pipeline)
 	{
 		DrawBatch();

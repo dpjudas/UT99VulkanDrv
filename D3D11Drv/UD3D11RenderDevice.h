@@ -112,6 +112,7 @@ public:
 		ID3D11ShaderResourceView* PPImageShaderView = nullptr;
 		int Width = 0;
 		int Height = 0;
+		int Multisample = 0;
 	} SceneBuffers;
 
 	struct ScenePipelineState
@@ -129,12 +130,12 @@ public:
 		ID3D11Buffer* VertexBuffer = nullptr;
 		ID3D11Buffer* IndexBuffer = nullptr;
 		ID3D11Buffer* ConstantBuffer = nullptr;
-		ID3D11RasterizerState* RasterizerState = nullptr;
+		ID3D11RasterizerState* RasterizerState[2] = {};
 		ID3D11PixelShader* PixelShader = {};
 		ID3D11PixelShader* PixelShaderAlphaTest = {};
 		ID3D11SamplerState* Samplers[16] = {};
 		ScenePipelineState Pipelines[32];
-		ScenePipelineState LinePipeline;
+		ScenePipelineState LinePipeline[2];
 		ScenePipelineState PointPipeline;
 	} ScenePass;
 
@@ -180,25 +181,23 @@ public:
 
 	// Configuration.
 	BITFIELD UseVSync;
-	INT Multisample;
-	INT GammaMode;
 	FLOAT GammaOffset;
 	FLOAT GammaOffsetRed;
 	FLOAT GammaOffsetGreen;
 	FLOAT GammaOffsetBlue;
-	FLOAT D3DBrightness;
-	FLOAT D3DContrast;
-	FLOAT D3DSaturation;
-	INT D3DGrayFormula;
-	BITFIELD D3DHdr;
-	BITFIELD D3DOccludeLines;
-
+	BYTE LinearBrightness;
+	BYTE Contrast;
+	BYTE Saturation;
+	INT GrayFormula;
+	BITFIELD Hdr;
+	BITFIELD OccludeLines;
 	FLOAT LODBias;
-	BITFIELD OneXBlending;
-	BITFIELD ActorXBlending;
+	BYTE AntialiasMode;
+	BYTE GammaMode;
+	BYTE LightMode;
 
 private:
-	void ResizeSceneBuffers(int width, int height);
+	void ResizeSceneBuffers(int width, int height, int multisample);
 	void ClearTextureCache();
 	void CreatePresentPass();
 	void CreateScenePass();
@@ -208,6 +207,8 @@ private:
 	void DrawBatch();
 
 	void NextSceneBuffers();
+
+	int GetSettingsMultisample();
 
 	ScenePipelineState* GetPipeline(DWORD PolyFlags);
 
@@ -242,7 +243,6 @@ private:
 	HitQuery ForceHit;
 
 	bool IsLocked = false;
-	INT ActiveMultisample = 0;
 	bool ActiveHdr = false;
 };
 

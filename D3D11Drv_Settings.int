@@ -1,23 +1,8 @@
 [Public]
-Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=UseVSync,Title="V-Sync",Description="Enables or disables vertical synchronization.")
-Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=Multisample,Title="MSAA Samples",Description="Sets the number of MSAA samples. Higher values lead to stronger smoothing and, therefore, better image quality. Lower values lead to worse image quality but better frame rates. Multisample is subject to hardware limitations.",Value(0),Value(2),Value(4),RequireRestart)
+Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=AntialiasMode,Title="Anti Aliasing",Description="Anti alias method used to reduce jagged edges",Value("Off"),Value("MSAA_2x"),Value("MSAA_4x"))
+Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=LightMode,Title="Light Mode",Description="Adjust how map surfaces and actors are lit",Value("Normal"),Value("OneXBlending"),Value("BrighterActors"))
 
-Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=D3DHdr,Title="HDR Mode",Description="Enables using high dynamic range. Only works if your monitor is set to run in HDR mode in the Windows display settings",RequireRestart)
-Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=OneXBlending,Title="1X Blending",Description="Make actors brighter by making the lightmaps dull and boring")
-Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=ActorXBlending,Title="ActorX Blending",Description="Make the actors twice as bright (same effect as 1X Blending, except lightmaps still look good)")
-
-Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=GammaMode,Title="Gamma Mode",Description="Gamma calculation mode",Value(0),Value(1))
-Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=GammaOffset,Title="Gamma Offset",Description="Add additional gamma")
-Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=GammaOffsetRed,Title="Gamma Offset Red",Description="Add additional red channel gamma")
-Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=GammaOffsetGreen,Title="Gamma Offset Green",Description="Add additional green channel gamma")
-Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=GammaOffsetBlue,Title="Gamma Offset Blue",Description="Add additional blue channel gamma")
-
-Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=D3DBrightness,Title="Linear Brightness",Description="Adjust brightness for all pixels")
-Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=D3DContrast,Title="Contrast",Description="Adjust pixel contrast")
-Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=D3DSaturation,Title="Saturation",Description="Adjust how saturated the colors are")
-Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=D3DGrayFormula,Title="Gray Formula",Description="Pick between multiple equations for the saturation",Value(0),Value(1),Value(2))
-
-Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=LODBias,Title="Texture LOD Bias",Description="Changes the level of detail for textures applied to distant surfaces and objects. Higher values increase the level of detail. Lower values decrease it. We recommend keeping the default setting.")
+Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=Hdr,Title="HDR Mode",Description="Enables using high dynamic range. Only works if your monitor is set to run in HDR mode in the Windows display settings",RequireRestart)
 
 Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=UsePrecache,Title="Precaching",Description="If checked, all textures will be precached onto video memory.")
 Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=DetailTextures,Title="Detail Texturing",Description="If checked, enables Detail Texturing.")
@@ -26,4 +11,15 @@ Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=Coronas,Title="Coronas",D
 Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=ShinySurfaces,Title="Shiny Surfaces",Description="ShinySurfaces")
 Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=VolumetricLighting,Title="Volumetric Lighting",Description="VolumetricLighting")
 
-Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=D3DOccludeLines,Title="Occlude Lines",Description="Occludes lines in the Unreal Editor")
+Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=LinearBrightness,Title="Linear Brightness",Description="Adjust brightness for all pixels")
+Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=Contrast,Title="Contrast",Description="Adjust pixel contrast")
+Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=Saturation,Title="Saturation",Description="Adjust how saturated the colors are")
+
+Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=GammaMode,Title="Gamma Mode",Description="Gamma calculation mode",Value("D3D9"),Value("XOpenGL"))
+Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=GammaOffset,Title="Gamma Offset",Description="Add additional gamma")
+Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=GammaOffsetRed,Title="Gamma Offset Red",Description="Add additional red channel gamma")
+Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=GammaOffsetGreen,Title="Gamma Offset Green",Description="Add additional green channel gamma")
+Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=GammaOffsetBlue,Title="Gamma Offset Blue",Description="Add additional blue channel gamma")
+
+Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=OccludeLines,Title="Occlude Lines",Description="Occludes lines in the Unreal Editor")
+Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=LODBias,Title="Texture LOD Bias",Description="Changes the level of detail for textures applied to distant surfaces and objects. Higher values increase the level of detail. Lower values decrease it. We recommend keeping the default setting.")
