@@ -35,7 +35,7 @@ void UD3D11RenderDevice::StaticConstructor()
 	VolumetricLighting = 1;
 
 #if defined(OLDUNREAL469SDK)
-	UseLightmapAtlas = 0;
+	UseLightmapAtlas = 1;
 	SupportsUpdateTextureRect = 1;
 	MaxTextureSize = 4096;
 	NeedsMaskedFonts = 0;
