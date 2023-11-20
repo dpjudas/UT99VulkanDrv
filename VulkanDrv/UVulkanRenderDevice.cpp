@@ -28,7 +28,7 @@ void UVulkanRenderDevice::StaticConstructor()
 	UsePrecache = 0;
 
 #if defined(OLDUNREAL469SDK)
-	UseLightmapAtlas = 0;
+	UseLightmapAtlas = 0; // Note: do not turn this on. It does not work and generates broken fogmaps.
 	SupportsUpdateTextureRect = 1;
 	MaxTextureSize = 4096;
 	NeedsMaskedFonts = 0;

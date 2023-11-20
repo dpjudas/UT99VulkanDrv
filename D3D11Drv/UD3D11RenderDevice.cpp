@@ -35,7 +35,7 @@ void UD3D11RenderDevice::StaticConstructor()
 	VolumetricLighting = 1;
 
 #if defined(OLDUNREAL469SDK)
-	UseLightmapAtlas = 1;
+	UseLightmapAtlas = 0; // Note: do not turn this on. It does not work and generates broken fogmaps.
 	SupportsUpdateTextureRect = 1;
 	MaxTextureSize = 4096;
 	NeedsMaskedFonts = 0;
