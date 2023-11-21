@@ -901,7 +901,7 @@ void UD3D11RenderDevice::Flush()
 {
 	guard(UD3D11RenderDevice::Flush);
 
-	DrawBatch();
+	DrawBatch(true);
 	ClearTextureCache();
 
 	if (UsePrecache && !GIsEditor)
@@ -916,7 +916,7 @@ void UD3D11RenderDevice::Flush(UBOOL AllowPrecache)
 {
 	guard(UD3D11RenderDevice::Flush);
 
-	DrawBatch();
+	DrawBatch(true);
 	ClearTextureCache();
 
 	if (AllowPrecache && UsePrecache && !GIsEditor)
@@ -1067,7 +1067,7 @@ void UD3D11RenderDevice::Unlock(UBOOL Blit)
 	guard(UD3D11RenderDevice::Unlock);
 
 	if (Blit || HitData)
-		DrawBatch();
+		DrawBatch(true);
 
 	if (Blit)
 	{
@@ -1294,7 +1294,7 @@ void UD3D11RenderDevice::PushHit(const BYTE* Data, INT Count)
 	if (Count <= 0) return;
 	HitQueryStack.insert(HitQueryStack.end(), Data, Data + Count);
 
-	DrawBatch();
+	DrawBatch(true);
 
 	INT index = HitQueries.size();
 
@@ -1486,7 +1486,7 @@ void UD3D11RenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& Inf
 	guard(UD3D11RenderDevice::DrawGouraudPolygon);
 
 	if (NumPts < 3) return; // This can apparently happen!!
-	if (SceneVertexPos + 1000 > SceneVertexBufferSize || SceneIndexPos + 1000 > SceneIndexBufferSize) NextSceneBuffers();
+	if (SceneVertexPos + NumPts > SceneVertexBufferSize || SceneIndexPos + NumPts * 3 > SceneIndexBufferSize) NextSceneBuffers();
 
 	CachedTexture* tex = Textures->GetTexture(&Info, !!(PolyFlags & PF_Masked));
 
@@ -1587,7 +1587,7 @@ void UD3D11RenderDevice::DrawGouraudTriangles(const FSceneNode* Frame, const FTe
 	// URenderDeviceOldUnreal469::DrawGouraudTriangles(Frame, Info, Pts, NumPts, PolyFlags, DataFlags, Span); return;
 
 	if (NumPts < 3) return; // This can apparently happen!!
-	if (SceneVertexPos + 1000 > SceneVertexBufferSize || SceneIndexPos + 1000 > SceneIndexBufferSize) NextSceneBuffers();
+	if (SceneVertexPos + NumPts > SceneVertexBufferSize || SceneIndexPos + NumPts * 3 > SceneIndexBufferSize) NextSceneBuffers();
 
 	CachedTexture* tex = Textures->GetTexture(const_cast<FTextureInfo*>(&Info), !!(PolyFlags & PF_Masked));
 
@@ -1706,7 +1706,7 @@ void UD3D11RenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT X
 {
 	guard(UD3D11RenderDevice::DrawTile);
 
-	if (SceneVertexPos + 1000 > SceneVertexBufferSize || SceneIndexPos + 1000 > SceneIndexBufferSize) NextSceneBuffers();
+	if (SceneVertexPos + 4 > SceneVertexBufferSize || SceneIndexPos + 6 > SceneIndexBufferSize) NextSceneBuffers();
 
 	// stijn: fix for invisible actor icons in ortho viewports
 	if (GIsEditor && Frame->Viewport->Actor && (Frame->Viewport->IsOrtho() || Abs(Z) <= SMALL_NUMBER))
@@ -1813,7 +1813,7 @@ void UD3D11RenderDevice::Draw3DLine(FSceneNode* Frame, FPlane Color, DWORD LineF
 
 		SetDescriptorSet(PF_Highlighted);
 
-		if (SceneVertexPos + 1000 > SceneVertexBufferSize || SceneIndexPos + 1000 > SceneIndexBufferSize) NextSceneBuffers();
+		if (SceneVertexPos + 2 > SceneVertexBufferSize || SceneIndexPos + 2 > SceneIndexBufferSize) NextSceneBuffers();
 		if (!SceneVertices || !SceneIndexes) return;
 
 		SceneVertex* v = &SceneVertices[SceneVertexPos];
@@ -1852,7 +1852,7 @@ void UD3D11RenderDevice::Draw2DLine(FSceneNode* Frame, FPlane Color, DWORD LineF
 
 	SetDescriptorSet(PF_Highlighted);
 
-	if (SceneVertexPos + 1000 > SceneVertexBufferSize || SceneIndexPos + 1000 > SceneIndexBufferSize) NextSceneBuffers();
+	if (SceneVertexPos + 2 > SceneVertexBufferSize || SceneIndexPos + 2 > SceneIndexBufferSize) NextSceneBuffers();
 	if (!SceneVertices || !SceneIndexes) return;
 
 	SceneVertex* v = &SceneVertices[SceneVertexPos];
@@ -1886,7 +1886,7 @@ void UD3D11RenderDevice::Draw2DPoint(FSceneNode* Frame, FPlane Color, DWORD Line
 
 	SetDescriptorSet(PF_Highlighted);
 
-	if (SceneVertexPos + 1000 > SceneVertexBufferSize || SceneIndexPos + 1000 > SceneIndexBufferSize) NextSceneBuffers();
+	if (SceneVertexPos + 2 > SceneVertexBufferSize || SceneIndexPos + 2 > SceneIndexBufferSize) NextSceneBuffers();
 	if (!SceneVertices || !SceneIndexes) return;
 
 	SceneVertex* v = &SceneVertices[SceneVertexPos];
@@ -1919,7 +1919,7 @@ void UD3D11RenderDevice::ClearZ(FSceneNode* Frame)
 {
 	guard(UD3D11RenderDevice::ClearZ);
 
-	DrawBatch();
+	DrawBatch(true);
 
 	Context->ClearDepthStencilView(SceneBuffers.DepthBufferView, D3D11_CLEAR_DEPTH, 1.0f, 0);
 
@@ -1993,7 +1993,7 @@ void UD3D11RenderDevice::EndFlash()
 	guard(UD3D11RenderDevice::EndFlash);
 	if (FlashScale != FPlane(0.5f, 0.5f, 0.5f, 0.0f) || FlashFog != FPlane(0.0f, 0.0f, 0.0f, 0.0f))
 	{
-		DrawBatch();
+		DrawBatch(true);
 
 		SceneConstants.ObjectToProjection = mat4::identity();
 		SceneConstants.NearClip = vec4(0.0f, 0.0f, 0.0f, 1.0f);
@@ -2030,7 +2030,7 @@ void UD3D11RenderDevice::EndFlash()
 			SceneVertexPos += vcount;
 			SceneIndexPos += icount;
 
-			DrawBatch();
+			DrawBatch(true);
 		}
 
 		if (CurrentFrame)
@@ -2043,7 +2043,7 @@ void UD3D11RenderDevice::SetSceneNode(FSceneNode* Frame)
 {
 	guard(UD3D11RenderDevice::SetSceneNode);
 
-	DrawBatch();
+	DrawBatch(true);
 
 	CurrentFrame = Frame;
 	Aspect = Frame->FY / Frame->FX;
@@ -2082,42 +2082,20 @@ void UD3D11RenderDevice::ClearTextureCache()
 
 void UD3D11RenderDevice::DrawBatch(bool nextBuffer)
 {
-	size_t icount = SceneIndexPos - Batch.SceneIndexStart;
-	if (icount > 0)
+	Batch.SceneIndexEnd = SceneIndexPos;
+
+	if (Batch.SceneIndexStart != Batch.SceneIndexEnd)
+		QueuedBatches.push_back(Batch);
+
+	if (nextBuffer && !QueuedBatches.empty())
 	{
-		ID3D11ShaderResourceView* views[4] =
-		{
-			Batch.Tex ? Batch.Tex->View : Textures->GetNullTexture()->View,
-			Batch.Lightmap ? Batch.Lightmap->View : Textures->GetNullTexture()->View,
-			Batch.Macrotex ? Batch.Macrotex->View : Textures->GetNullTexture()->View,
-			Batch.Detailtex ? Batch.Detailtex->View : Textures->GetNullTexture()->View
-		};
-
-		ID3D11SamplerState* samplers[4] =
-		{
-			ScenePass.Samplers[Batch.TexSamplerMode],
-			ScenePass.Samplers[0],
-			ScenePass.Samplers[Batch.MacrotexSamplerMode],
-			ScenePass.Samplers[Batch.DetailtexSamplerMode]
-		};
-
-		Context->PSSetSamplers(0, 4, samplers);
-		Context->PSSetShaderResources(0, 4, views);
-		Context->PSSetShader(Batch.Pipeline->PixelShader, nullptr, 0);
-
-		Context->OMSetBlendState(Batch.Pipeline->BlendState, nullptr, 0xffffffff);
-		Context->OMSetDepthStencilState(Batch.Pipeline->DepthStencilState, 0);
-
-		Context->IASetPrimitiveTopology(Batch.Pipeline->PrimitiveTopology);
-
 		Context->Unmap(ScenePass.VertexBuffer, 0); SceneVertices = nullptr;
 		Context->Unmap(ScenePass.IndexBuffer, 0); SceneIndexes = nullptr;
 
-		Context->DrawIndexed(icount, Batch.SceneIndexStart, 0);
-	}
+		for (const DrawBatchEntry& entry : QueuedBatches)
+			DrawEntry(entry);
+		QueuedBatches.clear();
 
-	if (icount > 0 || nextBuffer)
-	{
 		D3D11_MAPPED_SUBRESOURCE mappedVertexBuffer = {};
 		HRESULT result = Context->Map(ScenePass.VertexBuffer, 0, nextBuffer ? D3D11_MAP_WRITE_DISCARD : D3D11_MAP_WRITE_NO_OVERWRITE, 0, &mappedVertexBuffer);
 		if (SUCCEEDED(result))
@@ -2137,9 +2115,41 @@ void UD3D11RenderDevice::DrawBatch(bool nextBuffer)
 			SceneVertexPos = 0;
 			SceneIndexPos = 0;
 		}
-
-		Batch.SceneIndexStart = SceneIndexPos;
 	}
+
+	Batch.SceneIndexStart = SceneIndexPos;
+}
+
+void UD3D11RenderDevice::DrawEntry(const DrawBatchEntry& entry)
+{
+	size_t icount = entry.SceneIndexEnd - entry.SceneIndexStart;
+
+	ID3D11ShaderResourceView* views[4] =
+	{
+		entry.Tex ? entry.Tex->View : Textures->GetNullTexture()->View,
+		entry.Lightmap ? entry.Lightmap->View : Textures->GetNullTexture()->View,
+		entry.Macrotex ? entry.Macrotex->View : Textures->GetNullTexture()->View,
+		entry.Detailtex ? entry.Detailtex->View : Textures->GetNullTexture()->View
+	};
+
+	ID3D11SamplerState* samplers[4] =
+	{
+		ScenePass.Samplers[entry.TexSamplerMode],
+		ScenePass.Samplers[0],
+		ScenePass.Samplers[entry.MacrotexSamplerMode],
+		ScenePass.Samplers[entry.DetailtexSamplerMode]
+	};
+
+	Context->PSSetSamplers(0, 4, samplers);
+	Context->PSSetShaderResources(0, 4, views);
+	Context->PSSetShader(entry.Pipeline->PixelShader, nullptr, 0);
+
+	Context->OMSetBlendState(entry.Pipeline->BlendState, nullptr, 0xffffffff);
+	Context->OMSetDepthStencilState(entry.Pipeline->DepthStencilState, 0);
+
+	Context->IASetPrimitiveTopology(entry.Pipeline->PrimitiveTopology);
+
+	Context->DrawIndexed(icount, entry.SceneIndexStart, 0);
 }
 
 std::vector<uint8_t> UD3D11RenderDevice::CompileHlsl(const std::string& filename, const std::string& shadertype, const std::vector<std::string> defines)

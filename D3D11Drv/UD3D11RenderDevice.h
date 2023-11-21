@@ -139,12 +139,13 @@ public:
 		ScenePipelineState PointPipeline;
 	} ScenePass;
 
-	static const int SceneVertexBufferSize = 1 * 1024 * 1024;
-	static const int SceneIndexBufferSize = 1 * 1024 * 1024;
+	static const int SceneVertexBufferSize = 32 * 1024;
+	static const int SceneIndexBufferSize = 32 * 1024;
 
-	struct
+	struct DrawBatchEntry
 	{
 		size_t SceneIndexStart = 0;
+		size_t SceneIndexEnd = 0;
 		ScenePipelineState* Pipeline = nullptr;
 		CachedTexture* Tex = nullptr;
 		CachedTexture* Lightmap = nullptr;
@@ -154,6 +155,7 @@ public:
 		uint32_t DetailtexSamplerMode = 0;
 		uint32_t MacrotexSamplerMode = 0;
 	} Batch;
+	std::vector<DrawBatchEntry> QueuedBatches;
 
 	SceneVertex* SceneVertices = nullptr;
 	size_t SceneVertexPos = 0;
@@ -205,6 +207,7 @@ private:
 	void SetPipeline(DWORD polyflags);
 	void SetDescriptorSet(DWORD polyflags, CachedTexture* tex = nullptr, CachedTexture* lightmap = nullptr, CachedTexture* macrotex = nullptr, CachedTexture* detailtex = nullptr, bool clamp = false);
 	void DrawBatch(bool nextBuffer = false);
+	void DrawEntry(const DrawBatchEntry& entry);
 
 	void NextSceneBuffers() { DrawBatch(true); }
 
