@@ -1886,7 +1886,7 @@ void UD3D11RenderDevice::Draw2DPoint(FSceneNode* Frame, FPlane Color, DWORD Line
 
 	SetDescriptorSet(PF_Highlighted);
 
-	if (SceneVertexPos + 2 > SceneVertexBufferSize || SceneIndexPos + 2 > SceneIndexBufferSize) NextSceneBuffers();
+	if (SceneVertexPos + 4 > SceneVertexBufferSize || SceneIndexPos + 6 > SceneIndexBufferSize) NextSceneBuffers();
 	if (!SceneVertices || !SceneIndexes) return;
 
 	SceneVertex* v = &SceneVertices[SceneVertexPos];
@@ -2006,6 +2006,8 @@ void UD3D11RenderDevice::EndFlash()
 		{
 			vec4 color(FlashFog.X, FlashFog.Y, FlashFog.Z, 1.0f - Min(FlashScale.X * 2.0f, 1.0f));
 			vec2 zero2(0.0f);
+
+			if (SceneVertexPos + 4 > SceneVertexBufferSize || SceneIndexPos + 6 > SceneIndexBufferSize) NextSceneBuffers();
 
 			SceneVertex* v = &SceneVertices[SceneVertexPos];
 
