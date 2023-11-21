@@ -901,7 +901,7 @@ void UD3D11RenderDevice::Flush()
 {
 	guard(UD3D11RenderDevice::Flush);
 
-	DrawBatch(true);
+	DrawBatches();
 	ClearTextureCache();
 
 	if (UsePrecache && !GIsEditor)
@@ -916,7 +916,7 @@ void UD3D11RenderDevice::Flush(UBOOL AllowPrecache)
 {
 	guard(UD3D11RenderDevice::Flush);
 
-	DrawBatch(true);
+	DrawBatches();
 	ClearTextureCache();
 
 	if (AllowPrecache && UsePrecache && !GIsEditor)
@@ -1067,7 +1067,7 @@ void UD3D11RenderDevice::Unlock(UBOOL Blit)
 	guard(UD3D11RenderDevice::Unlock);
 
 	if (Blit || HitData)
-		DrawBatch(true);
+		DrawBatches();
 
 	if (Blit)
 	{
@@ -1294,7 +1294,7 @@ void UD3D11RenderDevice::PushHit(const BYTE* Data, INT Count)
 	if (Count <= 0) return;
 	HitQueryStack.insert(HitQueryStack.end(), Data, Data + Count);
 
-	DrawBatch(true);
+	DrawBatches();
 
 	INT index = HitQueries.size();
 
@@ -1807,7 +1807,7 @@ void UD3D11RenderDevice::Draw3DLine(FSceneNode* Frame, FPlane Color, DWORD LineF
 		auto pipeline = &ScenePass.LinePipeline[OccludeLines];
 		if (pipeline != Batch.Pipeline)
 		{
-			DrawBatch();
+			AddDrawBatch();
 			Batch.Pipeline = pipeline;
 		}
 
@@ -1846,7 +1846,7 @@ void UD3D11RenderDevice::Draw2DLine(FSceneNode* Frame, FPlane Color, DWORD LineF
 	auto pipeline = &ScenePass.LinePipeline[OccludeLines];
 	if (pipeline != Batch.Pipeline)
 	{
-		DrawBatch();
+		AddDrawBatch();
 		Batch.Pipeline = pipeline;
 	}
 
@@ -1880,7 +1880,7 @@ void UD3D11RenderDevice::Draw2DPoint(FSceneNode* Frame, FPlane Color, DWORD Line
 	auto pipeline = &ScenePass.PointPipeline;
 	if (pipeline != Batch.Pipeline)
 	{
-		DrawBatch();
+		AddDrawBatch();
 		Batch.Pipeline = pipeline;
 	}
 
@@ -1919,7 +1919,7 @@ void UD3D11RenderDevice::ClearZ(FSceneNode* Frame)
 {
 	guard(UD3D11RenderDevice::ClearZ);
 
-	DrawBatch(true);
+	DrawBatches();
 
 	Context->ClearDepthStencilView(SceneBuffers.DepthBufferView, D3D11_CLEAR_DEPTH, 1.0f, 0);
 
@@ -1993,7 +1993,7 @@ void UD3D11RenderDevice::EndFlash()
 	guard(UD3D11RenderDevice::EndFlash);
 	if (FlashScale != FPlane(0.5f, 0.5f, 0.5f, 0.0f) || FlashFog != FPlane(0.0f, 0.0f, 0.0f, 0.0f))
 	{
-		DrawBatch(true);
+		DrawBatches();
 
 		SceneConstants.ObjectToProjection = mat4::identity();
 		SceneConstants.NearClip = vec4(0.0f, 0.0f, 0.0f, 1.0f);
@@ -2030,7 +2030,7 @@ void UD3D11RenderDevice::EndFlash()
 			SceneVertexPos += vcount;
 			SceneIndexPos += icount;
 
-			DrawBatch(true);
+			AddDrawBatch();
 		}
 
 		if (CurrentFrame)
@@ -2043,7 +2043,7 @@ void UD3D11RenderDevice::SetSceneNode(FSceneNode* Frame)
 {
 	guard(UD3D11RenderDevice::SetSceneNode);
 
-	DrawBatch(true);
+	DrawBatches();
 
 	CurrentFrame = Frame;
 	Aspect = Frame->FY / Frame->FX;
@@ -2080,41 +2080,45 @@ void UD3D11RenderDevice::ClearTextureCache()
 	Textures->ClearCache();
 }
 
-void UD3D11RenderDevice::DrawBatch(bool nextBuffer)
+void UD3D11RenderDevice::AddDrawBatch()
 {
-	Batch.SceneIndexEnd = SceneIndexPos;
-
-	if (Batch.SceneIndexStart != Batch.SceneIndexEnd)
-		QueuedBatches.push_back(Batch);
-
-	if (nextBuffer && !QueuedBatches.empty())
+	if (Batch.SceneIndexStart != SceneIndexPos)
 	{
-		Context->Unmap(ScenePass.VertexBuffer, 0); SceneVertices = nullptr;
-		Context->Unmap(ScenePass.IndexBuffer, 0); SceneIndexes = nullptr;
+		Batch.SceneIndexEnd = SceneIndexPos;
+		QueuedBatches.push_back(Batch);
+		Batch.SceneIndexStart = SceneIndexPos;
+	}
+}
 
-		for (const DrawBatchEntry& entry : QueuedBatches)
-			DrawEntry(entry);
-		QueuedBatches.clear();
+void UD3D11RenderDevice::DrawBatches(bool nextBuffer)
+{
+	AddDrawBatch();
 
-		D3D11_MAPPED_SUBRESOURCE mappedVertexBuffer = {};
-		HRESULT result = Context->Map(ScenePass.VertexBuffer, 0, nextBuffer ? D3D11_MAP_WRITE_DISCARD : D3D11_MAP_WRITE_NO_OVERWRITE, 0, &mappedVertexBuffer);
-		if (SUCCEEDED(result))
-		{
-			SceneVertices = (SceneVertex*)mappedVertexBuffer.pData;
-		}
+	Context->Unmap(ScenePass.VertexBuffer, 0); SceneVertices = nullptr;
+	Context->Unmap(ScenePass.IndexBuffer, 0); SceneIndexes = nullptr;
 
-		D3D11_MAPPED_SUBRESOURCE mappedIndexBuffer = {};
-		result = Context->Map(ScenePass.IndexBuffer, 0, nextBuffer ? D3D11_MAP_WRITE_DISCARD : D3D11_MAP_WRITE_NO_OVERWRITE, 0, &mappedIndexBuffer);
-		if (SUCCEEDED(result))
-		{
-			SceneIndexes = (uint32_t*)mappedIndexBuffer.pData;
-		}
+	for (const DrawBatchEntry& entry : QueuedBatches)
+		DrawEntry(entry);
+	QueuedBatches.clear();
 
-		if (nextBuffer)
-		{
-			SceneVertexPos = 0;
-			SceneIndexPos = 0;
-		}
+	D3D11_MAPPED_SUBRESOURCE mappedVertexBuffer = {};
+	HRESULT result = Context->Map(ScenePass.VertexBuffer, 0, nextBuffer ? D3D11_MAP_WRITE_DISCARD : D3D11_MAP_WRITE_NO_OVERWRITE, 0, &mappedVertexBuffer);
+	if (SUCCEEDED(result))
+	{
+		SceneVertices = (SceneVertex*)mappedVertexBuffer.pData;
+	}
+
+	D3D11_MAPPED_SUBRESOURCE mappedIndexBuffer = {};
+	result = Context->Map(ScenePass.IndexBuffer, 0, nextBuffer ? D3D11_MAP_WRITE_DISCARD : D3D11_MAP_WRITE_NO_OVERWRITE, 0, &mappedIndexBuffer);
+	if (SUCCEEDED(result))
+	{
+		SceneIndexes = (uint32_t*)mappedIndexBuffer.pData;
+	}
+
+	if (nextBuffer)
+	{
+		SceneVertexPos = 0;
+		SceneIndexPos = 0;
 	}
 
 	Batch.SceneIndexStart = SceneIndexPos;

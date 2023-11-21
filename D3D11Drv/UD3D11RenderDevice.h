@@ -139,7 +139,7 @@ public:
 		ScenePipelineState PointPipeline;
 	} ScenePass;
 
-	static const int SceneVertexBufferSize = 32 * 1024;
+	static const int SceneVertexBufferSize = 16 * 1024;
 	static const int SceneIndexBufferSize = 32 * 1024;
 
 	struct DrawBatchEntry
@@ -206,10 +206,11 @@ private:
 
 	void SetPipeline(DWORD polyflags);
 	void SetDescriptorSet(DWORD polyflags, CachedTexture* tex = nullptr, CachedTexture* lightmap = nullptr, CachedTexture* macrotex = nullptr, CachedTexture* detailtex = nullptr, bool clamp = false);
-	void DrawBatch(bool nextBuffer = false);
-	void DrawEntry(const DrawBatchEntry& entry);
 
-	void NextSceneBuffers() { DrawBatch(true); }
+	void AddDrawBatch();
+	void NextSceneBuffers() { DrawBatches(true); }
+	void DrawBatches(bool nextBuffer = false);
+	void DrawEntry(const DrawBatchEntry& entry);
 
 	int GetSettingsMultisample();
 
@@ -259,7 +260,7 @@ inline void UD3D11RenderDevice::SetPipeline(DWORD PolyFlags)
 	auto pipeline = GetPipeline(PolyFlags);
 	if (pipeline != Batch.Pipeline)
 	{
-		DrawBatch();
+		AddDrawBatch();
 		Batch.Pipeline = pipeline;
 	}
 }
@@ -275,7 +276,7 @@ inline void UD3D11RenderDevice::SetDescriptorSet(DWORD PolyFlags, CachedTexture*
 
 	if (Batch.Tex != tex || Batch.TexSamplerMode != samplermode || Batch.Lightmap != lightmap || Batch.Detailtex != detailtex || Batch.DetailtexSamplerMode != detailsamplermode || Batch.Macrotex != macrotex || Batch.MacrotexSamplerMode != macrosamplermode)
 	{
-		DrawBatch();
+		AddDrawBatch();
 		Batch.Tex = tex;
 		Batch.Lightmap = lightmap;
 		Batch.Detailtex = detailtex;
