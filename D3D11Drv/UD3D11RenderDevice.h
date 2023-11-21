@@ -204,9 +204,9 @@ private:
 
 	void SetPipeline(DWORD polyflags);
 	void SetDescriptorSet(DWORD polyflags, CachedTexture* tex = nullptr, CachedTexture* lightmap = nullptr, CachedTexture* macrotex = nullptr, CachedTexture* detailtex = nullptr, bool clamp = false);
-	void DrawBatch();
+	void DrawBatch(bool nextBuffer = false);
 
-	void NextSceneBuffers();
+	void NextSceneBuffers() { DrawBatch(true); }
 
 	int GetSettingsMultisample();
 

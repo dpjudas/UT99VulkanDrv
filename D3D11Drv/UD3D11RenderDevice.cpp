@@ -1287,44 +1287,6 @@ void UD3D11RenderDevice::Unlock(UBOOL Blit)
 	unguard;
 }
 
-void UD3D11RenderDevice::NextSceneBuffers()
-{
-	if (SceneVertices)
-	{
-		Context->Unmap(ScenePass.VertexBuffer, 0);
-		SceneVertices = nullptr;
-	}
-
-	if (SceneIndexes)
-	{
-		Context->Unmap(ScenePass.IndexBuffer, 0);
-		SceneIndexes = nullptr;
-	}
-
-	SceneVertexPos = 0;
-	SceneIndexPos = 0;
-
-	if (!SceneVertices)
-	{
-		D3D11_MAPPED_SUBRESOURCE mappedVertexBuffer = {};
-		HRESULT result = Context->Map(ScenePass.VertexBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedVertexBuffer);
-		if (SUCCEEDED(result))
-		{
-			SceneVertices = (SceneVertex*)mappedVertexBuffer.pData;
-		}
-	}
-
-	if (!SceneIndexes)
-	{
-		D3D11_MAPPED_SUBRESOURCE mappedIndexBuffer = {};
-		HRESULT result = Context->Map(ScenePass.IndexBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedIndexBuffer);
-		if (SUCCEEDED(result))
-		{
-			SceneIndexes = (uint32_t*)mappedIndexBuffer.pData;
-		}
-	}
-}
-
 void UD3D11RenderDevice::PushHit(const BYTE* Data, INT Count)
 {
 	guard(UD3D11RenderDevice::PushHit);
@@ -2118,7 +2080,7 @@ void UD3D11RenderDevice::ClearTextureCache()
 	Textures->ClearCache();
 }
 
-void UD3D11RenderDevice::DrawBatch()
+void UD3D11RenderDevice::DrawBatch(bool nextBuffer)
 {
 	size_t icount = SceneIndexPos - Batch.SceneIndexStart;
 	if (icount > 0)
@@ -2152,19 +2114,28 @@ void UD3D11RenderDevice::DrawBatch()
 		Context->Unmap(ScenePass.IndexBuffer, 0); SceneIndexes = nullptr;
 
 		Context->DrawIndexed(icount, Batch.SceneIndexStart, 0);
+	}
 
+	if (icount > 0 || nextBuffer)
+	{
 		D3D11_MAPPED_SUBRESOURCE mappedVertexBuffer = {};
-		HRESULT result = Context->Map(ScenePass.VertexBuffer, 0, D3D11_MAP_WRITE_NO_OVERWRITE, 0, &mappedVertexBuffer);
+		HRESULT result = Context->Map(ScenePass.VertexBuffer, 0, nextBuffer ? D3D11_MAP_WRITE_DISCARD : D3D11_MAP_WRITE_NO_OVERWRITE, 0, &mappedVertexBuffer);
 		if (SUCCEEDED(result))
 		{
 			SceneVertices = (SceneVertex*)mappedVertexBuffer.pData;
 		}
 
 		D3D11_MAPPED_SUBRESOURCE mappedIndexBuffer = {};
-		result = Context->Map(ScenePass.IndexBuffer, 0, D3D11_MAP_WRITE_NO_OVERWRITE, 0, &mappedIndexBuffer);
+		result = Context->Map(ScenePass.IndexBuffer, 0, nextBuffer ? D3D11_MAP_WRITE_DISCARD : D3D11_MAP_WRITE_NO_OVERWRITE, 0, &mappedIndexBuffer);
 		if (SUCCEEDED(result))
 		{
 			SceneIndexes = (uint32_t*)mappedIndexBuffer.pData;
+		}
+
+		if (nextBuffer)
+		{
+			SceneVertexPos = 0;
+			SceneIndexPos = 0;
 		}
 
 		Batch.SceneIndexStart = SceneIndexPos;
