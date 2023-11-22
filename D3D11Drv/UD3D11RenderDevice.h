@@ -199,6 +199,17 @@ public:
 	BYTE LightMode;
 	INT RefreshRate;
 
+	struct
+	{
+		int ComplexSurfaces = 0;
+		int GouraudPolygons = 0;
+		int Tiles = 0;
+		int DrawCalls = 0;
+		int Uploads = 0;
+		int RectUploads = 0;
+		int BuffersUsed = 0;
+	} Stats;
+
 private:
 	void ResizeSceneBuffers(int width, int height, int multisample);
 	void ClearTextureCache();
@@ -249,6 +260,7 @@ private:
 
 	bool IsLocked = false;
 	bool ActiveHdr = false;
+	bool ShowStats = false;
 };
 
 inline void ThrowIfFailed(HRESULT result, const char* msg) { if (FAILED(result)) throw std::runtime_error(msg); }

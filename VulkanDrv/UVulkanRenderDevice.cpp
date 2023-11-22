@@ -328,12 +328,6 @@ UBOOL UVulkanRenderDevice::Exec(const TCHAR* Cmd, FOutputDevice& Ar)
 {
 	guard(UVulkanRenderDevice::Exec);
 
-#if !defined(UNREALGOLD)
-	if (URenderDevice::Exec(Cmd, Ar))
-	{
-		return 1;
-	}
-#endif
 	if (ParseCommand(&Cmd, TEXT("vk_contrast")))
 	{
 		float value = _wtof(Cmd);
@@ -475,7 +469,11 @@ UBOOL UVulkanRenderDevice::Exec(const TCHAR* Cmd, FOutputDevice& Ar)
 	}
 	else
 	{
+#if !defined(UNREALGOLD)
+		return Super::Exec(Cmd, Ar);
+#else
 		return 0;
+#endif
 	}
 
 	unguard;

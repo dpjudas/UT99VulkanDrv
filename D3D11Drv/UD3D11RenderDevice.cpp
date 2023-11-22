@@ -189,6 +189,11 @@ UBOOL UD3D11RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 			swapDesc.OutputWindow = (HWND)Viewport->GetWindow();
 			swapDesc.Windowed = TRUE;
 			swapDesc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
+			if (RefreshRate != 0)
+			{
+				swapDesc.BufferDesc.RefreshRate.Numerator = RefreshRate;
+				swapDesc.BufferDesc.RefreshRate.Denominator = 1;
+			}
 
 			// First try create a swap chain for Windows 8 and newer. If that fails, try the old for Windows 7
 			HRESULT result = E_FAIL;
@@ -938,12 +943,6 @@ UBOOL UD3D11RenderDevice::Exec(const TCHAR* Cmd, FOutputDevice& Ar)
 {
 	guard(UD3D11RenderDevice::Exec);
 
-#if !defined(UNREALGOLD)
-	if (URenderDevice::Exec(Cmd, Ar))
-	{
-		return 1;
-	}
-#endif
 	if (ParseCommand(&Cmd, TEXT("DGL")))
 	{
 		if (ParseCommand(&Cmd, TEXT("BUFFERTRIS")))
@@ -988,9 +987,18 @@ UBOOL UD3D11RenderDevice::Exec(const TCHAR* Cmd, FOutputDevice& Ar)
 		Ar.Log(*Str.LeftChop(1));
 		return 1;
 	}
+	else if (ParseCommand(&Cmd, TEXT("VSTAT")))
+	{
+		ShowStats = !ShowStats;
+		return 1;
+	}
 	else
 	{
+#if !defined(UNREALGOLD)
+		return URenderDevice::Exec(Cmd, Ar);
+#else
 		return 0;
+#endif
 	}
 
 	unguard;
@@ -1072,6 +1080,32 @@ void UD3D11RenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane Scr
 void UD3D11RenderDevice::Unlock(UBOOL Blit)
 {
 	guard(UD3D11RenderDevice::Unlock);
+
+	if (Blit)
+	{
+		if (ShowStats)
+		{
+			UCanvas* canvas = Viewport->Canvas;
+			canvas->CurX = 16;
+			canvas->CurY = 94;
+			canvas->WrappedPrintf(canvas->SmallFont, 0, TEXT("D3D11 Statistics"));
+
+			int y = 110;
+
+			canvas->CurX = 16;
+			canvas->CurY = y;
+			canvas->WrappedPrintf(canvas->SmallFont, 0, TEXT("Draw calls: %d, Complex surfaces: %d, Gouraud polygons: %d, Tiles: %d; Uploads: %d, Rect Uploads: %d, Buffers Used: %d\r\n"), Stats.DrawCalls, Stats.ComplexSurfaces, Stats.GouraudPolygons, Stats.Tiles, Stats.Uploads, Stats.RectUploads, Stats.BuffersUsed);
+			y += 8;
+		}
+
+		Stats.DrawCalls = 0;
+		Stats.ComplexSurfaces = 0;
+		Stats.GouraudPolygons = 0;
+		Stats.Tiles = 0;
+		Stats.Uploads = 0;
+		Stats.RectUploads = 0;
+		Stats.BuffersUsed = 1;
+	}
 
 	if (Blit || HitData)
 		DrawBatches();
@@ -1485,6 +1519,8 @@ void UD3D11RenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Sur
 		}
 	}
 
+	Stats.ComplexSurfaces++;
+
 	unguard;
 }
 
@@ -1574,6 +1610,8 @@ void UD3D11RenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& Inf
 
 	SceneVertexPos += vcount;
 	SceneIndexPos += icount;
+
+	Stats.GouraudPolygons++;
 
 	unguard;
 }
@@ -1704,6 +1742,8 @@ void UD3D11RenderDevice::DrawGouraudTriangles(const FSceneNode* Frame, const FTe
 	SceneVertexPos += vcount;
 	SceneIndexPos += icount;
 
+	Stats.GouraudPolygons++;
+
 	unguard;
 }
 
@@ -1781,6 +1821,8 @@ void UD3D11RenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT X
 
 	SceneVertexPos += vcount;
 	SceneIndexPos += icount;
+
+	Stats.Tiles++;
 
 	unguard;
 }
@@ -2128,6 +2170,7 @@ void UD3D11RenderDevice::DrawBatches(bool nextBuffer)
 	{
 		SceneVertexPos = 0;
 		SceneIndexPos = 0;
+		Stats.BuffersUsed++;
 	}
 
 	Batch.SceneIndexStart = SceneIndexPos;
@@ -2163,6 +2206,7 @@ void UD3D11RenderDevice::DrawEntry(const DrawBatchEntry& entry)
 	Context->IASetPrimitiveTopology(entry.Pipeline->PrimitiveTopology);
 
 	Context->DrawIndexed(icount, entry.SceneIndexStart, 0);
+	Stats.DrawCalls++;
 }
 
 std::vector<uint8_t> UD3D11RenderDevice::CompileHlsl(const std::string& filename, const std::string& shadertype, const std::vector<std::string> defines)

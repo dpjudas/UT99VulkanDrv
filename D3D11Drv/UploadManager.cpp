@@ -97,6 +97,8 @@ void UploadManager::UploadTexture(CachedTexture* tex, const FTextureInfo& Info, 
 		UploadData(tex->Texture, Info, masked, uploader, tex->DummyMipmapCount, minSize);
 	else
 		UploadWhite(tex->Texture);
+
+	renderer->Stats.Uploads++;
 }
 
 void UploadManager::UploadTextureRect(CachedTexture* tex, const FTextureInfo& Info, int x, int y, int w, int h)
@@ -120,6 +122,8 @@ void UploadManager::UploadTextureRect(CachedTexture* tex, const FTextureInfo& In
 	box.bottom = y + h;
 	box.back = 1;
 	renderer->Context->UpdateSubresource(tex->Texture, D3D11CalcSubresource(0, 0, Info.NumMips), &box, data, pitch, 0);
+
+	renderer->Stats.RectUploads++;
 }
 
 void UploadManager::UploadData(ID3D11Texture2D* image, const FTextureInfo& Info, bool masked, TextureUploader* uploader, int dummyMipmapCount, INT minSize)
