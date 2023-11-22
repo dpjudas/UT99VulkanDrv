@@ -197,6 +197,7 @@ public:
 	BYTE AntialiasMode;
 	BYTE GammaMode;
 	BYTE LightMode;
+	INT RefreshRate;
 
 private:
 	void ResizeSceneBuffers(int width, int height, int multisample);

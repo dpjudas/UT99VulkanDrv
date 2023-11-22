@@ -57,6 +57,7 @@ void UD3D11RenderDevice::StaticConstructor()
 
 	LODBias = -0.5f;
 	LightMode = 0;
+	RefreshRate = 0;
 
 #if defined(OLDUNREAL469SDK)
 	new(GetClass(), TEXT("UseLightmapAtlas"), RF_Public) UBoolProperty(CPP_PROPERTY(UseLightmapAtlas), TEXT("Display"), CPF_Config);
@@ -75,6 +76,7 @@ void UD3D11RenderDevice::StaticConstructor()
 	new(GetClass(), TEXT("Hdr"), RF_Public) UBoolProperty(CPP_PROPERTY(Hdr), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("OccludeLines"), RF_Public) UBoolProperty(CPP_PROPERTY(OccludeLines), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("LODBias"), RF_Public) UFloatProperty(CPP_PROPERTY(LODBias), TEXT("Display"), CPF_Config);
+	new(GetClass(), TEXT("RefreshRate"), RF_Public) UIntProperty(CPP_PROPERTY(RefreshRate), TEXT("Display"), CPF_Config);
 
 	UEnum* AntialiasModes = new(GetClass(), TEXT("AntialiasModes"))UEnum(nullptr);
 	new(AntialiasModes->Names)FName(TEXT("Off"));
@@ -267,6 +269,11 @@ UBOOL UD3D11RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 		modeDesc.Width = NewX;
 		modeDesc.Height = NewY;
 		modeDesc.Format = ActiveHdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM;
+		if (RefreshRate != 0)
+		{
+			modeDesc.RefreshRate.Numerator = RefreshRate;
+			modeDesc.RefreshRate.Denominator = 1;
+		}
 		result = SwapChain->ResizeTarget(&modeDesc);
 		if (FAILED(result))
 		{
