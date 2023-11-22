@@ -987,11 +987,6 @@ UBOOL UD3D11RenderDevice::Exec(const TCHAR* Cmd, FOutputDevice& Ar)
 		Ar.Log(*Str.LeftChop(1));
 		return 1;
 	}
-	else if (ParseCommand(&Cmd, TEXT("VSTAT")))
-	{
-		ShowStats = !ShowStats;
-		return 1;
-	}
 	else
 	{
 #if !defined(UNREALGOLD)
@@ -1077,35 +1072,26 @@ void UD3D11RenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane Scr
 	unguard;
 }
 
+void UD3D11RenderDevice::DrawStats(FSceneNode* Frame)
+{
+	Super::DrawStats(Frame);
+
+#if defined(OLDUNREAL469SDK)
+	GRender->ShowStat(CurrentFrame, TEXT("D3D11: Draw calls: %d, Complex surfaces: %d, Gouraud polygons: %d, Tiles: %d; Uploads: %d, Rect Uploads: %d, Buffers Used: %d\r\n"), Stats.DrawCalls, Stats.ComplexSurfaces, Stats.GouraudPolygons, Stats.Tiles, Stats.Uploads, Stats.RectUploads, Stats.BuffersUsed);
+#endif
+
+	Stats.DrawCalls = 0;
+	Stats.ComplexSurfaces = 0;
+	Stats.GouraudPolygons = 0;
+	Stats.Tiles = 0;
+	Stats.Uploads = 0;
+	Stats.RectUploads = 0;
+	Stats.BuffersUsed = 1;
+}
+
 void UD3D11RenderDevice::Unlock(UBOOL Blit)
 {
 	guard(UD3D11RenderDevice::Unlock);
-
-	if (Blit)
-	{
-		if (ShowStats)
-		{
-			UCanvas* canvas = Viewport->Canvas;
-			canvas->CurX = 16;
-			canvas->CurY = 94;
-			canvas->WrappedPrintf(canvas->SmallFont, 0, TEXT("D3D11 Statistics"));
-
-			int y = 110;
-
-			canvas->CurX = 16;
-			canvas->CurY = y;
-			canvas->WrappedPrintf(canvas->SmallFont, 0, TEXT("Draw calls: %d, Complex surfaces: %d, Gouraud polygons: %d, Tiles: %d; Uploads: %d, Rect Uploads: %d, Buffers Used: %d\r\n"), Stats.DrawCalls, Stats.ComplexSurfaces, Stats.GouraudPolygons, Stats.Tiles, Stats.Uploads, Stats.RectUploads, Stats.BuffersUsed);
-			y += 8;
-		}
-
-		Stats.DrawCalls = 0;
-		Stats.ComplexSurfaces = 0;
-		Stats.GouraudPolygons = 0;
-		Stats.Tiles = 0;
-		Stats.Uploads = 0;
-		Stats.RectUploads = 0;
-		Stats.BuffersUsed = 1;
-	}
 
 	if (Blit || HitData)
 		DrawBatches();

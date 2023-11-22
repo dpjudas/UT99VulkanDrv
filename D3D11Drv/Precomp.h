@@ -32,3 +32,7 @@
 #if !defined(UNREALGOLD) && !defined(DEUSEX)
 #define OLDUNREAL469SDK
 #endif
+
+#if defined(OLDUNREAL469SDK)
+#include "Render.h"
+#endif

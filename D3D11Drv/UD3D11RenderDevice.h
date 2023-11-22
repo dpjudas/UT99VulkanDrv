@@ -76,6 +76,7 @@ public:
 	void EndFlash() override;
 	void SetSceneNode(FSceneNode* Frame) override;
 	void PrecacheTexture(FTextureInfo& Info, DWORD PolyFlags) override;
+	void DrawStats(FSceneNode* Frame) override;
 
 #if defined(OLDUNREAL469SDK)
 	// URenderDeviceOldUnreal469 extensions
@@ -260,7 +261,6 @@ private:
 
 	bool IsLocked = false;
 	bool ActiveHdr = false;
-	bool ShowStats = false;
 };
 
 inline void ThrowIfFailed(HRESULT result, const char* msg) { if (FAILED(result)) throw std::runtime_error(msg); }

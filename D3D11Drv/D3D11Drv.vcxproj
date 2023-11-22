@@ -132,7 +132,7 @@
       <SDLCheck>false</SDLCheck>
       <PreprocessorDefinitions>WIN32;_DEBUG;D3D11DRV_EXPORTS;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>false</ConformanceMode>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(SolutionDir)Thirdparty\UnrealTournamentSDK\Core\Inc;$(SolutionDir)Thirdparty\UnrealTournamentSDK\Engine\Inc;$(SolutionDir)Thirdparty;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(SolutionDir)Thirdparty\UnrealTournamentSDK\Core\Inc;$(SolutionDir)Thirdparty\UnrealTournamentSDK\Engine\Inc;$(SolutionDir)Thirdparty\UnrealTournamentSDK\Render\Inc;$(SolutionDir)Thirdparty;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <TreatWChar_tAsBuiltInType>false</TreatWChar_tAsBuiltInType>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <StructMemberAlignment>4Bytes</StructMemberAlignment>
@@ -144,7 +144,7 @@
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableUAC>false</EnableUAC>
-      <AdditionalLibraryDirectories>$(SolutionDir)Thirdparty\ut432pubsrc\Core\Lib;$(SolutionDir)Thirdparty\ut432pubsrc\Engine\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(SolutionDir)Thirdparty\UnrealTournamentSDK\Core\Lib;$(SolutionDir)Thirdparty\UnrealTournamentSDK\Engine\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='DeusExDebug|Win32'">
@@ -197,7 +197,7 @@
       <SDLCheck>false</SDLCheck>
       <PreprocessorDefinitions>WIN32;NDEBUG;D3D11DRV_EXPORTS;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>false</ConformanceMode>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(SolutionDir)Thirdparty\UnrealTournamentSDK\Core\Inc;$(SolutionDir)Thirdparty\UnrealTournamentSDK\Engine\Inc;$(SolutionDir)Thirdparty;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(SolutionDir)Thirdparty\UnrealTournamentSDK\Core\Inc;$(SolutionDir)Thirdparty\UnrealTournamentSDK\Engine\Inc;$(SolutionDir)Thirdparty\UnrealTournamentSDK\Render\Inc;$(SolutionDir)Thirdparty;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <TreatWChar_tAsBuiltInType>false</TreatWChar_tAsBuiltInType>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <StructMemberAlignment>4Bytes</StructMemberAlignment>
@@ -211,7 +211,7 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableUAC>false</EnableUAC>
-      <AdditionalLibraryDirectories>$(SolutionDir)Thirdparty\UnrealTournamentSDK\Core\Lib;$(SolutionDir)Thirdparty\UnrealTournamentSDK\Engine\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(SolutionDir)Thirdparty\UnrealTournamentSDK\Core\Lib;$(SolutionDir)Thirdparty\UnrealTournamentSDK\Engine\Lib;$(SolutionDir)Thirdparty\UnrealTournamentSDK\Render\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='DeusExRelease|Win32'">
