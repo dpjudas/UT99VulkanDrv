@@ -340,7 +340,130 @@ std::string FileResource::readAllText(const std::string& filename)
 				return output;
 			}
 		)";
-		}
+	}
+	else if (filename == "shaders/BloomExtract.frag")
+	{
+		return R"(
+			struct Input
+			{
+				float4 fragCoord : SV_Position;
+				float2 texCoord : PixelTexCoord;
+			};
+
+			struct Output
+			{
+				float4 outColor : SV_Target;
+			};
+
+			SamplerState samplerTex
+			{
+				Filter = MIN_MAG_MIP_LINEAR;
+				AddressU = Clamp;
+				AddressV = Clamp;
+			};
+
+			Texture2D tex;
+
+			Output main(Input input)
+			{
+				Output output;
+				output.outColor = float4(max(tex.Sample(samplerTex, input.texCoord).rgb - 1.0, 0.0), 0.0);
+				return output;
+			}
+		)";
+	}
+	else if (filename == "shaders/BloomCombine.frag")
+	{
+		return R"(
+			struct Input
+			{
+				float4 fragCoord : SV_Position;
+				float2 texCoord : PixelTexCoord;
+			};
+
+			struct Output
+			{
+				float4 outColor : SV_Target;
+			};
+
+			SamplerState samplerTex
+			{
+				Filter = MIN_MAG_MIP_LINEAR;
+				AddressU = Clamp;
+				AddressV = Clamp;
+			};
+
+			Texture2D tex;
+
+			Output main(Input input)
+			{
+				Output output;
+				output.outColor = tex.Sample(samplerTex, input.texCoord);
+				return output;
+			}
+		)";
+	}
+	else if (filename == "shaders/Blur.frag")
+	{
+		return R"(
+			struct Input
+			{
+				float4 fragCoord : SV_Position;
+				float2 texCoord : PixelTexCoord;
+			};
+
+			struct Output
+			{
+				float4 outColor : SV_Target;
+			};
+
+			cbuffer BloomPushConstants
+			{
+				float SampleWeights0;
+				float SampleWeights1;
+				float SampleWeights2;
+				float SampleWeights3;
+				float SampleWeights4;
+				float SampleWeights5;
+				float SampleWeights6;
+				float SampleWeights7;
+			}
+
+			SamplerState samplerTex
+			{
+				Filter = MIN_MAG_MIP_LINEAR;
+				AddressU = Clamp;
+				AddressV = Clamp;
+			};
+
+			Texture2D tex;
+
+			Output main(Input input)
+			{
+				Output output;
+			#if defined(BLUR_HORIZONTAL)
+				output.outColor =
+					tex.Sample(samplerTex, input.texCoord, int2( 0, 0)) * SampleWeights0 +
+					tex.Sample(samplerTex, input.texCoord, int2( 1, 0)) * SampleWeights1 +
+					tex.Sample(samplerTex, input.texCoord, int2(-1, 0)) * SampleWeights2 +
+					tex.Sample(samplerTex, input.texCoord, int2( 2, 0)) * SampleWeights3 +
+					tex.Sample(samplerTex, input.texCoord, int2(-2, 0)) * SampleWeights4 +
+					tex.Sample(samplerTex, input.texCoord, int2( 3, 0)) * SampleWeights5 +
+					tex.Sample(samplerTex, input.texCoord, int2(-3, 0)) * SampleWeights6;
+			#else
+				output.outColor =
+					tex.Sample(samplerTex, input.texCoord, int2(0, 0)) * SampleWeights0 +
+					tex.Sample(samplerTex, input.texCoord, int2(0, 1)) * SampleWeights1 +
+					tex.Sample(samplerTex, input.texCoord, int2(0,-1)) * SampleWeights2 +
+					tex.Sample(samplerTex, input.texCoord, int2(0, 2)) * SampleWeights3 +
+					tex.Sample(samplerTex, input.texCoord, int2(0,-2)) * SampleWeights4 +
+					tex.Sample(samplerTex, input.texCoord, int2(0, 3)) * SampleWeights5 +
+					tex.Sample(samplerTex, input.texCoord, int2(0,-3)) * SampleWeights6;
+			#endif
+				return output;
+			}
+		)";
+	}
 
 	return {};
 }

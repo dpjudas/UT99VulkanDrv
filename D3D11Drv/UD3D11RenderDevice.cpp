@@ -54,6 +54,8 @@ void UD3D11RenderDevice::StaticConstructor()
 
 	Hdr = 0;
 	OccludeLines = 0;
+	Bloom = 0;
+	BloomAmount = 128;
 
 	LODBias = -0.5f;
 	LightMode = 0;
@@ -75,6 +77,8 @@ void UD3D11RenderDevice::StaticConstructor()
 	new(GetClass(), TEXT("GrayFormula"), RF_Public) UIntProperty(CPP_PROPERTY(GrayFormula), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("Hdr"), RF_Public) UBoolProperty(CPP_PROPERTY(Hdr), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("OccludeLines"), RF_Public) UBoolProperty(CPP_PROPERTY(OccludeLines), TEXT("Display"), CPF_Config);
+	new(GetClass(), TEXT("Bloom"), RF_Public) UBoolProperty(CPP_PROPERTY(Bloom), TEXT("Display"), CPF_Config);
+	new(GetClass(), TEXT("BloomAmount"), RF_Public) UByteProperty(CPP_PROPERTY(BloomAmount), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("LODBias"), RF_Public) UFloatProperty(CPP_PROPERTY(LODBias), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("RefreshRate"), RF_Public) UIntProperty(CPP_PROPERTY(RefreshRate), TEXT("Display"), CPF_Config);
 
@@ -232,6 +236,7 @@ UBOOL UD3D11RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 
 		CreateScenePass();
 		CreatePresentPass();
+		CreateBloomPass();
 
 		Textures.reset(new TextureManager(this));
 		Uploads.reset(new UploadManager(this));
@@ -372,6 +377,10 @@ void UD3D11RenderDevice::Exit()
 	ReleaseObject(PresentPass.DitherTexture);
 	ReleaseObject(PresentPass.BlendState);
 	ReleaseObject(PresentPass.DepthStencilState);
+	ReleaseObject(BloomPass.Extract);
+	ReleaseObject(BloomPass.Combine);
+	ReleaseObject(BloomPass.BlurVertical);
+	ReleaseObject(BloomPass.BlurHorizontal);
 	ReleaseObject(ScenePass.VertexShader);
 	ReleaseObject(ScenePass.InputLayout);
 	ReleaseObject(ScenePass.VertexBuffer);
@@ -410,6 +419,15 @@ void UD3D11RenderDevice::Exit()
 	ReleaseObject(SceneBuffers.HitBuffer);
 	ReleaseObject(SceneBuffers.DepthBuffer);
 	ReleaseObject(SceneBuffers.PPImage);
+	for (PPBlurLevel& level : SceneBuffers.BlurLevels)
+	{
+		ReleaseObject(level.VTexture);
+		ReleaseObject(level.VTextureRTV);
+		ReleaseObject(level.VTextureSRV);
+		ReleaseObject(level.HTexture);
+		ReleaseObject(level.HTextureRTV);
+		ReleaseObject(level.HTextureSRV);
+	}
 	ReleaseObject(BackBufferView);
 	ReleaseObject(BackBuffer);
 	ReleaseObject(SwapChain);
@@ -439,6 +457,16 @@ void UD3D11RenderDevice::ResizeSceneBuffers(int width, int height, int multisamp
 	ReleaseObject(SceneBuffers.HitBuffer);
 	ReleaseObject(SceneBuffers.DepthBuffer);
 	ReleaseObject(SceneBuffers.PPImage);
+
+	for (PPBlurLevel& level : SceneBuffers.BlurLevels)
+	{
+		ReleaseObject(level.VTexture);
+		ReleaseObject(level.VTextureRTV);
+		ReleaseObject(level.VTextureSRV);
+		ReleaseObject(level.HTexture);
+		ReleaseObject(level.HTextureRTV);
+		ReleaseObject(level.HTextureSRV);
+	}
 
 	SceneBuffers.Width = width;
 	SceneBuffers.Height = height;
@@ -543,14 +571,50 @@ void UD3D11RenderDevice::ResizeSceneBuffers(int width, int height, int multisamp
 
 	result = Device->CreateShaderResourceView(SceneBuffers.PPImage, nullptr, &SceneBuffers.PPImageShaderView);
 	ThrowIfFailed(result, "CreateShaderResourceView(PPImage) failed");
+
+	int bloomWidth = width;
+	int bloomHeight = height;
+	for (PPBlurLevel& level : SceneBuffers.BlurLevels)
+	{
+		bloomWidth = (bloomWidth + 1) / 2;
+		bloomHeight = (bloomHeight + 1) / 2;
+
+		texDesc = {};
+		texDesc.Usage = D3D11_USAGE_DEFAULT;
+		texDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+		texDesc.Width = bloomWidth;
+		texDesc.Height = bloomHeight;
+		texDesc.MipLevels = 1;
+		texDesc.ArraySize = 1;
+		texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+		texDesc.SampleDesc.Count = 1;
+		texDesc.SampleDesc.Quality = 0;
+
+		result = Device->CreateTexture2D(&texDesc, nullptr, &level.VTexture);
+		ThrowIfFailed(result, "CreateTexture2D(SceneBuffers.BlurLevels.VTexture) failed");
+
+		result = Device->CreateTexture2D(&texDesc, nullptr, &level.HTexture);
+		ThrowIfFailed(result, "CreateTexture2D(SceneBuffers.BlurLevels.HTexture) failed");
+
+		result = Device->CreateRenderTargetView(level.VTexture, nullptr, &level.VTextureRTV);
+		ThrowIfFailed(result, "CreateRenderTargetView(SceneBuffers.BlurLevels.VTextureRTV) failed");
+
+		result = Device->CreateRenderTargetView(level.HTexture, nullptr, &level.HTextureRTV);
+		ThrowIfFailed(result, "CreateRenderTargetView(SceneBuffers.BlurLevels.HTextureRTV) failed");
+
+		result = Device->CreateShaderResourceView(level.VTexture, nullptr, &level.VTextureSRV);
+		ThrowIfFailed(result, "CreateRenderTargetView(SceneBuffers.BlurLevels.VTextureSRV) failed");
+
+		result = Device->CreateShaderResourceView(level.HTexture, nullptr, &level.HTextureSRV);
+		ThrowIfFailed(result, "CreateRenderTargetView(SceneBuffers.BlurLevels.HTextureSRV) failed");
+
+		level.Width = bloomWidth;
+		level.Height = bloomHeight;
+	}
 }
 
 void UD3D11RenderDevice::CreateScenePass()
 {
-	std::vector<uint8_t> vscode = CompileHlsl("shaders/Scene.vert", "vs");
-	HRESULT result = Device->CreateVertexShader(vscode.data(), vscode.size(), nullptr, &ScenePass.VertexShader);
-	ThrowIfFailed(result, "CreateVertexShader(ScenePass.VertexShader) failed");
-
 	std::vector<D3D11_INPUT_ELEMENT_DESC> elements =
 	{
 		{ "AttrFlags", 0, DXGI_FORMAT_R32_UINT, 0, offsetof(SceneVertex, Flags), D3D11_INPUT_PER_VERTEX_DATA, 0 },
@@ -562,16 +626,9 @@ void UD3D11RenderDevice::CreateScenePass()
 		{ "AttrColor", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, offsetof(SceneVertex, Color), D3D11_INPUT_PER_VERTEX_DATA, 0 }
 	};
 
-	result = Device->CreateInputLayout(elements.data(), (UINT)elements.size(), vscode.data(), vscode.size(), &ScenePass.InputLayout);
-	ThrowIfFailed(result, "CreateInputLayout(ScenePass.InputLayout) failed");
-
-	std::vector<uint8_t> pscode = CompileHlsl("shaders/Scene.frag", "ps");
-	result = Device->CreatePixelShader(pscode.data(), pscode.size(), nullptr, &ScenePass.PixelShader);
-	ThrowIfFailed(result, "CreatePixelShader(ScenePass.PixelShader) failed");
-
-	std::vector<uint8_t> pscodeAT = CompileHlsl("shaders/Scene.frag", "ps", { "ALPHATEST" });
-	result = Device->CreatePixelShader(pscodeAT.data(), pscodeAT.size(), nullptr, &ScenePass.PixelShaderAlphaTest);
-	ThrowIfFailed(result, "CreatePixelShader(ScenePass.PixelShaderAlphaTest) failed");
+	CreateVertexShader(ScenePass.VertexShader, "ScenePass.VertexShader", ScenePass.InputLayout, "ScenePass.InputLayout", elements, "shaders/Scene.vert");
+	CreatePixelShader(ScenePass.PixelShader, "ScenePass.PixelShader", "shaders/Scene.frag");
+	CreatePixelShader(ScenePass.PixelShaderAlphaTest, "ScenePass.PixelShaderAlphaTest", "shaders/Scene.frag", { "ALPHATEST" });
 
 	for (int i = 0; i < 16; i++)
 	{
@@ -592,7 +649,7 @@ void UD3D11RenderDevice::CreateScenePass()
 		samplerDesc.AddressU = addressmode;
 		samplerDesc.AddressV = addressmode;
 		samplerDesc.AddressW = addressmode;
-		result = Device->CreateSamplerState(&samplerDesc, &ScenePass.Samplers[i]);
+		HRESULT result = Device->CreateSamplerState(&samplerDesc, &ScenePass.Samplers[i]);
 		ThrowIfFailed(result, "CreateSamplerState(ScenePass.Samplers) failed");
 	}
 
@@ -604,7 +661,7 @@ void UD3D11RenderDevice::CreateScenePass()
 		rasterizerDesc.FrontCounterClockwise = FALSE;
 		rasterizerDesc.DepthClipEnable = FALSE; // Avoid clipping the weapon. The UE1 engine clips the geometry anyway.
 		rasterizerDesc.MultisampleEnable = i == 1 ? TRUE : FALSE;
-		result = Device->CreateRasterizerState(&rasterizerDesc, &ScenePass.RasterizerState[i]);
+		HRESULT result = Device->CreateRasterizerState(&rasterizerDesc, &ScenePass.RasterizerState[i]);
 		ThrowIfFailed(result, "CreateRasterizerState(ScenePass.Pipelines.RasterizerState) failed");
 	}
 
@@ -654,7 +711,7 @@ void UD3D11RenderDevice::CreateScenePass()
 			blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 		blendDesc.RenderTarget[1].BlendEnable = FALSE;
 		blendDesc.RenderTarget[1].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
-		result = Device->CreateBlendState(&blendDesc, &ScenePass.Pipelines[i].BlendState);
+		HRESULT result = Device->CreateBlendState(&blendDesc, &ScenePass.Pipelines[i].BlendState);
 		ThrowIfFailed(result, "CreateBlendState(ScenePass.Pipelines.BlendState) failed");
 
 		D3D11_DEPTH_STENCIL_DESC depthStencilDesc = {};
@@ -690,7 +747,7 @@ void UD3D11RenderDevice::CreateScenePass()
 		blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 		blendDesc.RenderTarget[1].BlendEnable = FALSE;
 		blendDesc.RenderTarget[1].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
-		result = Device->CreateBlendState(&blendDesc, &ScenePass.LinePipeline[i].BlendState);
+		HRESULT result = Device->CreateBlendState(&blendDesc, &ScenePass.LinePipeline[i].BlendState);
 		ThrowIfFailed(result, "CreateBlendState(ScenePass.LinePipeline.BlendState) failed");
 
 		D3D11_DEPTH_STENCIL_DESC depthStencilDesc = {};
@@ -718,7 +775,7 @@ void UD3D11RenderDevice::CreateScenePass()
 		blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 		blendDesc.RenderTarget[1].BlendEnable = FALSE;
 		blendDesc.RenderTarget[1].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
-		result = Device->CreateBlendState(&blendDesc, &ScenePass.PointPipeline.BlendState);
+		HRESULT result = Device->CreateBlendState(&blendDesc, &ScenePass.PointPipeline.BlendState);
 		ThrowIfFailed(result, "CreateBlendState(ScenePass.LinePipeline.BlendState) failed");
 
 		D3D11_DEPTH_STENCIL_DESC depthStencilDesc = {};
@@ -737,7 +794,7 @@ void UD3D11RenderDevice::CreateScenePass()
 	bufDesc.ByteWidth = SceneVertexBufferSize * sizeof(SceneVertex);
 	bufDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
 	bufDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-	result = Device->CreateBuffer(&bufDesc, nullptr, &ScenePass.VertexBuffer);
+	HRESULT result = Device->CreateBuffer(&bufDesc, nullptr, &ScenePass.VertexBuffer);
 	ThrowIfFailed(result, "CreateBuffer(ScenePass.VertexBuffer) failed");
 
 	bufDesc = {};
@@ -798,6 +855,159 @@ UD3D11RenderDevice::ScenePipelineState* UD3D11RenderDevice::GetPipeline(DWORD Po
 	return &ScenePass.Pipelines[index];
 }
 
+void UD3D11RenderDevice::RunBloomPass()
+{
+	float blurAmount = 0.6f + BloomAmount * (1.9f / 255.0f);
+	BloomPushConstants pushconstants;
+	ComputeBlurSamples(7, blurAmount, pushconstants.SampleWeights);
+
+	UINT stride = sizeof(vec2);
+	UINT offset = 0;
+	Context->IASetVertexBuffers(0, 1, &PresentPass.PPStepVertexBuffer, &stride, &offset);
+	Context->IASetInputLayout(PresentPass.PPStepLayout);
+	Context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	Context->VSSetShader(PresentPass.PPStep, nullptr, 0);
+	Context->RSSetState(PresentPass.RasterizerState);
+	Context->PSSetConstantBuffers(0, 1, &BloomPass.ConstantBuffer);
+	Context->OMSetDepthStencilState(PresentPass.DepthStencilState, 0);
+	Context->OMSetBlendState(PresentPass.BlendState, nullptr, 0xffffffff);
+	Context->UpdateSubresource(BloomPass.ConstantBuffer, 0, nullptr, &pushconstants, 0, 0);
+
+	D3D11_VIEWPORT viewport = {};
+	viewport.MaxDepth = 1.0f;
+
+	// Extract overbright pixels that we want to bloom:
+	viewport.Width = SceneBuffers.BlurLevels[0].Width;
+	viewport.Height = SceneBuffers.BlurLevels[0].Height;
+	Context->OMSetRenderTargets(1, &SceneBuffers.BlurLevels[0].VTextureRTV, nullptr);
+	Context->RSSetViewports(1, &viewport);
+	Context->PSSetShader(BloomPass.Extract, nullptr, 0);
+	Context->PSSetShaderResources(0, 1, &SceneBuffers.PPImageShaderView);
+	Context->Draw(6, 0);
+
+	// Blur and downscale:
+	for (int i = 0; i < SceneBuffers.NumBloomLevels - 1; i++)
+	{
+		auto& blevel = SceneBuffers.BlurLevels[i];
+		auto& next = SceneBuffers.BlurLevels[i + 1];
+
+		viewport.Width = blevel.Width;
+		viewport.Height = blevel.Height;
+		Context->RSSetViewports(1, &viewport);
+		BlurStep(blevel.VTextureSRV, blevel.HTextureRTV, false);
+		BlurStep(blevel.HTextureSRV, blevel.VTextureRTV, true);
+
+		// Linear downscale:
+		viewport.Width = next.Width;
+		viewport.Height = next.Height;
+		Context->OMSetRenderTargets(1, &next.VTextureRTV, nullptr);
+		Context->RSSetViewports(1, &viewport);
+		Context->PSSetShader(BloomPass.Combine, nullptr, 0);
+		Context->PSSetShaderResources(0, 1, &blevel.VTextureSRV);
+		Context->Draw(6, 0);
+	}
+
+	// Blur and upscale:
+	for (int i = SceneBuffers.NumBloomLevels - 1; i > 0; i--)
+	{
+		auto& blevel = SceneBuffers.BlurLevels[i];
+		auto& next = SceneBuffers.BlurLevels[i - 1];
+
+		viewport.Width = blevel.Width;
+		viewport.Height = blevel.Height;
+		Context->RSSetViewports(1, &viewport);
+		BlurStep(blevel.VTextureSRV, blevel.HTextureRTV, false);
+		BlurStep(blevel.HTextureSRV, blevel.VTextureRTV, true);
+
+		// Linear upscale:
+		viewport.Width = next.Width;
+		viewport.Height = next.Height;
+		Context->OMSetRenderTargets(1, &next.VTextureRTV, nullptr);
+		Context->RSSetViewports(1, &viewport);
+		Context->PSSetShader(BloomPass.Combine, nullptr, 0);
+		Context->PSSetShaderResources(0, 1, &blevel.VTextureSRV);
+		Context->Draw(6, 0);
+	}
+
+	viewport.Width = SceneBuffers.BlurLevels[0].Width;
+	viewport.Height = SceneBuffers.BlurLevels[0].Height;
+	Context->RSSetViewports(1, &viewport);
+	BlurStep(SceneBuffers.BlurLevels[0].VTextureSRV, SceneBuffers.BlurLevels[0].HTextureRTV, false);
+	BlurStep(SceneBuffers.BlurLevels[0].HTextureSRV, SceneBuffers.BlurLevels[0].VTextureRTV, true);
+
+	// Add bloom back to scene post process texture:
+	viewport.Width = SceneBuffers.Width;
+	viewport.Height = SceneBuffers.Height;
+	Context->OMSetRenderTargets(1, &SceneBuffers.PPImageView, nullptr);
+	Context->OMSetBlendState(BloomPass.AdditiveBlendState, nullptr, 0xffffffff);
+	Context->RSSetViewports(1, &viewport);
+	Context->PSSetShader(BloomPass.Combine, nullptr, 0);
+	Context->PSSetShaderResources(0, 1, &SceneBuffers.BlurLevels[0].VTextureSRV);
+	Context->Draw(6, 0);
+}
+
+void UD3D11RenderDevice::BlurStep(ID3D11ShaderResourceView* input, ID3D11RenderTargetView* output, bool vertical)
+{
+	Context->OMSetRenderTargets(1, &output, nullptr);
+	Context->PSSetShader(vertical ? BloomPass.BlurVertical : BloomPass.BlurHorizontal, nullptr, 0);
+	Context->PSSetShaderResources(0, 1, &input);
+	Context->Draw(6, 0);
+}
+
+float UD3D11RenderDevice::ComputeBlurGaussian(float n, float theta) // theta = Blur Amount
+{
+	return (float)((1.0f / std::sqrtf(2 * 3.14159265359f * theta)) * std::expf(-(n * n) / (2.0f * theta * theta)));
+}
+
+void UD3D11RenderDevice::ComputeBlurSamples(int sampleCount, float blurAmount, float* sampleWeights)
+{
+	sampleWeights[0] = ComputeBlurGaussian(0, blurAmount);
+
+	float totalWeights = sampleWeights[0];
+
+	for (int i = 0; i < sampleCount / 2; i++)
+	{
+		float weight = ComputeBlurGaussian(i + 1.0f, blurAmount);
+
+		sampleWeights[i * 2 + 1] = weight;
+		sampleWeights[i * 2 + 2] = weight;
+
+		totalWeights += weight * 2;
+	}
+
+	for (int i = 0; i < sampleCount; i++)
+	{
+		sampleWeights[i] /= totalWeights;
+	}
+}
+
+void UD3D11RenderDevice::CreateBloomPass()
+{
+	CreatePixelShader(BloomPass.Extract, "BloomPass.Extract", "shaders/BloomExtract.frag");
+	CreatePixelShader(BloomPass.Combine, "BloomPass.Combine", "shaders/BloomCombine.frag");
+	CreatePixelShader(BloomPass.BlurVertical, "BloomPass.BlurVertical", "shaders/Blur.frag", { "BLUR_VERTICAL" });
+	CreatePixelShader(BloomPass.BlurHorizontal, "BloomPass.BlurHorizontal", "shaders/Blur.frag", { "BLUR_HORIZONTAL" });
+
+	D3D11_BUFFER_DESC bufDesc = {};
+	bufDesc.Usage = D3D11_USAGE_DEFAULT;
+	bufDesc.ByteWidth = sizeof(BloomPushConstants);
+	bufDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+	HRESULT result = Device->CreateBuffer(&bufDesc, nullptr, &BloomPass.ConstantBuffer);
+	ThrowIfFailed(result, "CreateBuffer(BloomPass.ConstantBuffer) failed");
+
+	D3D11_BLEND_DESC blendDesc = {};
+	blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+	blendDesc.RenderTarget[0].BlendEnable = TRUE;
+	blendDesc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
+	blendDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+	blendDesc.RenderTarget[0].SrcBlend = D3D11_BLEND_ONE;
+	blendDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
+	blendDesc.RenderTarget[0].DestBlend = D3D11_BLEND_ONE;
+	blendDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ONE;
+	result = Device->CreateBlendState(&blendDesc, &BloomPass.AdditiveBlendState);
+	ThrowIfFailed(result, "CreateBlendState(BloomPass.AdditiveBlendState) failed");
+}
+
 void UD3D11RenderDevice::CreatePresentPass()
 {
 	std::vector<vec2> positions =
@@ -828,9 +1038,12 @@ void UD3D11RenderDevice::CreatePresentPass()
 	result = Device->CreateBuffer(&bufDesc, nullptr, &PresentPass.PresentConstantBuffer);
 	ThrowIfFailed(result, "CreateBuffer(PresentPass.PresentConstantBuffer) failed");
 
-	std::vector<uint8_t> ppstep = CompileHlsl("shaders/PPStep.vert", "vs");
-	result = Device->CreateVertexShader(ppstep.data(), ppstep.size(), nullptr, &PresentPass.PPStep);
-	ThrowIfFailed(result, "CreateVertexShader(PresentPass.PPStep) failed");
+	std::vector<D3D11_INPUT_ELEMENT_DESC> elements =
+	{
+		{ "AttrPos", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 }
+	};
+
+	CreateVertexShader(PresentPass.PPStep, "PresentPass.PPStep", PresentPass.PPStepLayout, "PresentPass.PPStepLayout", elements, "shaders/PPStep.vert");
 
 	static const char* transferFunctions[2] = { nullptr, "HDR_MODE" };
 	static const char* gammaModes[2] = { "GAMMA_MODE_D3D9", "GAMMA_MODE_XOPENGL" };
@@ -842,22 +1055,10 @@ void UD3D11RenderDevice::CreatePresentPass()
 		if (gammaModes[(i >> 1) & 1]) defines.push_back(gammaModes[(i >> 1) & 1]);
 		if (colorModes[(i >> 2) & 3]) defines.push_back(colorModes[(i >> 2) & 3]);
 
-		std::vector<uint8_t> present = CompileHlsl("shaders/Present.frag", "ps", defines);
-		result = Device->CreatePixelShader(present.data(), present.size(), nullptr, &PresentPass.Present[i]);
-		ThrowIfFailed(result, "CreatePixelShader(PresentPass.Present) failed");
+		CreatePixelShader(PresentPass.Present[i], "PresentPass.Present", "shaders/Present.frag", defines);
 	}
 
-	std::vector<uint8_t> hitresolve = CompileHlsl("shaders/HitResolve.frag", "ps");
-	result = Device->CreatePixelShader(hitresolve.data(), hitresolve.size(), nullptr, &PresentPass.HitResolve);
-	ThrowIfFailed(result, "CreatePixelShader(PresentPass.HitResolve) failed");
-
-	std::vector<D3D11_INPUT_ELEMENT_DESC> elements =
-	{
-		{ "AttrPos", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 }
-	};
-
-	result = Device->CreateInputLayout(elements.data(), (UINT)elements.size(), ppstep.data(), ppstep.size(), &PresentPass.PPStepLayout);
-	ThrowIfFailed(result, "CreateInputLayout(PresentPass.PPStepLayout) failed");
+	CreatePixelShader(PresentPass.HitResolve, "PresentPass.HitResolve", "shaders/HitResolve.frag");
 
 	static const float ditherdata[64] =
 	{
@@ -1105,6 +1306,11 @@ void UD3D11RenderDevice::Unlock(UBOOL Blit)
 		else
 		{
 			Context->CopyResource(SceneBuffers.PPImage, SceneBuffers.ColorBuffer);
+		}
+
+		if (Bloom)
+		{
+			RunBloomPass();
 		}
 
 		Context->OMSetRenderTargets(1, &BackBufferView, nullptr);
@@ -2195,6 +2401,23 @@ void UD3D11RenderDevice::DrawEntry(const DrawBatchEntry& entry)
 	Stats.DrawCalls++;
 }
 
+void UD3D11RenderDevice::CreateVertexShader(ID3D11VertexShader*& outShader, const std::string& shaderName, ID3D11InputLayout*& outInputLayout, const std::string& inputLayoutName, const std::vector<D3D11_INPUT_ELEMENT_DESC>& elements, const std::string& filename, const std::vector<std::string> defines)
+{
+	std::vector<uint8_t> bytecode = CompileHlsl(filename, "vs", defines);
+	HRESULT result = Device->CreateVertexShader(bytecode.data(), bytecode.size(), nullptr, &outShader);
+	ThrowIfFailed(result, ("CreateVertexShader(" + shaderName + ") failed").c_str());
+
+	result = Device->CreateInputLayout(elements.data(), (UINT)elements.size(), bytecode.data(), bytecode.size(), &outInputLayout);
+	ThrowIfFailed(result, ("CreateInputLayout(" + inputLayoutName + ") failed").c_str());
+}
+
+void UD3D11RenderDevice::CreatePixelShader(ID3D11PixelShader*& outShader, const std::string& shaderName, const std::string& filename, const std::vector<std::string> defines)
+{
+	std::vector<uint8_t> bytecode = CompileHlsl(filename, "ps", defines);
+	HRESULT result = Device->CreatePixelShader(bytecode.data(), bytecode.size(), nullptr, &outShader);
+	ThrowIfFailed(result, ("CreatePixelShader(" + shaderName + ") failed").c_str());
+}
+
 std::vector<uint8_t> UD3D11RenderDevice::CompileHlsl(const std::string& filename, const std::string& shadertype, const std::vector<std::string> defines)
 {
 	std::string code = FileResource::readAllText(filename);
@@ -2227,7 +2450,7 @@ std::vector<uint8_t> UD3D11RenderDevice::CompileHlsl(const std::string& filename
 		std::string msg((const char*)errors->GetBufferPointer(), errors->GetBufferSize());
 		if (!msg.empty() && msg.back() == 0) msg.pop_back();
 		ReleaseObject(errors);
-		throw std::runtime_error(msg);
+		throw std::runtime_error("Could not compile shader '" + filename + "':" + msg);
 	}
 	ReleaseObject(errors);
 	ThrowIfFailed(result, "D3DCompile failed");

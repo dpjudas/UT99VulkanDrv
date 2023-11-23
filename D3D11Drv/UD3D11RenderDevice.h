@@ -35,6 +35,11 @@ struct PresentPushConstants
 	vec4 GammaCorrection;
 };
 
+struct BloomPushConstants
+{
+	float SampleWeights[8];
+};
+
 #if defined(OLDUNREAL469SDK)
 class UD3D11RenderDevice : public URenderDeviceOldUnreal469
 {
@@ -96,6 +101,18 @@ public:
 	ID3D11Texture2D* BackBuffer = nullptr;
 	ID3D11RenderTargetView* BackBufferView = nullptr;
 
+	struct PPBlurLevel
+	{
+		ID3D11Texture2D* VTexture = nullptr;
+		ID3D11RenderTargetView* VTextureRTV = nullptr;
+		ID3D11ShaderResourceView* VTextureSRV = nullptr;
+		ID3D11Texture2D* HTexture = nullptr;
+		ID3D11RenderTargetView* HTextureRTV = nullptr;
+		ID3D11ShaderResourceView* HTextureSRV = nullptr;
+		int Width = 0;
+		int Height = 0;
+	};
+
 	struct
 	{
 		ID3D11Texture2D* ColorBuffer = nullptr;
@@ -111,6 +128,8 @@ public:
 		ID3D11RenderTargetView* PPImageView = nullptr;
 		ID3D11ShaderResourceView* HitBufferShaderView = nullptr;
 		ID3D11ShaderResourceView* PPImageShaderView = nullptr;
+		enum { NumBloomLevels = 4 };
+		PPBlurLevel BlurLevels[NumBloomLevels];
 		int Width = 0;
 		int Height = 0;
 		int Multisample = 0;
@@ -179,6 +198,16 @@ public:
 		ID3D11RasterizerState* RasterizerState = nullptr;
 	} PresentPass;
 
+	struct
+	{
+		ID3D11PixelShader* Extract = nullptr;
+		ID3D11PixelShader* Combine = nullptr;
+		ID3D11PixelShader* BlurVertical = nullptr;
+		ID3D11PixelShader* BlurHorizontal = nullptr;
+		ID3D11Buffer* ConstantBuffer = nullptr;
+		ID3D11BlendState* AdditiveBlendState = nullptr;
+	} BloomPass;
+
 	std::unique_ptr<TextureManager> Textures;
 	std::unique_ptr<UploadManager> Uploads;
 
@@ -194,6 +223,8 @@ public:
 	INT GrayFormula;
 	BITFIELD Hdr;
 	BITFIELD OccludeLines;
+	BITFIELD Bloom;
+	BYTE BloomAmount;
 	FLOAT LODBias;
 	BYTE AntialiasMode;
 	BYTE GammaMode;
@@ -215,7 +246,13 @@ private:
 	void ResizeSceneBuffers(int width, int height, int multisample);
 	void ClearTextureCache();
 	void CreatePresentPass();
+	void CreateBloomPass();
 	void CreateScenePass();
+
+	void RunBloomPass();
+	void BlurStep(ID3D11ShaderResourceView* input, ID3D11RenderTargetView* output, bool vertical);
+	float ComputeBlurGaussian(float n, float theta);
+	void ComputeBlurSamples(int sampleCount, float blurAmount, float* sampleWeights);
 
 	void SetPipeline(DWORD polyflags);
 	void SetDescriptorSet(DWORD polyflags, CachedTexture* tex = nullptr, CachedTexture* lightmap = nullptr, CachedTexture* macrotex = nullptr, CachedTexture* detailtex = nullptr, bool clamp = false);
@@ -229,6 +266,8 @@ private:
 
 	ScenePipelineState* GetPipeline(DWORD PolyFlags);
 
+	void CreateVertexShader(ID3D11VertexShader*& outShader, const std::string& shaderName, ID3D11InputLayout*& outInputLayout, const std::string& inputLayoutName, const std::vector<D3D11_INPUT_ELEMENT_DESC>& elements, const std::string& filename, const std::vector<std::string> defines = {});
+	void CreatePixelShader(ID3D11PixelShader*& outShader, const std::string& shaderName, const std::string& filename, const std::vector<std::string> defines = {});
 	std::vector<uint8_t> CompileHlsl(const std::string& filename, const std::string& shadertype, const std::vector<std::string> defines = {});
 
 	template<typename T>

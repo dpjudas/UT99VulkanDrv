@@ -11,6 +11,9 @@ Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=Coronas,Title="Coronas",D
 Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=ShinySurfaces,Title="Shiny Surfaces",Description="ShinySurfaces")
 Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=VolumetricLighting,Title="Volumetric Lighting",Description="VolumetricLighting")
 
+Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=Bloom,Title="Bloom",Description="Bloom overbright pixels")
+Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=BloomAmount,Title="Bloom Amount",Description="Bloom amount")
+
 Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=LinearBrightness,Title="Linear Brightness",Description="Adjust brightness for all pixels")
 Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=Contrast,Title="Contrast",Description="Adjust pixel contrast")
 Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=Saturation,Title="Saturation",Description="Adjust how saturated the colors are")
