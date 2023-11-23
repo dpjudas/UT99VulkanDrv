@@ -100,6 +100,8 @@ Add the following section to the file:
 - LinearBrightness: True brightness control (UT's brightness control is actually gamma control). 128 is the default.
 - OccludeLines: If true, lines are occluded by geometry in the Unreal editor.
 - LODBias: Adjusts the level-of-detail bias for textures. A number greater than zero will bias it towards using lower detail mipmaps. A negative number will bias it towards using higher level mipmaps
+- Bloom: Adds bloom to overbright pixels
+- BloomAmount: Controls how strong the bloom blur should be. 128 is the default.
 
 ## License
 
