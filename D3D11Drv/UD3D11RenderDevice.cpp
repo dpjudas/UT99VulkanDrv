@@ -1912,7 +1912,7 @@ void UD3D11RenderDevice::DrawGouraudTriangles(const FSceneNode* Frame, const FTe
 		for (uint32_t i = 2; i < vcount; i += 3)
 		{
 			// If outcoded, skip it.
-			if (Pts[icount].Flags & Pts[icount + 1].Flags & Pts[icount + 2].Flags)
+			if (Pts[i - 2].Flags & Pts[i - 1].Flags & Pts[i].Flags)
 				continue;
 
 			*(iptr++) = vstart + i;
@@ -1927,10 +1927,10 @@ void UD3D11RenderDevice::DrawGouraudTriangles(const FSceneNode* Frame, const FTe
 		for (uint32_t i = 2; i < vcount; i += 3)
 		{
 			// If outcoded, skip it.
-			if (Pts[icount].Flags & Pts[icount + 1].Flags & Pts[icount + 2].Flags)
+			if (Pts[i - 2].Flags & Pts[i - 1].Flags & Pts[i].Flags)
 				continue;
 
-			bool backface = FTriple(Pts[icount].Point, Pts[icount + 1].Point, Pts[icount + 2].Point) <= 0.0;
+			bool backface = FTriple(Pts[i - 2].Point, Pts[i - 1].Point, Pts[i].Point) <= 0.0;
 			if (mirror == backface)
 			{
 				*(iptr++) = vstart + i - 2;
