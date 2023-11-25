@@ -55,10 +55,11 @@ public:
 	void EndFlash() override;
 	void SetSceneNode(FSceneNode* Frame) override;
 	void PrecacheTexture(FTextureInfo& Info, DWORD PolyFlags) override;
+	void DrawStats(FSceneNode* Frame) override;
 
 #if defined(OLDUNREAL469SDK)
 	// URenderDeviceOldUnreal469 extensions
-	// void DrawGouraudTriangles(const FSceneNode* Frame, const FTextureInfo& Info, FTransTexture* const Pts, INT NumPts, DWORD PolyFlags, DWORD DataFlags, FSpanBuffer* Span) override;
+	void DrawGouraudTriangles(const FSceneNode* Frame, const FTextureInfo& Info, FTransTexture* const Pts, INT NumPts, DWORD PolyFlags, DWORD DataFlags, FSpanBuffer* Span) override;
 	UBOOL SupportsTextureFormat(ETextureFormat Format) override;
 	void UpdateTextureRect(FTextureInfo& Info, INT U, INT V, INT UL, INT VL) override;
 #endif
@@ -85,18 +86,26 @@ public:
 
 	// Configuration.
 	BITFIELD UseVSync;
+	FLOAT GammaOffset;
+	FLOAT GammaOffsetRed;
+	FLOAT GammaOffsetGreen;
+	FLOAT GammaOffsetBlue;
+	BYTE LinearBrightness;
+	BYTE Contrast;
+	BYTE Saturation;
+	INT GrayFormula;
+	BITFIELD Hdr;
+	BITFIELD OccludeLines;
+	//BITFIELD Bloom;
+	//BYTE BloomAmount;
+	FLOAT LODBias;
+	BYTE AntialiasMode;
+	BYTE GammaMode;
+	BYTE LightMode;
+
 	INT VkDeviceIndex;
 	BITFIELD VkDebug;
-	INT Multisample;
-	FLOAT VkBrightness;
-	FLOAT VkContrast;
-	FLOAT VkSaturation;
-	INT VkGrayFormula;
-	BITFIELD VkHdr;
 	BITFIELD VkExclusiveFullscreen;
-	FLOAT LODBias;
-	BITFIELD OneXBlending;
-	BITFIELD ActorXBlending;
 
 	void DrawPresentTexture(int x, int y, int width, int height);
 
@@ -110,6 +119,16 @@ public:
 		int RectUploads = 0;
 	} Stats;
 
+	int GetSettingsMultisample()
+	{
+		switch (AntialiasMode)
+		{
+		default:
+		case 0: return 0;
+		case 1: return 2;
+		case 2: return 4;
+		}
+	}
 
 private:
 	void ClearTextureCache();
@@ -124,12 +143,7 @@ private:
 	float RFX2;
 	float RFY2;
 
-	BYTE* HitData = nullptr;
-	INT* HitSize = nullptr;
-
 	bool IsLocked = false;
-	bool StatResources = false;
-	bool StatDraw = false;
 
 	void SetPipeline(VulkanPipeline* pipeline);
 	void SetDescriptorSet(VulkanDescriptorSet* descriptorSet, bool bindless);
@@ -148,6 +162,21 @@ private:
 
 	size_t SceneVertexPos = 0;
 	size_t SceneIndexPos = 0;
+
+	struct HitQuery
+	{
+		INT Start = 0;
+		INT Count = 0;
+	};
+
+	BYTE* HitData = nullptr;
+	INT* HitSize = nullptr;
+	std::vector<BYTE> HitQueryStack;
+	std::vector<HitQuery> HitQueries;
+	std::vector<BYTE> HitBuffer;
+
+	int ForceHitIndex = -1;
+	HitQuery ForceHit;
 };
 
 inline void UVulkanRenderDevice::SetPipeline(VulkanPipeline* pipeline)

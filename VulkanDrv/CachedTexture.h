@@ -8,4 +8,6 @@ public:
 
 	int BindlessIndex[4] = { -1, -1, -1, -1 };
 	int RealtimeChangeCount = 0;
+
+	std::vector<VkBufferImageCopy> pendingUploads[2];
 };

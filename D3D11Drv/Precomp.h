@@ -1,7 +1,5 @@
 #pragma once
 
-#include <vector>
-
 #define _CRT_SECURE_NO_WARNINGS
 #define WIN32_LEAN_AND_MEAN
 
@@ -17,6 +15,8 @@
 #include <vector>
 #include <algorithm>
 #include <memory>
+#include <map>
+#include <unordered_map>
 #pragma pack(pop)
 
 #define UTGLR_NO_APP_MALLOC

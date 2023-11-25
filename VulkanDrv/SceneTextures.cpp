@@ -3,7 +3,7 @@
 #include "SceneTextures.h"
 #include "UVulkanRenderDevice.h"
 
-SceneTextures::SceneTextures(UVulkanRenderDevice* renderer, int width, int height, int multisample) : width(width), height(height)
+SceneTextures::SceneTextures(UVulkanRenderDevice* renderer, int width, int height, int multisample) : width(width), height(height), multisample(multisample)
 {
 	SceneSamples = GetBestSampleCount(renderer->Device.get(), multisample);
 
@@ -18,6 +18,19 @@ SceneTextures::SceneTextures(UVulkanRenderDevice* renderer, int width, int heigh
 	ColorBufferView = ImageViewBuilder()
 		.Image(ColorBuffer.get(), VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_ASPECT_COLOR_BIT)
 		.DebugName("colorBufferView")
+		.Create(renderer->Device.get());
+
+	HitBuffer = ImageBuilder()
+		.Size(width, height)
+		.Samples(SceneSamples)
+		.Format(VK_FORMAT_R32_UINT)
+		.Usage(VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT)
+		.DebugName("hitBuffer")
+		.Create(renderer->Device.get());
+
+	HitBufferView = ImageViewBuilder()
+		.Image(HitBuffer.get(), VK_FORMAT_R32_UINT, VK_IMAGE_ASPECT_COLOR_BIT)
+		.DebugName("hitBufferView")
 		.Create(renderer->Device.get());
 
 	DepthBuffer = ImageBuilder()
@@ -46,9 +59,30 @@ SceneTextures::SceneTextures(UVulkanRenderDevice* renderer, int width, int heigh
 		.DebugName("ppImageView")
 		.Create(renderer->Device.get());
 
+	PPHitBuffer = ImageBuilder()
+		.Size(width, height)
+		.Samples(VK_SAMPLE_COUNT_1_BIT)
+		.Format(VK_FORMAT_R32_UINT)
+		.Usage(VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
+		.DebugName("ppHitBuffer")
+		.Create(renderer->Device.get());
+
+	StagingHitBuffer = BufferBuilder()
+		.Usage(VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_TO_CPU)
+		.Size(width * height * sizeof(uint32_t))
+		.DebugName("stagingHitBuffer")
+		.Create(renderer->Device.get());
+
 	PipelineBarrier()
 		.AddImage(
 			ColorBuffer.get(),
+			VK_IMAGE_LAYOUT_UNDEFINED,
+			VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+			0,
+			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+			VK_IMAGE_ASPECT_COLOR_BIT)
+		.AddImage(
+			HitBuffer.get(),
 			VK_IMAGE_LAYOUT_UNDEFINED,
 			VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 			0,

@@ -22,10 +22,13 @@ void UVulkanRenderDevice::StaticConstructor()
 	SupportsLazyTextures = 0;
 	PrefersDeferredLoad = 0;
 	UseVSync = 1;
-	VkDeviceIndex = 0;
-	VkDebug = 0;
-	Multisample = 0;
-	UsePrecache = 0;
+	AntialiasMode = 0;
+	UsePrecache = 1;
+	Coronas = 1;
+	ShinySurfaces = 1;
+	DetailTextures = 1;
+	HighDetailActors = 1;
+	VolumetricLighting = 1;
 
 #if defined(OLDUNREAL469SDK)
 	UseLightmapAtlas = 0; // Note: do not turn this on. It does not work and generates broken fogmaps.
@@ -34,17 +37,28 @@ void UVulkanRenderDevice::StaticConstructor()
 	NeedsMaskedFonts = 0;
 #endif
 
-	VkBrightness = 0.0f;
-	VkContrast = 1.0f;
-	VkSaturation = 1.0f;
-	VkGrayFormula = 1;
+	GammaMode = 0;
+	GammaOffset = 0.0f;
+	GammaOffsetRed = 0.0f;
+	GammaOffsetGreen = 0.0f;
+	GammaOffsetBlue = 0.0f;
 
-	VkHdr = 1;
+	LinearBrightness = 128; // 0.0f;
+	Contrast = 128; // 1.0f;
+	Saturation = 255; // 1.0f;
+	GrayFormula = 1;
+
+	Hdr = 0;
+	OccludeLines = 0;
+	//Bloom = 0;
+	//BloomAmount = 128;
+
+	LODBias = -0.5f;
+	LightMode = 0;
+
+	VkDeviceIndex = 0;
+	VkDebug = 0;
 	VkExclusiveFullscreen = 0;
-
-	LODBias = 0.0f;
-	OneXBlending = 0;
-	ActorXBlending = 0;
 
 #if defined(OLDUNREAL469SDK)
 	new(GetClass(), TEXT("UseLightmapAtlas"), RF_Public) UBoolProperty(CPP_PROPERTY(UseLightmapAtlas), TEXT("Display"), CPF_Config);
@@ -52,20 +66,40 @@ void UVulkanRenderDevice::StaticConstructor()
 
 	new(GetClass(), TEXT("UseVSync"), RF_Public) UBoolProperty(CPP_PROPERTY(UseVSync), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("UsePrecache"), RF_Public) UBoolProperty(CPP_PROPERTY(UsePrecache), TEXT("Display"), CPF_Config);
-	new(GetClass(), TEXT("Multisample"), RF_Public) UIntProperty(CPP_PROPERTY(Multisample), TEXT("Display"), CPF_Config);
+	new(GetClass(), TEXT("GammaOffset"), RF_Public) UFloatProperty(CPP_PROPERTY(GammaOffset), TEXT("Display"), CPF_Config);
+	new(GetClass(), TEXT("GammaOffsetRed"), RF_Public) UFloatProperty(CPP_PROPERTY(GammaOffsetRed), TEXT("Display"), CPF_Config);
+	new(GetClass(), TEXT("GammaOffsetGreen"), RF_Public) UFloatProperty(CPP_PROPERTY(GammaOffsetGreen), TEXT("Display"), CPF_Config);
+	new(GetClass(), TEXT("GammaOffsetBlue"), RF_Public) UFloatProperty(CPP_PROPERTY(GammaOffsetBlue), TEXT("Display"), CPF_Config);
+	new(GetClass(), TEXT("LinearBrightness"), RF_Public) UByteProperty(CPP_PROPERTY(LinearBrightness), TEXT("Display"), CPF_Config);
+	new(GetClass(), TEXT("Contrast"), RF_Public) UByteProperty(CPP_PROPERTY(Contrast), TEXT("Display"), CPF_Config);
+	new(GetClass(), TEXT("Saturation"), RF_Public) UByteProperty(CPP_PROPERTY(Saturation), TEXT("Display"), CPF_Config);
+	new(GetClass(), TEXT("GrayFormula"), RF_Public) UIntProperty(CPP_PROPERTY(GrayFormula), TEXT("Display"), CPF_Config);
+	new(GetClass(), TEXT("Hdr"), RF_Public) UBoolProperty(CPP_PROPERTY(Hdr), TEXT("Display"), CPF_Config);
+	new(GetClass(), TEXT("OccludeLines"), RF_Public) UBoolProperty(CPP_PROPERTY(OccludeLines), TEXT("Display"), CPF_Config);
+	//new(GetClass(), TEXT("Bloom"), RF_Public) UBoolProperty(CPP_PROPERTY(Bloom), TEXT("Display"), CPF_Config);
+	//new(GetClass(), TEXT("BloomAmount"), RF_Public) UByteProperty(CPP_PROPERTY(BloomAmount), TEXT("Display"), CPF_Config);
+	new(GetClass(), TEXT("LODBias"), RF_Public) UFloatProperty(CPP_PROPERTY(LODBias), TEXT("Display"), CPF_Config);
+
+	UEnum* AntialiasModes = new(GetClass(), TEXT("AntialiasModes"))UEnum(nullptr);
+	new(AntialiasModes->Names)FName(TEXT("Off"));
+	new(AntialiasModes->Names)FName(TEXT("MSAA_2x"));
+	new(AntialiasModes->Names)FName(TEXT("MSAA_4x"));
+	new(GetClass(), TEXT("AntialiasMode"), RF_Public) UByteProperty(CPP_PROPERTY(AntialiasMode), TEXT("Display"), CPF_Config, AntialiasModes);
+
+	UEnum* GammaModes = new(GetClass(), TEXT("GammaModes"))UEnum(nullptr);
+	new(GammaModes->Names)FName(TEXT("D3D9"));
+	new(GammaModes->Names)FName(TEXT("XOpenGL"));
+	new(GetClass(), TEXT("GammaMode"), RF_Public) UByteProperty(CPP_PROPERTY(GammaMode), TEXT("Display"), CPF_Config, GammaModes);
+
+	UEnum* LightModes = new(GetClass(), TEXT("LightModes"))UEnum(nullptr);
+	new(LightModes->Names)FName(TEXT("Normal"));
+	new(LightModes->Names)FName(TEXT("OneXBlending"));
+	new(LightModes->Names)FName(TEXT("BrighterActors"));
+	new(GetClass(), TEXT("LightMode"), RF_Public) UByteProperty(CPP_PROPERTY(LightMode), TEXT("Display"), CPF_Config, LightModes);
+
 	new(GetClass(), TEXT("VkDeviceIndex"), RF_Public) UIntProperty(CPP_PROPERTY(VkDeviceIndex), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("VkDebug"), RF_Public) UBoolProperty(CPP_PROPERTY(VkDebug), TEXT("Display"), CPF_Config);
-
-	new(GetClass(), TEXT("VkBrightness"), RF_Public) UFloatProperty(CPP_PROPERTY(VkBrightness), TEXT("Display"), CPF_Config);
-	new(GetClass(), TEXT("VkContrast"), RF_Public) UFloatProperty(CPP_PROPERTY(VkContrast), TEXT("Display"), CPF_Config);
-	new(GetClass(), TEXT("VkSaturation"), RF_Public) UFloatProperty(CPP_PROPERTY(VkSaturation), TEXT("Display"), CPF_Config);
-	new(GetClass(), TEXT("VkGrayFormula"), RF_Public) UIntProperty(CPP_PROPERTY(VkGrayFormula), TEXT("Display"), CPF_Config);
-	new(GetClass(), TEXT("VkHdr"), RF_Public) UBoolProperty(CPP_PROPERTY(VkHdr), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("VkExclusiveFullscreen"), RF_Public) UBoolProperty(CPP_PROPERTY(VkExclusiveFullscreen), TEXT("Display"), CPF_Config);
-
-	new(GetClass(), TEXT("LODBias"), RF_Public) UFloatProperty(CPP_PROPERTY(LODBias), TEXT("Display"), CPF_Config);
-	new(GetClass(), TEXT("OneXBlending"), RF_Public) UBoolProperty(CPP_PROPERTY(OneXBlending), TEXT("Display"), CPF_Config);
-	new(GetClass(), TEXT("ActorXBlending"), RF_Public) UBoolProperty(CPP_PROPERTY(ActorXBlending), TEXT("Display"), CPF_Config);
 
 	unguard;
 }
@@ -328,35 +362,7 @@ UBOOL UVulkanRenderDevice::Exec(const TCHAR* Cmd, FOutputDevice& Ar)
 {
 	guard(UVulkanRenderDevice::Exec);
 
-	if (ParseCommand(&Cmd, TEXT("vk_contrast")))
-	{
-		float value = _wtof(Cmd);
-		VkContrast = clamp(value, 0.1f, 3.f);
-		SaveConfig();
-		return 1;
-	}
-	else if (ParseCommand(&Cmd, TEXT("vk_saturation")))
-	{
-		float value = _wtof(Cmd);
-		VkSaturation = clamp(value, -15.0f, 15.f);
-		SaveConfig();
-		return 1;
-	}
-	else if (ParseCommand(&Cmd, TEXT("vk_brightness")))
-	{
-		float value = _wtof(Cmd);
-		VkBrightness = clamp(value, -0.8f, 0.8f);
-		SaveConfig();
-		return 1;
-	}
-	else if (ParseCommand(&Cmd, TEXT("vk_grayformula")))
-	{
-		int value = _wtoi(Cmd);
-		VkGrayFormula = clamp(value, 0, 2);
-		SaveConfig();
-		return 1;
-	}
-	else if (ParseCommand(&Cmd, TEXT("DGL")))
+	if (ParseCommand(&Cmd, TEXT("DGL")))
 	{
 		if (ParseCommand(&Cmd, TEXT("BUFFERTRIS")))
 		{
@@ -440,20 +446,6 @@ UBOOL UVulkanRenderDevice::Exec(const TCHAR* Cmd, FOutputDevice& Ar)
 		Ar.Log(*Str.LeftChop(1));
 		return 1;
 	}
-	else if (ParseCommand(&Cmd, TEXT("VSTAT")))
-	{
-		if (ParseCommand(&Cmd, TEXT("Resources")))
-		{
-			StatResources = !StatResources;
-			return 1;
-		}
-		else if (ParseCommand(&Cmd, TEXT("Draw")))
-		{
-			StatDraw = !StatDraw;
-			return 1;
-		}
-		return 0;
-	}
 	else if (ParseCommand(&Cmd, TEXT("GetVkDevices")))
 	{
 		std::vector<VulkanCompatibleDevice> supportedDevices = VulkanDeviceBuilder()
@@ -489,13 +481,16 @@ void UVulkanRenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane Sc
 	FlashScale = InFlashScale;
 	FlashFog = InFlashFog;
 
+	pushconstants.hitIndex = 0;
+	ForceHitIndex = -1;
+
 	try
 	{
-		if (!Textures->Scene || Textures->Scene->width != Viewport->SizeX || Textures->Scene->height != Viewport->SizeY)
+		if (!Textures->Scene || Textures->Scene->width != Viewport->SizeX || Textures->Scene->height != Viewport->SizeY ||Textures->Scene->multisample != GetSettingsMultisample())
 		{
 			Framebuffers->DestroySceneFramebuffer();
 			Textures->Scene.reset();
-			Textures->Scene.reset(new SceneTextures(this, Viewport->SizeX, Viewport->SizeY, Multisample));
+			Textures->Scene.reset(new SceneTextures(this, Viewport->SizeX, Viewport->SizeY, GetSettingsMultisample()));
 			RenderPasses->CreateRenderPass();
 			RenderPasses->CreatePipelines();
 			Framebuffers->CreateSceneFramebuffer();
@@ -510,6 +505,13 @@ void UVulkanRenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane Sc
 		PipelineBarrier()
 			.AddImage(
 				Textures->Scene->ColorBuffer.get(),
+				VK_IMAGE_LAYOUT_UNDEFINED,
+				VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+				VK_ACCESS_SHADER_READ_BIT,
+				VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+				VK_IMAGE_ASPECT_COLOR_BIT)
+			.AddImage(
+				Textures->Scene->HitBuffer.get(),
 				VK_IMAGE_LAYOUT_UNDEFINED,
 				VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 				VK_ACCESS_SHADER_READ_BIT,
@@ -537,48 +539,28 @@ void UVulkanRenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane Sc
 	unguard;
 }
 
+void UVulkanRenderDevice::DrawStats(FSceneNode* Frame)
+{
+	Super::DrawStats(Frame);
+
+#if defined(OLDUNREAL469SDK)
+	GRender->ShowStat(CurrentFrame, TEXT("Vulkan: Draw calls: %d, Complex surfaces: %d, Gouraud polygons: %d, Tiles: %d; Uploads: %d, Rect Uploads: %d\r\n"), Stats.DrawCalls, Stats.ComplexSurfaces, Stats.GouraudPolygons, Stats.Tiles, Stats.Uploads, Stats.RectUploads);
+#endif
+
+	Stats.DrawCalls = 0;
+	Stats.ComplexSurfaces = 0;
+	Stats.GouraudPolygons = 0;
+	Stats.Tiles = 0;
+	Stats.Uploads = 0;
+	Stats.RectUploads = 0;
+}
+
 void UVulkanRenderDevice::Unlock(UBOOL Blit)
 {
 	guard(UVulkanRenderDevice::Unlock);
 
 	try
 	{
-		if (Blit && (StatResources || StatDraw))
-		{
-			UCanvas* canvas = Viewport->Canvas;
-			canvas->CurX = 16;
-			canvas->CurY = 94;
-			canvas->WrappedPrintf(canvas->SmallFont, 0, TEXT("Vulkan Statistics"));
-
-			int y = 110;
-
-			if (StatResources)
-			{
-				canvas->CurX = 16;
-				canvas->CurY = y;
-				canvas->WrappedPrintf(canvas->SmallFont, 0, TEXT("Textures in cache: %d\r\n"), Textures->GetTexturesInCache());
-				y += 8;
-			}
-
-			if (StatDraw)
-			{
-				canvas->CurX = 16;
-				canvas->CurY = y;
-				canvas->WrappedPrintf(canvas->SmallFont, 0, TEXT("Draw calls: %d, Complex surfaces: %d, Gouraud polygons: %d, Tiles: %d; Uploads: %d, Rect Uploads: %d\r\n"), Stats.DrawCalls, Stats.ComplexSurfaces, Stats.GouraudPolygons, Stats.Tiles, Stats.Uploads, Stats.RectUploads);
-				y += 8;
-			}
-		}
-
-		if (Blit)
-		{
-			Stats.DrawCalls = 0;
-			Stats.ComplexSurfaces = 0;
-			Stats.GouraudPolygons = 0;
-			Stats.Tiles = 0;
-			Stats.Uploads = 0;
-			Stats.RectUploads = 0;
-		}
-
 		DrawBatch(Commands->GetDrawCommands());
 		RenderPasses->EndScene(Commands->GetDrawCommands());
 
@@ -587,9 +569,43 @@ void UVulkanRenderDevice::Unlock(UBOOL Blit)
 
 		if (HitData)
 		{
-			*HitSize = 0;
+			// Look for the last hit
+			int width = Viewport->HitXL;
+			int height = Viewport->HitYL;
+			int hit = 0;
+			const int32_t* data = (const int32_t*)Textures->Scene->StagingHitBuffer->Map(0, width * height * sizeof(int32_t));
+			if (data)
+			{
+				for (int y = 0; y < height; y++)
+				{
+					const INT* line = data + y * width;
+					for (int x = 0; x < width; x++)
+					{
+						hit = std::max(hit, line[x]);
+					}
+				}
+				Textures->Scene->StagingHitBuffer->Unmap();
+			}
+			hit--;
+
+			if (hit < ForceHitIndex)
+				hit = ForceHitIndex;
+
+			if (hit >= 0 && hit < (int)HitQueries.size())
+			{
+				const HitQuery& query = HitQueries[hit];
+				memcpy(HitData, HitBuffer.data() + query.Start, query.Count);
+				*HitSize = query.Count;
+			}
+			else
+			{
+				*HitSize = 0;
+			}
 		}
 
+		HitQueryStack.clear();
+		HitQueries.clear();
+		HitBuffer.clear();
 		HitData = nullptr;
 		HitSize = nullptr;
 
@@ -684,7 +700,7 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 	if (detailtex && !fogmap) flags |= 4;
 	if (fogmap) flags |= 8;
 
-	if (OneXBlending) flags |= 64;
+	if (LightMode == 1) flags |= 64;
 
 	if (fogmap) // if Surface.FogMap exists, use instead of detail texture
 	{
@@ -726,47 +742,59 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 	uint32_t istart = ipos;
 	uint32_t icount = 0;
 
-	for (FSavedPoly* Poly = Facet.Polys; Poly; Poly = Poly->Next)
+	vec4 color(1.0f);
+
+	// Draw the surface twice if the editor selected it. Second time highlighted without textures
+	int drawcount = (Surface.PolyFlags & PF_Selected) && GIsEditor ? 2 : 1;
+	while (drawcount-- > 0)
 	{
-		auto pts = Poly->Pts;
-		uint32_t vcount = Poly->NumPts;
-		if (vcount < 3) continue;
-
-		for (uint32_t i = 0; i < vcount; i++)
+		for (FSavedPoly* Poly = Facet.Polys; Poly; Poly = Poly->Next)
 		{
-			FVector point = pts[i]->Point;
-			FLOAT u = Facet.MapCoords.XAxis | point;
-			FLOAT v = Facet.MapCoords.YAxis | point;
+			auto pts = Poly->Pts;
+			uint32_t vcount = Poly->NumPts;
+			if (vcount < 3) continue;
 
-			vptr->Flags = flags;
-			vptr->Position.x = point.X;
-			vptr->Position.y = point.Y;
-			vptr->Position.z = point.Z;
-			vptr->TexCoord.s = (u - UPan) * UMult;
-			vptr->TexCoord.t = (v - VPan) * VMult;
-			vptr->TexCoord2.s = (u - LMUPan) * LMUMult;
-			vptr->TexCoord2.t = (v - LMVPan) * LMVMult;
-			vptr->TexCoord3.s = (u - MacroUPan) * MacroUMult;
-			vptr->TexCoord3.t = (v - MacroVPan) * MacroVMult;
-			vptr->TexCoord4.s = (u - DetailUPan) * DetailUMult;
-			vptr->TexCoord4.t = (v - DetailVPan) * DetailVMult;
-			vptr->Color.r = 1.0f;
-			vptr->Color.g = 1.0f;
-			vptr->Color.b = 1.0f;
-			vptr->Color.a = 1.0f;
-			vptr->TextureBinds = textureBinds;
-			vptr++;
+			for (uint32_t i = 0; i < vcount; i++)
+			{
+				FVector point = pts[i]->Point;
+				FLOAT u = Facet.MapCoords.XAxis | point;
+				FLOAT v = Facet.MapCoords.YAxis | point;
+
+				vptr->Flags = flags;
+				vptr->Position.x = point.X;
+				vptr->Position.y = point.Y;
+				vptr->Position.z = point.Z;
+				vptr->TexCoord.s = (u - UPan) * UMult;
+				vptr->TexCoord.t = (v - VPan) * VMult;
+				vptr->TexCoord2.s = (u - LMUPan) * LMUMult;
+				vptr->TexCoord2.t = (v - LMVPan) * LMVMult;
+				vptr->TexCoord3.s = (u - MacroUPan) * MacroUMult;
+				vptr->TexCoord3.t = (v - MacroVPan) * MacroVMult;
+				vptr->TexCoord4.s = (u - DetailUPan) * DetailUMult;
+				vptr->TexCoord4.t = (v - DetailVPan) * DetailVMult;
+				vptr->Color = color;
+				vptr->TextureBinds = textureBinds;
+				vptr++;
+			}
+
+			for (uint32_t i = vpos + 2; i < vpos + vcount; i++)
+			{
+				*(iptr++) = vpos;
+				*(iptr++) = i - 1;
+				*(iptr++) = i;
+			}
+
+			vpos += vcount;
+			icount += (vcount - 2) * 3;
 		}
 
-		for (uint32_t i = vpos + 2; i < vpos + vcount; i++)
+		if (drawcount != 0)
 		{
-			*(iptr++) = vpos;
-			*(iptr++) = i - 1;
-			*(iptr++) = i;
+			SetPipeline(RenderPasses->getPipeline(PF_Highlighted, UsesBindless));
+			if (!UsesBindless)
+				SetDescriptorSet(DescriptorSets->GetTextureDescriptorSet(PF_Highlighted, tex, lightmap, macrotex, detailtex), false);
+			color = vec4(0.0f, 0.0f, 0.05f, 0.20f);
 		}
-
-		vpos += vcount;
-		icount += (vcount - 2) * 3;
 	}
 
 	Stats.ComplexSurfaces++;
@@ -808,7 +836,7 @@ void UVulkanRenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& In
 	float VMult = GetVMult(Info);
 	int flags = (PolyFlags & (PF_RenderFog | PF_Translucent | PF_Modulated)) == PF_RenderFog ? 16 : 0;
 
-	if ((PolyFlags & (PF_Translucent | PF_Modulated)) == 0 && ActorXBlending) flags |= 32;
+	if ((PolyFlags & (PF_Translucent | PF_Modulated)) == 0 && LightMode == 2) flags |= 32;
 
 	if (PolyFlags & PF_Modulated)
 	{
@@ -884,6 +912,162 @@ void UVulkanRenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& In
 	unguard;
 }
 
+#if defined(OLDUNREAL469SDK)
+
+static void EnviroMap(const FSceneNode* Frame, FTransTexture& P, FLOAT UScale, FLOAT VScale)
+{
+	FVector T = P.Point.UnsafeNormal().MirrorByVector(P.Normal).TransformVectorBy(Frame->Uncoords);
+	P.U = (T.X + 1.0f) * 0.5f * 256.0f * UScale;
+	P.V = (T.Y + 1.0f) * 0.5f * 256.0f * VScale;
+}
+
+void UVulkanRenderDevice::DrawGouraudTriangles(const FSceneNode* Frame, const FTextureInfo& Info, FTransTexture* const Pts, INT NumPts, DWORD PolyFlags, DWORD DataFlags, FSpanBuffer* Span)
+{
+	guard(UVulkanRenderDevice::DrawGouraudTriangles);
+
+	if (NumPts < 3) return; // This can apparently happen!!
+
+	SetPipeline(RenderPasses->getPipeline(PolyFlags, UsesBindless));
+
+	CachedTexture* tex = Textures->GetTexture(const_cast<FTextureInfo*>(&Info), !!(PolyFlags & PF_Masked));
+	ivec4 textureBinds;
+	if (UsesBindless)
+	{
+		textureBinds.x = DescriptorSets->GetTextureArrayIndex(PolyFlags, tex);
+		textureBinds.y = 0;
+		textureBinds.z = 0;
+		textureBinds.w = 0;
+		SetDescriptorSet(DescriptorSets->GetBindlessDescriptorSet(), true);
+	}
+	else
+	{
+		textureBinds.x = 0;
+		textureBinds.y = 0;
+		textureBinds.z = 0;
+		textureBinds.w = 0;
+		SetDescriptorSet(DescriptorSets->GetTextureDescriptorSet(PolyFlags, tex), false);
+	}
+
+	float UMult = GetUMult(Info);
+	float VMult = GetVMult(Info);
+	int flags = (PolyFlags & (PF_RenderFog | PF_Translucent | PF_Modulated)) == PF_RenderFog ? 16 : 0;
+
+	if ((PolyFlags & (PF_Translucent | PF_Modulated)) == 0 && LightMode == 2) flags |= 32;
+
+	if (PolyFlags & PF_Environment)
+	{
+		FLOAT UScale = Info.UScale * Info.USize * (1.0f / 256.0f);
+		FLOAT VScale = Info.VScale * Info.VSize * (1.0f / 256.0f);
+
+		for (INT i = 0; i < NumPts; i++)
+			::EnviroMap(Frame, Pts[i], UScale, VScale);
+	}
+
+	if (PolyFlags & PF_Modulated)
+	{
+		SceneVertex* vertex = &Buffers->SceneVertices[SceneVertexPos];
+		for (INT i = 0; i < NumPts; i++)
+		{
+			FTransTexture* P = &Pts[i];
+			vertex->Flags = flags;
+			vertex->Position.x = P->Point.X;
+			vertex->Position.y = P->Point.Y;
+			vertex->Position.z = P->Point.Z;
+			vertex->TexCoord.s = P->U * UMult;
+			vertex->TexCoord.t = P->V * VMult;
+			vertex->TexCoord2.s = P->Fog.X;
+			vertex->TexCoord2.t = P->Fog.Y;
+			vertex->TexCoord3.s = P->Fog.Z;
+			vertex->TexCoord3.t = P->Fog.W;
+			vertex->TexCoord4.s = 0.0f;
+			vertex->TexCoord4.t = 0.0f;
+			vertex->Color.r = 1.0f;
+			vertex->Color.g = 1.0f;
+			vertex->Color.b = 1.0f;
+			vertex->Color.a = 1.0f;
+			vertex->TextureBinds = textureBinds;
+			vertex++;
+		}
+	}
+	else
+	{
+		SceneVertex* vertex = &Buffers->SceneVertices[SceneVertexPos];
+		for (INT i = 0; i < NumPts; i++)
+		{
+			FTransTexture* P = &Pts[i];
+			vertex->Flags = flags;
+			vertex->Position.x = P->Point.X;
+			vertex->Position.y = P->Point.Y;
+			vertex->Position.z = P->Point.Z;
+			vertex->TexCoord.s = P->U * UMult;
+			vertex->TexCoord.t = P->V * VMult;
+			vertex->TexCoord2.s = P->Fog.X;
+			vertex->TexCoord2.t = P->Fog.Y;
+			vertex->TexCoord3.s = P->Fog.Z;
+			vertex->TexCoord3.t = P->Fog.W;
+			vertex->TexCoord4.s = 0.0f;
+			vertex->TexCoord4.t = 0.0f;
+			vertex->Color.r = P->Light.X;
+			vertex->Color.g = P->Light.Y;
+			vertex->Color.b = P->Light.Z;
+			vertex->Color.a = 1.0f;
+			vertex->TextureBinds = textureBinds;
+			vertex++;
+		}
+	}
+
+	bool mirror = (Frame->Mirror == -1.0);
+
+	size_t vstart = SceneVertexPos;
+	size_t vcount = NumPts;
+	size_t istart = SceneIndexPos;
+	size_t icount = 0;
+
+	if (PolyFlags & PF_TwoSided)
+	{
+		uint32_t* iptr = Buffers->SceneIndexes + istart;
+		for (uint32_t i = 2; i < vcount; i += 3)
+		{
+			// If outcoded, skip it.
+			if (Pts[icount].Flags & Pts[icount + 1].Flags & Pts[icount + 2].Flags)
+				continue;
+
+			*(iptr++) = vstart + i;
+			*(iptr++) = vstart + i - 1;
+			*(iptr++) = vstart + i - 2;
+			icount += 3;
+		}
+	}
+	else
+	{
+		uint32_t* iptr = Buffers->SceneIndexes + istart;
+		for (uint32_t i = 2; i < vcount; i += 3)
+		{
+			// If outcoded, skip it.
+			if (Pts[icount].Flags & Pts[icount + 1].Flags & Pts[icount + 2].Flags)
+				continue;
+
+			bool backface = FTriple(Pts[icount].Point, Pts[icount + 1].Point, Pts[icount + 2].Point) <= 0.0;
+			if (mirror == backface)
+			{
+				*(iptr++) = vstart + i - 2;
+				*(iptr++) = vstart + i - 1;
+				*(iptr++) = vstart + i;
+				icount += 3;
+			}
+		}
+	}
+
+	SceneVertexPos += vcount;
+	SceneIndexPos += icount;
+
+	Stats.GouraudPolygons++;
+
+	unguard;
+}
+
+#endif
+
 void UVulkanRenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT X, FLOAT Y, FLOAT XL, FLOAT YL, FLOAT U, FLOAT V, FLOAT UL, FLOAT VL, class FSpanBuffer* Span, FLOAT Z, FPlane Color, FPlane Fog, DWORD PolyFlags)
 {
 	guard(UVulkanRenderDevice::DrawTile);
@@ -941,7 +1125,7 @@ void UVulkanRenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT 
 	}
 	a = 1.0f;
 
-	if (Multisample > 0)
+	if (Textures->Scene->multisample > 1)
 	{
 		XL = std::floor(X + XL + 0.5f);
 		YL = std::floor(Y + YL + 0.5f);
@@ -1003,7 +1187,7 @@ void UVulkanRenderDevice::Draw3DLine(FSceneNode* Frame, FPlane Color, DWORD Line
 	}
 	else
 	{
-		SetPipeline(RenderPasses->getLinePipeline(UsesBindless));
+		SetPipeline(RenderPasses->getLinePipeline(OccludeLines, UsesBindless));
 
 		ivec4 textureBinds;
 		if (UsesBindless)
@@ -1052,7 +1236,7 @@ void UVulkanRenderDevice::Draw2DLine(FSceneNode* Frame, FPlane Color, DWORD Line
 {
 	guard(UVulkanRenderDevice::Draw2DLine);
 
-	SetPipeline(RenderPasses->getLinePipeline(UsesBindless));
+	SetPipeline(RenderPasses->getLinePipeline(OccludeLines, UsesBindless));
 
 	ivec4 textureBinds;
 	if (UsesBindless)
@@ -1096,7 +1280,7 @@ void UVulkanRenderDevice::Draw2DPoint(FSceneNode* Frame, FPlane Color, DWORD Lin
 	// Hack to fix UED selection problem with selection brush
 	if (GIsEditor) Z = 1.0f;
 
-	SetPipeline(RenderPasses->getPointPipeline(UsesBindless));
+	SetPipeline(RenderPasses->getPointPipeline(OccludeLines, UsesBindless));
 
 	ivec4 textureBinds;
 	if (UsesBindless)
@@ -1164,12 +1348,43 @@ void UVulkanRenderDevice::ClearZ(FSceneNode* Frame)
 void UVulkanRenderDevice::PushHit(const BYTE* Data, INT Count)
 {
 	guard(UVulkanRenderDevice::PushHit);
+
+	if (Count <= 0) return;
+	HitQueryStack.insert(HitQueryStack.end(), Data, Data + Count);
+
+	DrawBatch(Commands->GetDrawCommands());
+
+	INT index = HitQueries.size();
+
+	HitQuery query;
+	query.Start = HitBuffer.size();
+	query.Count = HitQueryStack.size();
+	HitQueries.push_back(query);
+
+	HitBuffer.insert(HitBuffer.end(), HitQueryStack.begin(), HitQueryStack.end());
+
+	pushconstants.hitIndex = index + 1;
+
 	unguard;
 }
 
 void UVulkanRenderDevice::PopHit(INT Count, UBOOL bForce)
 {
 	guard(UVulkanRenderDevice::PopHit);
+
+	if (bForce)
+	{
+		ForceHitIndex = HitQueries.size();
+
+		HitQuery query;
+		query.Start = HitBuffer.size();
+		query.Count = HitQueryStack.size();
+		HitQueries.push_back(query);
+		HitBuffer.insert(HitBuffer.end(), HitQueryStack.begin(), HitQueryStack.end());
+	}
+
+	HitQueryStack.resize(HitQueryStack.size() - Count);
+
 	unguard;
 }
 
@@ -1266,6 +1481,7 @@ void UVulkanRenderDevice::EndFlash()
 
 		DrawBatch(Commands->GetDrawCommands());
 		pushconstants.objectToProjection = mat4::identity();
+		pushconstants.nearClip = vec4(0.0f, 0.0f, 0.0f, 1.0f);
 
 		SetPipeline(RenderPasses->getEndFlashPipeline());
 		SetDescriptorSet(DescriptorSets->GetTextureDescriptorSet(0, nullptr), false);
@@ -1322,6 +1538,7 @@ void UVulkanRenderDevice::SetSceneNode(FSceneNode* Frame)
 	commands->setViewport(0, 1, &viewportdesc);
 
 	pushconstants.objectToProjection = mat4::frustum(-RProjZ, RProjZ, -Aspect * RProjZ, Aspect * RProjZ, 1.0f, 32768.0f, handedness::left, clipzrange::zero_positive_w);
+	pushconstants.nearClip = vec4(Frame->NearClip.X, Frame->NearClip.Y, Frame->NearClip.Z, Frame->NearClip.W);
 
 	unguard;
 }
@@ -1344,23 +1561,38 @@ void UVulkanRenderDevice::BlitSceneToPostprocess()
 	auto buffers = Textures->Scene.get();
 	auto cmdbuffer = Commands->GetDrawCommands();
 
-	PipelineBarrier()
-		.AddImage(
-			buffers->ColorBuffer.get(),
+	PipelineBarrier barrer0;
+	barrer0.AddImage(
+		buffers->ColorBuffer.get(),
+		VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+		VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+		VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+		VK_ACCESS_TRANSFER_READ_BIT);
+	if (HitData)
+	{
+		barrer0.AddImage(
+			buffers->HitBuffer.get(),
 			VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 			VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
 			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-			VK_ACCESS_TRANSFER_READ_BIT)
-		.AddImage(
-			buffers->PPImage.get(),
+			VK_ACCESS_TRANSFER_READ_BIT);
+		barrer0.AddImage(
+			buffers->PPHitBuffer.get(),
 			VK_IMAGE_LAYOUT_UNDEFINED,
 			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-			VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-			VK_ACCESS_TRANSFER_WRITE_BIT)
-		.Execute(
-			Commands->GetDrawCommands(),
-			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-			VK_PIPELINE_STAGE_TRANSFER_BIT);
+			VK_ACCESS_TRANSFER_READ_BIT,
+			VK_ACCESS_TRANSFER_WRITE_BIT);
+	}
+	barrer0.AddImage(
+		buffers->PPImage.get(),
+		VK_IMAGE_LAYOUT_UNDEFINED,
+		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+		VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+		VK_ACCESS_TRANSFER_WRITE_BIT);
+	barrer0.Execute(
+		Commands->GetDrawCommands(),
+		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+		VK_PIPELINE_STAGE_TRANSFER_BIT);
 
 	if (buffers->SceneSamples != VK_SAMPLE_COUNT_1_BIT)
 	{
@@ -1374,6 +1606,13 @@ void UVulkanRenderDevice::BlitSceneToPostprocess()
 			buffers->ColorBuffer->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
 			buffers->PPImage->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 			1, &resolve);
+		if (HitData)
+		{
+			cmdbuffer->resolveImage(
+				buffers->HitBuffer->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+				buffers->PPHitBuffer->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+				1, &resolve);
+		}
 	}
 	else
 	{
@@ -1391,30 +1630,117 @@ void UVulkanRenderDevice::BlitSceneToPostprocess()
 			colorBuffer->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
 			buffers->PPImage->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 			1, &blit, VK_FILTER_NEAREST);
+		if (HitData)
+		{
+			VkImageCopy copy = {};
+			copy.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			copy.srcSubresource.layerCount = 1;
+			copy.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			copy.dstSubresource.layerCount = 1;
+			copy.extent = { (uint32_t)colorBuffer->width, (uint32_t)colorBuffer->height, (uint32_t)1 };
+			cmdbuffer->copyImage(
+				buffers->HitBuffer->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+				buffers->PPHitBuffer->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+				1, &copy);
+		}
 	}
 
-	PipelineBarrier()
-		.AddImage(
-			buffers->PPImage.get(),
+	PipelineBarrier barrier1;
+	barrier1.AddImage(
+		buffers->PPImage.get(),
+		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+		VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+		VK_ACCESS_TRANSFER_WRITE_BIT,
+		VK_ACCESS_SHADER_READ_BIT);
+	if (HitData)
+	{
+		barrier1.AddImage(
+			buffers->PPHitBuffer.get(),
 			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
 			VK_ACCESS_TRANSFER_WRITE_BIT,
-			VK_ACCESS_SHADER_READ_BIT)
-		.Execute(
-			Commands->GetDrawCommands(),
-			VK_PIPELINE_STAGE_TRANSFER_BIT,
-			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+			VK_ACCESS_TRANSFER_READ_BIT);
+	}
+	barrier1.Execute(
+		Commands->GetDrawCommands(),
+		VK_PIPELINE_STAGE_TRANSFER_BIT,
+		HitData ? VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT : VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+
+	if (HitData)
+	{
+		VkBufferImageCopy copy = {};
+		copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		copy.imageSubresource.layerCount = 1;
+		copy.imageOffset = { (int32_t)Viewport->HitX, (int32_t)Viewport->HitY, (int32_t)0 };
+		copy.imageExtent = { (uint32_t)Viewport->HitXL, (uint32_t)Viewport->HitYL, (uint32_t)1 };
+		cmdbuffer->copyImageToBuffer(buffers->PPHitBuffer->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, buffers->StagingHitBuffer->buffer, 1, &copy);
+
+		PipelineBarrier()
+			.AddBuffer(buffers->StagingHitBuffer.get(), VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_HOST_READ_BIT)
+			.Execute(cmdbuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT);
+	}
 }
 
 void UVulkanRenderDevice::DrawPresentTexture(int x, int y, int width, int height)
 {
 	PresentPushConstants pushconstants;
-	pushconstants.InvGamma = 1.0f / (Viewport->GetOuterUClient()->Brightness * 2.0f);
-	pushconstants.Contrast = clamp(VkContrast, 0.1f, 3.f);
-	pushconstants.Saturation = clamp(VkSaturation, -1.0f, 1.0f);
-	pushconstants.Brightness = clamp(VkBrightness, -15.0f, 15.f);
-	pushconstants.GrayFormula = clamp(VkGrayFormula, 0, 2);
-	pushconstants.HdrMode = (Commands->SwapChain->Format().colorSpace == VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT) ? 1 : 0;
+	if (Viewport->IsOrtho())
+	{
+		pushconstants.GammaCorrection = { 1.0f };
+		pushconstants.Contrast = 1.0f;
+		pushconstants.Saturation = 1.0f;
+		pushconstants.Brightness = 0.0f;
+	}
+	else
+	{
+		float brightness = GIsEditor ? 1.0f : Clamp(Viewport->GetOuterUClient()->Brightness * 2.0, 0.05, 2.99);
+
+		if (GammaMode == 0)
+		{
+			float invGammaRed = 1.0f / Max(brightness + GammaOffset + GammaOffsetRed, 0.001f);
+			float invGammaGreen = 1.0f / Max(brightness + GammaOffset + GammaOffsetGreen, 0.001f);
+			float invGammaBlue = 1.0f / Max(brightness + GammaOffset + GammaOffsetBlue, 0.001f);
+			pushconstants.GammaCorrection = vec4(invGammaRed, invGammaGreen, invGammaBlue, 0.0f);
+		}
+		else
+		{
+			float invGammaRed = (GammaOffset + GammaOffsetRed + 2.0f) > 0.0f ? 1.0f / (GammaOffset + GammaOffsetRed + 1.0f) : 1.0f;
+			float invGammaGreen = (GammaOffset + GammaOffsetGreen + 2.0f) > 0.0f ? 1.0f / (GammaOffset + GammaOffsetGreen + 1.0f) : 1.0f;
+			float invGammaBlue = (GammaOffset + GammaOffsetBlue + 2.0f) > 0.0f ? 1.0f / (GammaOffset + GammaOffsetBlue + 1.0f) : 1.0f;
+			pushconstants.GammaCorrection = vec4(invGammaRed, invGammaGreen, invGammaBlue, brightness);
+		}
+
+		// pushconstants.Contrast = clamp(Contrast, 0.1f, 3.f);
+		if (Contrast >= 128)
+		{
+			pushconstants.Contrast = 1.0f + (Contrast - 128) / 127.0f * 3.0f;
+		}
+		else
+		{
+			pushconstants.Contrast = Max(Contrast / 128.0f, 0.1f);
+		}
+
+		// pushconstants.Saturation = clamp(Saturation, -1.0f, 1.0f);
+		pushconstants.Saturation = 1.0f - 2.0f * (255 - Saturation) / 255.0f;
+
+		// pushconstants.Brightness = clamp(LinearBrightness, -1.8f, 1.8f);
+		if (LinearBrightness >= 128)
+		{
+			pushconstants.Brightness = (LinearBrightness - 128) / 127.0f * 1.8f;
+		}
+		else
+		{
+			pushconstants.Brightness = (128 - LinearBrightness) / 128.0f * -1.8f;
+		}
+	}
+
+	bool ActiveHdr = (Commands->SwapChain->Format().colorSpace == VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT) ? 1 : 0;
+
+	// Select present shader based on what the user is actually using
+	int presentShader = 0;
+	if (ActiveHdr) presentShader |= 1;
+	if (GammaMode == 1) presentShader |= 2;
+	if (pushconstants.Brightness != 0.0f || pushconstants.Contrast != 1.0f || pushconstants.Saturation != 1.0f) presentShader |= (Clamp(GrayFormula, 0, 2) + 1) << 2;
 
 	VkViewport viewport = {};
 	viewport.x = x;
@@ -1433,7 +1759,7 @@ void UVulkanRenderDevice::DrawPresentTexture(int x, int y, int width, int height
 	RenderPasses->BeginPresent(cmdbuffer);
 	cmdbuffer->setViewport(0, 1, &viewport);
 	cmdbuffer->setScissor(0, 1, &scissor);
-	cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, RenderPasses->PresentPipeline.get());
+	cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, RenderPasses->PresentPipeline[presentShader].get());
 	cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, RenderPasses->PresentPipelineLayout.get(), 0, DescriptorSets->GetPresentDescriptorSet());
 	cmdbuffer->pushConstants(RenderPasses->PresentPipelineLayout.get(), VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PresentPushConstants), &pushconstants);
 	cmdbuffer->draw(6, 1, 0, 0);

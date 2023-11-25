@@ -1821,8 +1821,6 @@ void UD3D11RenderDevice::DrawGouraudTriangles(const FSceneNode* Frame, const FTe
 {
 	guard(UD3D11RenderDevice::DrawGouraudTriangles);
 
-	// URenderDeviceOldUnreal469::DrawGouraudTriangles(Frame, Info, Pts, NumPts, PolyFlags, DataFlags, Span); return;
-
 	if (NumPts < 3) return; // This can apparently happen!!
 	if (SceneVertexPos + NumPts > SceneVertexBufferSize || SceneIndexPos + NumPts * 3 > SceneIndexBufferSize) NextSceneBuffers();
 

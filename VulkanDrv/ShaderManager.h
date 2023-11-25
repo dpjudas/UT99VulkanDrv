@@ -19,18 +19,18 @@ struct SceneVertex
 struct ScenePushConstants
 {
 	mat4 objectToProjection;
+	vec4 nearClip;
+	uint32_t hitIndex;
+	uint32_t padding1, padding2, padding3;
 };
 
 struct PresentPushConstants
 {
-	float InvGamma;
 	float Contrast;
 	float Saturation;
 	float Brightness;
-	int GrayFormula;
-	int HdrMode;
-	int32_t padding2;
-	int32_t padding3;
+	float Padding;
+	vec4 GammaCorrection;
 };
 
 class ShaderManager
@@ -47,7 +47,7 @@ public:
 	} Scene, SceneBindless;
 
 	std::unique_ptr<VulkanShader> ppVertexShader;
-	std::unique_ptr<VulkanShader> ppFragmentPresentShader;
+	std::unique_ptr<VulkanShader> ppFragmentPresentShader[16];
 
 	static std::string LoadShaderCode(const std::string& filename, const std::string& defines = {});
 

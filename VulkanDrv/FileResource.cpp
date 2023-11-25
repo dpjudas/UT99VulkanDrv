@@ -12,6 +12,9 @@ std::string FileResource::readAllText(const std::string& filename)
 			layout(push_constant) uniform ScenePushConstants
 			{
 				mat4 objectToProjection;
+				vec4 nearClip;
+				uint uHitIndex;
+				uint padding1, padding2, padding3;
 			};
 
 			layout(location = 0) in uint aFlags;
@@ -31,19 +34,22 @@ std::string FileResource::readAllText(const std::string& filename)
 			layout(location = 3) out vec2 texCoord3;
 			layout(location = 4) out vec2 texCoord4;
 			layout(location = 5) out vec4 color;
+			layout(location = 6) flat out uint hitIndex;
 			#if defined(BINDLESS_TEXTURES)
-			layout(location = 6) flat out ivec4 textureBinds;
+			layout(location = 7) flat out ivec4 textureBinds;
 			#endif
 
 			void main()
 			{
 				gl_Position = objectToProjection * vec4(aPosition, 1.0);
+				gl_ClipDistance[0] = dot(nearClip, vec4(aPosition, 1.0));
 				flags = aFlags;
 				texCoord = aTexCoord;
 				texCoord2 = aTexCoord2;
 				texCoord3 = aTexCoord3;
 				texCoord4 = aTexCoord4;
 				color = aColor;
+				hitIndex = uHitIndex;
 				#if defined(BINDLESS_TEXTURES)
 				textureBinds = aTextureBinds;
 				#endif
@@ -68,11 +74,13 @@ std::string FileResource::readAllText(const std::string& filename)
 			layout(location = 3) in vec2 texCoord3;
 			layout(location = 4) in vec2 texCoord4;
 			layout(location = 5) in vec4 color;
+			layout(location = 6) flat in uint hitIndex;
 			#if defined(BINDLESS_TEXTURES)
-			layout(location = 6) flat in ivec4 textureBinds;
+			layout(location = 7) flat in ivec4 textureBinds;
 			#endif
 
 			layout(location = 0) out vec4 outColor;
+			layout(location = 1) out uint outHitIndex;
 
 			vec4 darkClamp(vec4 c)
 			{
@@ -132,7 +140,11 @@ std::string FileResource::readAllText(const std::string& filename)
 				if (outColor.a < 0.5) discard;
 				#endif
 
-				outColor = clamp(outColor, 0.0, 1.0);
+				// Clamp if it isn't a lightmap texture (we want lightmap textures to go overbright so the HDR mode can pick it up)
+				if ((flags & 1) == 0)
+					outColor = clamp(outColor, 0.0, 1.0);
+
+				outHitIndex = hitIndex;
 			}
 		)";
 	}
@@ -163,14 +175,11 @@ std::string FileResource::readAllText(const std::string& filename)
 		return R"(
 			layout(push_constant) uniform PresentPushConstants
 			{
-				float InvGamma;
 				float Contrast;
 				float Saturation;
 				float Brightness;
-				int GrayFormula;
-				int HdrMode;
-				int Padding2;
-				int Padding3;
+				float Padding;
+				vec4 GammaCorrection;
 			};
 
 			layout(binding = 0) uniform sampler2D texSampler;
@@ -185,41 +194,97 @@ std::string FileResource::readAllText(const std::string& filename)
 				return floor(c.rgb * 255.0 + threshold) / 255.0;
 			}
 
-			vec3 srgb(vec3 c)
-			{
-				return mix(c * 12.92, 1.055 * pow(c, vec3(1.0/2.4)) - 0.055, step(c, vec3(0.0031308)));
-			}
-
-			vec3 linear(vec3 c)
+			vec3 linearHdr(vec3 c)
 			{
 				return pow(c, vec3(2.2)) * 1.2;
 			}
 
-			vec3 applyGamma(vec3 c)
+			#if defined(GAMMA_MODE_D3D9)
+
+			vec3 gammaCorrect(vec3 c)
 			{
-				vec3 valgray;
-				if (GrayFormula == 0)
-					valgray = vec3(c.r + c.g + c.b) * (1 - Saturation) / 3 + c * Saturation;
-				else if (GrayFormula == 2)	// new formula
-					valgray = mix(vec3(pow(dot(pow(c, vec3(2.2)), vec3(0.2126, 0.7152, 0.0722)), 1.0/2.2)), c, Saturation);
-				else
-					valgray = mix(vec3(dot(c, vec3(0.3,0.56,0.14))), c, Saturation);
+				return pow(c, GammaCorrection.xyz);
+			}
+
+			#elif defined(GAMMA_MODE_XOPENGL)
+
+			// Returns maximum of first 3 components
+			float max3(vec3 v)
+			{
+				return max(max(v.x, v.y), v.z);
+			}
+			float max3(vec4 v)
+			{
+				return max(max(v.x, v.y), v.z);
+			}
+
+			// Returns square of argument
+			float square_f( float f)
+			{
+				return f*f;
+			}
+
+			vec3 gammaCorrect(vec3 c)
+			{
+				if (GammaCorrection.w > 1.0)
+				{
+					// Obtains a multiplier required to offset value according to the following
+					// formula: ((1 - (2 * value - 1)^2) * 0.25)
+					// It has the shape of a parabola with roots in 0,1 and maximum at f(x=0.5)=0.25
+					float CCValue = max(max3(c), 0.001);
+					float CC = (1.0 - square_f(2.0 * CCValue - 1.0)) * 0.25  * (GammaCorrection.w - 1.0);
+					c = clamp( c * ((CCValue+CC) / CCValue), 0.0, 1.0);
+				}
+				else if (GammaCorrection.w < 1.0)
+				{
+					// Downscale brightness
+					c *= GammaCorrection.w;
+				}
+
+				return pow(c, GammaCorrection.xyz);
+			}
+
+			#endif
+
+			#if defined(COLOR_CORRECT_MODE0)
+			vec3 colorCorrect(vec3 c)
+			{
+				float v = c.r + c.g + c.b;
+				vec3 valgray = vec3(v, v, v) * (1 - Saturation) / 3 + c * Saturation;
 				vec3 val = valgray * Contrast - (Contrast - 1.0) * 0.5;
 				val += Brightness * 0.5;
-				val = pow(max(val, vec3(0.0)), vec3(InvGamma));
-				return val;
+				return max(val, vec3(0.0, 0.0, 0.0));
 			}
+			#elif defined(COLOR_CORRECT_MODE1)
+			vec3 colorCorrect(vec3 c)
+			{
+				float v = dot(c, vec3(0.3, 0.56, 0.14));
+				vec3 valgray = mix(vec3(v, v, v), c, Saturation);
+				vec3 val = valgray * Contrast - (Contrast - 1.0) * 0.5;
+				val += Brightness * 0.5;
+				return max(val, vec3(0.0, 0.0, 0.0));
+			}
+			#elif defined(COLOR_CORRECT_MODE2)
+			vec3 colorCorrect(vec3 c)
+			{
+				float v = pow(dot(pow(c, vec3(2.2, 2.2, 2.2)), vec3(0.2126, 0.7152, 0.0722)), 1.0/2.2);
+				vec3 valgray = mix(vec3(v, v, v), c, Saturation);
+				vec3 val = valgray * Contrast - (Contrast - 1.0) * 0.5;
+				val += Brightness * 0.5;
+				return max(val, vec3(0.0, 0.0, 0.0));
+			}
+			#else
+			vec3 colorCorrect(vec3 c) { return c; }
+			#endif
 
 			void main()
 			{
-				if (HdrMode == 0)
-				{
-					outColor = vec4(dither(applyGamma(texture(texSampler, texCoord).rgb)), 1.0f);
-				}
-				else
-				{
-					outColor = vec4(linear(applyGamma(texture(texSampler, texCoord).rgb)), 1.0f);
-				}
+				vec3 color = gammaCorrect(colorCorrect(texture(texSampler, texCoord).rgb));
+			#if defined(HDR_MODE)
+				outColor = vec4(linearHdr(color), 1.0f);
+			#else
+				outColor = vec4(dither(color), 1.0f);
+			#endif
 			}
 		)";
 	}
