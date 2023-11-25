@@ -1660,6 +1660,8 @@ void UD3D11RenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Sur
 			{
 				NextSceneBuffers();
 				if (SceneVertexPos + vcount > SceneVertexBufferSize || SceneIndexPos + vcount * 3 > SceneIndexBufferSize) return; // Surface is too large for our buffers
+				SetPipeline(Surface.PolyFlags);
+				SetDescriptorSet(Surface.PolyFlags, tex, lightmap, macrotex, detailtex);
 			}
 
 			if (!SceneVertices || !SceneIndexes) return;
