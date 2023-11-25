@@ -223,6 +223,8 @@ void UploadManager::SubmitUploads()
 				VK_ACCESS_SHADER_READ_BIT,
 				VK_IMAGE_ASPECT_COLOR_BIT,
 				0, partialUpdates ? 1 : tex->pendingUploads[0].size());
+
+			tex->pendingUploads[i].clear();
 		}
 		afterBarrier.Execute(cmdbuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
 	}
