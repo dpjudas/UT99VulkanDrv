@@ -1590,8 +1590,6 @@ void UD3D11RenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Sur
 {
 	guard(UD3D11RenderDevice::DrawComplexSurface);
 
-	if (SceneVertexPos + 1000 > SceneVertexBufferSize || SceneIndexPos + 1000 > SceneIndexBufferSize) NextSceneBuffers();
-
 	CachedTexture* tex = Textures->GetTexture(Surface.Texture, !!(Surface.PolyFlags & PF_Masked));
 	CachedTexture* lightmap = Textures->GetTexture(Surface.LightMap, false);
 	CachedTexture* macrotex = Textures->GetTexture(Surface.MacroTexture, false);
@@ -1650,22 +1648,27 @@ void UD3D11RenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Sur
 	int drawcount = (Surface.PolyFlags & PF_Selected) && GIsEditor ? 2 : 1;
 	while (drawcount-- > 0)
 	{
-		if (!SceneVertices || !SceneIndexes) return;
-
-		uint32_t vpos = SceneVertexPos;
-		uint32_t ipos = SceneIndexPos;
-
-		SceneVertex* vptr = SceneVertices + vpos;
-		uint32_t* iptr = SceneIndexes + ipos;
-
-		uint32_t istart = ipos;
-		uint32_t icount = 0;
-
 		for (FSavedPoly* Poly = Facet.Polys; Poly; Poly = Poly->Next)
 		{
 			auto pts = Poly->Pts;
 			uint32_t vcount = Poly->NumPts;
 			if (vcount < 3) continue;
+
+			uint32_t icount = (vcount - 2) * 3;
+
+			if (SceneVertexPos + vcount > SceneVertexBufferSize || SceneIndexPos + vcount * 3 > SceneIndexBufferSize)
+			{
+				NextSceneBuffers();
+				if (SceneVertexPos + vcount > SceneVertexBufferSize || SceneIndexPos + vcount * 3 > SceneIndexBufferSize) return; // Surface is too large for our buffers
+			}
+
+			if (!SceneVertices || !SceneIndexes) return;
+
+			uint32_t vpos = SceneVertexPos;
+			uint32_t ipos = SceneIndexPos;
+
+			SceneVertex* vptr = SceneVertices + vpos;
+			uint32_t* iptr = SceneIndexes + ipos;
 
 			for (uint32_t i = 0; i < vcount; i++)
 			{
@@ -1696,12 +1699,9 @@ void UD3D11RenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Sur
 				*(iptr++) = i;
 			}
 
-			vpos += vcount;
-			icount += (vcount - 2) * 3;
+			SceneVertexPos += vcount;
+			SceneIndexPos += icount;
 		}
-
-		SceneVertexPos = vpos;
-		SceneIndexPos = ipos + icount;
 
 		if (drawcount != 0)
 		{
