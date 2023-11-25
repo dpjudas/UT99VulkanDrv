@@ -713,41 +713,22 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 
 	SetPipeline(RenderPasses->getPipeline(Surface.PolyFlags, UsesBindless));
 
-	ivec4 textureBinds;
-	if (UsesBindless)
-	{
-		textureBinds.x = DescriptorSets->GetTextureArrayIndex(Surface.PolyFlags, tex);
-		textureBinds.y = DescriptorSets->GetTextureArrayIndex(0, macrotex);
-		textureBinds.z = DescriptorSets->GetTextureArrayIndex(0, detailtex);
-		textureBinds.w = DescriptorSets->GetTextureArrayIndex(0, lightmap);
-
-		SetDescriptorSet(DescriptorSets->GetBindlessDescriptorSet(), true);
-	}
-	else
-	{
-		textureBinds.x = 0.0f;
-		textureBinds.y = 0.0f;
-		textureBinds.z = 0.0f;
-		textureBinds.w = 0.0f;
-
-		SetDescriptorSet(DescriptorSets->GetTextureDescriptorSet(Surface.PolyFlags, tex, lightmap, macrotex, detailtex), false);
-	}
-
-	uint32_t vpos = SceneVertexPos;
-	uint32_t ipos = SceneIndexPos;
-
-	SceneVertex* vptr = Buffers->SceneVertices + vpos;
-	uint32_t* iptr = Buffers->SceneIndexes + ipos;
-
-	uint32_t istart = ipos;
-	uint32_t icount = 0;
-
+	ivec4 textureBinds = SetDescriptorSet(Surface.PolyFlags, tex, lightmap, macrotex, detailtex);
 	vec4 color(1.0f);
 
 	// Draw the surface twice if the editor selected it. Second time highlighted without textures
 	int drawcount = (Surface.PolyFlags & PF_Selected) && GIsEditor ? 2 : 1;
 	while (drawcount-- > 0)
 	{
+		uint32_t vpos = SceneVertexPos;
+		uint32_t ipos = SceneIndexPos;
+
+		SceneVertex* vptr = Buffers->SceneVertices + vpos;
+		uint32_t* iptr = Buffers->SceneIndexes + ipos;
+
+		uint32_t istart = ipos;
+		uint32_t icount = 0;
+
 		for (FSavedPoly* Poly = Facet.Polys; Poly; Poly = Poly->Next)
 		{
 			auto pts = Poly->Pts;
@@ -788,19 +769,18 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 			icount += (vcount - 2) * 3;
 		}
 
+		SceneVertexPos = vpos;
+		SceneIndexPos = ipos + icount;
+
 		if (drawcount != 0)
 		{
 			SetPipeline(RenderPasses->getPipeline(PF_Highlighted, UsesBindless));
-			if (!UsesBindless)
-				SetDescriptorSet(DescriptorSets->GetTextureDescriptorSet(PF_Highlighted, tex, lightmap, macrotex, detailtex), false);
+			textureBinds = SetDescriptorSet(PF_Highlighted, nullptr);
 			color = vec4(0.0f, 0.0f, 0.05f, 0.20f);
 		}
 	}
 
 	Stats.ComplexSurfaces++;
-
-	SceneVertexPos = vpos;
-	SceneIndexPos = ipos + icount;
 
 	unguard;
 }
@@ -814,23 +794,7 @@ void UVulkanRenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& In
 	SetPipeline(RenderPasses->getPipeline(PolyFlags, UsesBindless));
 
 	CachedTexture* tex = Textures->GetTexture(&Info, !!(PolyFlags & PF_Masked));
-	ivec4 textureBinds;
-	if (UsesBindless)
-	{
-		textureBinds.x = DescriptorSets->GetTextureArrayIndex(PolyFlags, tex);
-		textureBinds.y = 0;
-		textureBinds.z = 0;
-		textureBinds.w = 0;
-		SetDescriptorSet(DescriptorSets->GetBindlessDescriptorSet(), true);
-	}
-	else
-	{
-		textureBinds.x = 0;
-		textureBinds.y = 0;
-		textureBinds.z = 0;
-		textureBinds.w = 0;
-		SetDescriptorSet(DescriptorSets->GetTextureDescriptorSet(PolyFlags, tex), false);
-	}
+	ivec4 textureBinds = SetDescriptorSet(PolyFlags, tex);
 
 	float UMult = GetUMult(Info);
 	float VMult = GetVMult(Info);
@@ -930,23 +894,7 @@ void UVulkanRenderDevice::DrawGouraudTriangles(const FSceneNode* Frame, const FT
 	SetPipeline(RenderPasses->getPipeline(PolyFlags, UsesBindless));
 
 	CachedTexture* tex = Textures->GetTexture(const_cast<FTextureInfo*>(&Info), !!(PolyFlags & PF_Masked));
-	ivec4 textureBinds;
-	if (UsesBindless)
-	{
-		textureBinds.x = DescriptorSets->GetTextureArrayIndex(PolyFlags, tex);
-		textureBinds.y = 0;
-		textureBinds.z = 0;
-		textureBinds.w = 0;
-		SetDescriptorSet(DescriptorSets->GetBindlessDescriptorSet(), true);
-	}
-	else
-	{
-		textureBinds.x = 0;
-		textureBinds.y = 0;
-		textureBinds.z = 0;
-		textureBinds.w = 0;
-		SetDescriptorSet(DescriptorSets->GetTextureDescriptorSet(PolyFlags, tex), false);
-	}
+	ivec4 textureBinds = SetDescriptorSet(PolyFlags, tex);
 
 	float UMult = GetUMult(Info);
 	float VMult = GetVMult(Info);
@@ -1085,25 +1033,7 @@ void UVulkanRenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT 
 
 	SetPipeline(RenderPasses->getPipeline(PolyFlags, UsesBindless));
 
-	ivec4 textureBinds;
-	if (UsesBindless)
-	{
-		textureBinds.x = DescriptorSets->GetTextureArrayIndex(PolyFlags, tex, true);
-		textureBinds.y = 0.0f;
-		textureBinds.z = 0.0f;
-		textureBinds.w = 0.0f;
-
-		SetDescriptorSet(DescriptorSets->GetBindlessDescriptorSet(), true);
-	}
-	else
-	{
-		textureBinds.x = 0.0f;
-		textureBinds.y = 0.0f;
-		textureBinds.z = 0.0f;
-		textureBinds.w = 0.0f;
-
-		SetDescriptorSet(DescriptorSets->GetTextureDescriptorSet(PolyFlags, tex, nullptr, nullptr, nullptr, true), false);
-	}
+	ivec4 textureBinds = SetDescriptorSet(PolyFlags, tex, true);
 
 	float UMult = tex ? GetUMult(Info) : 0.0f;
 	float VMult = tex ? GetVMult(Info) : 0.0f;
@@ -1189,25 +1119,7 @@ void UVulkanRenderDevice::Draw3DLine(FSceneNode* Frame, FPlane Color, DWORD Line
 	{
 		SetPipeline(RenderPasses->getLinePipeline(OccludeLines, UsesBindless));
 
-		ivec4 textureBinds;
-		if (UsesBindless)
-		{
-			textureBinds.x = DescriptorSets->GetTextureArrayIndex(PF_Highlighted, nullptr, true);
-			textureBinds.y = 0.0f;
-			textureBinds.z = 0.0f;
-			textureBinds.w = 0.0f;
-
-			SetDescriptorSet(DescriptorSets->GetBindlessDescriptorSet(), true);
-		}
-		else
-		{
-			textureBinds.x = 0.0f;
-			textureBinds.y = 0.0f;
-			textureBinds.z = 0.0f;
-			textureBinds.w = 0.0f;
-
-			SetDescriptorSet(DescriptorSets->GetTextureDescriptorSet(PF_Highlighted, nullptr, nullptr, nullptr, nullptr, true), false);
-		}
+		ivec4 textureBinds = SetDescriptorSet(PF_Highlighted, nullptr);
 
 		SceneVertex* v = &Buffers->SceneVertices[SceneVertexPos];
 		uint32_t* iptr = Buffers->SceneIndexes + SceneIndexPos;
@@ -1238,25 +1150,7 @@ void UVulkanRenderDevice::Draw2DLine(FSceneNode* Frame, FPlane Color, DWORD Line
 
 	SetPipeline(RenderPasses->getLinePipeline(OccludeLines, UsesBindless));
 
-	ivec4 textureBinds;
-	if (UsesBindless)
-	{
-		textureBinds.x = DescriptorSets->GetTextureArrayIndex(PF_Highlighted, nullptr, true);
-		textureBinds.y = 0.0f;
-		textureBinds.z = 0.0f;
-		textureBinds.w = 0.0f;
-
-		SetDescriptorSet(DescriptorSets->GetBindlessDescriptorSet(), true);
-	}
-	else
-	{
-		textureBinds.x = 0.0f;
-		textureBinds.y = 0.0f;
-		textureBinds.z = 0.0f;
-		textureBinds.w = 0.0f;
-
-		SetDescriptorSet(DescriptorSets->GetTextureDescriptorSet(PF_Highlighted, nullptr, nullptr, nullptr, nullptr, true), false);
-	}
+	ivec4 textureBinds = SetDescriptorSet(PF_Highlighted, nullptr);
 
 	SceneVertex* v = &Buffers->SceneVertices[SceneVertexPos];
 	uint32_t* iptr = Buffers->SceneIndexes + SceneIndexPos;
@@ -1282,25 +1176,7 @@ void UVulkanRenderDevice::Draw2DPoint(FSceneNode* Frame, FPlane Color, DWORD Lin
 
 	SetPipeline(RenderPasses->getPointPipeline(OccludeLines, UsesBindless));
 
-	ivec4 textureBinds;
-	if (UsesBindless)
-	{
-		textureBinds.x = DescriptorSets->GetTextureArrayIndex(PF_Highlighted, nullptr, true);
-		textureBinds.y = 0.0f;
-		textureBinds.z = 0.0f;
-		textureBinds.w = 0.0f;
-
-		SetDescriptorSet(DescriptorSets->GetBindlessDescriptorSet(), true);
-	}
-	else
-	{
-		textureBinds.x = 0.0f;
-		textureBinds.y = 0.0f;
-		textureBinds.z = 0.0f;
-		textureBinds.w = 0.0f;
-
-		SetDescriptorSet(DescriptorSets->GetTextureDescriptorSet(PF_Highlighted, nullptr, nullptr, nullptr, nullptr, true), false);
-	}
+	ivec4 textureBinds = SetDescriptorSet(PF_Highlighted, nullptr);
 
 	SceneVertex* v = &Buffers->SceneVertices[SceneVertexPos];
 

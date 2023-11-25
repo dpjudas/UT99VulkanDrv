@@ -272,7 +272,7 @@ void RenderPassManager::CreatePipelines()
 			builder.AddColorBlendAttachment(ColorBlendAttachmentBuilder().BlendMode(VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA).Create());
 			builder.AddColorBlendAttachment(ColorBlendAttachmentBuilder().Create());
 
-			builder.DepthStencilEnable(i == 1, false, false);
+			builder.DepthStencilEnable(false, false, false);
 			builder.RasterizationSamples(renderer->Textures->Scene->SceneSamples);
 			builder.DebugName(debugName[type]);
 

@@ -67,6 +67,12 @@ void DescriptorSetManager::ClearCache()
 
 int DescriptorSetManager::GetTextureArrayIndex(DWORD PolyFlags, CachedTexture* tex, bool clamp)
 {
+	if (NextBindlessIndex == 0)
+	{
+		WriteBindless.AddCombinedImageSampler(SceneBindlessDescriptorSet.get(), 0, 0, renderer->Textures->NullTextureView.get(), renderer->Samplers->Samplers[0].get(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+		NextBindlessIndex = 1;
+	}
+
 	if (!tex)
 		return 0;
 
