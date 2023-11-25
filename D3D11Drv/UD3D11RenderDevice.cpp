@@ -1906,28 +1906,38 @@ void UD3D11RenderDevice::DrawGouraudTriangles(const FSceneNode* Frame, const FTe
 	size_t istart = SceneIndexPos;
 	size_t icount = 0;
 
-	uint32_t* iptr = SceneIndexes + istart;
-	for (uint32_t i = 2; i < vcount; i += 3)
+	if (PolyFlags & PF_TwoSided)
 	{
-		// If outcoded, skip it.
-		if (Pts[icount].Flags & Pts[icount + 1].Flags & Pts[icount + 2].Flags)
-			continue;
-
-		bool backface = (PolyFlags & PF_TwoSided) && FTriple(Pts[icount].Point, Pts[icount + 1].Point, Pts[icount + 2].Point) <= 0.0;
-		if (mirror) backface = !backface;
-		if (!backface)
+		uint32_t* iptr = SceneIndexes + istart;
+		for (uint32_t i = 2; i < vcount; i += 3)
 		{
-			*(iptr++) = vstart + i - 2;
-			*(iptr++) = vstart + i - 1;
+			// If outcoded, skip it.
+			if (Pts[icount].Flags & Pts[icount + 1].Flags & Pts[icount + 2].Flags)
+				continue;
+
 			*(iptr++) = vstart + i;
+			*(iptr++) = vstart + i - 1;
+			*(iptr++) = vstart + i - 2;
 			icount += 3;
 		}
-		else if (PolyFlags & PF_TwoSided)
+	}
+	else
+	{
+		uint32_t* iptr = SceneIndexes + istart;
+		for (uint32_t i = 2; i < vcount; i += 3)
 		{
-			*(iptr++) = vstart + i;
-			*(iptr++) = vstart + i - 1;
-			*(iptr++) = vstart + i - 2;
-			icount += 3;
+			// If outcoded, skip it.
+			if (Pts[icount].Flags & Pts[icount + 1].Flags & Pts[icount + 2].Flags)
+				continue;
+
+			bool backface = FTriple(Pts[icount].Point, Pts[icount + 1].Point, Pts[icount + 2].Point) <= 0.0;
+			if (mirror == backface)
+			{
+				*(iptr++) = vstart + i - 2;
+				*(iptr++) = vstart + i - 1;
+				*(iptr++) = vstart + i;
+				icount += 3;
+			}
 		}
 	}
 
