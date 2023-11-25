@@ -10,7 +10,11 @@ class VulkanSurfaceCapabilities
 {
 public:
 	VkSurfaceCapabilitiesKHR Capabilites = { };
+#ifdef WIN32
 	VkSurfaceCapabilitiesFullScreenExclusiveEXT FullScreenExclusive = { VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_FULL_SCREEN_EXCLUSIVE_EXT };
+#else
+	struct { void* pNext = nullptr; VkBool32 fullScreenExclusiveSupported = 0; } FullScreenExclusive;
+#endif
 	std::vector<VkPresentModeKHR> PresentModes;
 	std::vector<VkSurfaceFormatKHR> Formats;
 };

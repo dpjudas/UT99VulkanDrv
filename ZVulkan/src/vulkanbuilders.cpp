@@ -1,4 +1,3 @@
-
 #include "vulkanbuilders.h"
 #include "vulkansurface.h"
 #include "vulkancompatibledevice.h"
@@ -128,29 +127,143 @@ ShaderBuilder::ShaderBuilder()
 {
 }
 
-ShaderBuilder& ShaderBuilder::VertexShader(const std::string& c)
+ShaderBuilder& ShaderBuilder::Type(ShaderType type)
 {
-	code = c;
-	stage = EShLanguage::EShLangVertex;
+	switch (type)
+	{
+	case ShaderType::Vertex: stage = EShLanguage::EShLangVertex; break;
+	case ShaderType::TessControl: stage = EShLanguage::EShLangTessControl; break;
+	case ShaderType::TessEvaluation: stage = EShLanguage::EShLangTessEvaluation; break;
+	case ShaderType::Geometry: stage = EShLanguage::EShLangGeometry; break;
+	case ShaderType::Fragment: stage = EShLanguage::EShLangFragment; break;
+	case ShaderType::Compute: stage = EShLanguage::EShLangCompute; break;
+	}
 	return *this;
 }
 
-ShaderBuilder& ShaderBuilder::FragmentShader(const std::string& c)
+ShaderBuilder& ShaderBuilder::AddSource(const std::string& name, const std::string& code)
 {
-	code = c;
-	stage = EShLanguage::EShLangFragment;
+	sources.push_back({ name, code });
 	return *this;
 }
+
+ShaderBuilder& ShaderBuilder::OnIncludeSystem(std::function<ShaderIncludeResult(std::string headerName, std::string includerName, size_t inclusionDepth)> onIncludeSystem)
+{
+	this->onIncludeSystem = std::move(onIncludeSystem);
+	return *this;
+}
+
+ShaderBuilder& ShaderBuilder::OnIncludeLocal(std::function<ShaderIncludeResult(std::string headerName, std::string includerName, size_t inclusionDepth)> onIncludeLocal)
+{
+	this->onIncludeLocal = std::move(onIncludeLocal);
+	return *this;
+}
+
+class ShaderBuilderIncluderImpl : public glslang::TShader::Includer
+{
+public:
+	ShaderBuilderIncluderImpl(ShaderBuilder* shaderBuilder) : shaderBuilder(shaderBuilder)
+	{
+	}
+
+	IncludeResult* includeSystem(const char* headerName, const char* includerName, size_t inclusionDepth) override
+	{
+		if (!shaderBuilder->onIncludeSystem)
+		{
+			return nullptr;
+		}
+
+		try
+		{
+			std::unique_ptr<ShaderIncludeResult> result;
+			try
+			{
+				result = std::make_unique<ShaderIncludeResult>(shaderBuilder->onIncludeSystem(headerName, includerName, inclusionDepth));
+			}
+			catch (const std::exception& e)
+			{
+				result = std::make_unique<ShaderIncludeResult>(e.what());
+			}
+
+			if (!result || (result->name.empty() && result->text.empty()))
+			{
+				return nullptr;
+			}
+
+			IncludeResult* outer = new IncludeResult(result->name, result->text.data(), result->text.size(), result.get());
+			result.release();
+			return outer;
+		}
+		catch (...)
+		{
+			return nullptr;
+		}
+	}
+
+	IncludeResult* includeLocal(const char* headerName, const char* includerName, size_t inclusionDepth) override
+	{
+		if (!shaderBuilder->onIncludeLocal)
+		{
+			return nullptr;
+		}
+
+		try
+		{
+			std::unique_ptr<ShaderIncludeResult> result;
+			try
+			{
+				result = std::make_unique<ShaderIncludeResult>(shaderBuilder->onIncludeLocal(headerName, includerName, inclusionDepth));
+			}
+			catch (const std::exception& e)
+			{
+				result = std::make_unique<ShaderIncludeResult>(e.what());
+			}
+
+			if (!result || (result->name.empty() && result->text.empty()))
+			{
+				return nullptr;
+			}
+
+			IncludeResult* outer = new IncludeResult(result->name, result->text.data(), result->text.size(), result.get());
+			result.release();
+			return outer;
+		}
+		catch (...)
+		{
+			return nullptr;
+		}
+	}
+
+	void releaseInclude(IncludeResult* result) override
+	{
+		if (result)
+		{
+			delete (ShaderIncludeResult*)result->userData;
+			delete result;
+		}
+	}
+
+private:
+	ShaderBuilder* shaderBuilder = nullptr;
+};
 
 std::unique_ptr<VulkanShader> ShaderBuilder::Create(const char *shadername, VulkanDevice *device)
 {
 	EShLanguage stage = (EShLanguage)this->stage;
-	const char *sources[] = { code.c_str() };
+
+	std::vector<const char*> namesC, sourcesC;
+	std::vector<int> lengthsC;
+	for (const auto& s : sources)
+	{
+		namesC.push_back(s.first.c_str());
+		sourcesC.push_back(s.second.c_str());
+		lengthsC.push_back((int)s.second.size());
+	}
 
 	TBuiltInResource resources = DefaultTBuiltInResource;
 
 	glslang::TShader shader(stage);
-	shader.setStrings(sources, 1);
+	shader.setStringsWithLengthsAndNames(sourcesC.data(), lengthsC.data(), namesC.data(), (int)sources.size());
 	shader.setEnvInput(glslang::EShSourceGlsl, stage, glslang::EShClientVulkan, 100);
     if (device->Instance->ApiVersion >= VK_API_VERSION_1_2)
     {
@@ -162,10 +275,12 @@ std::unique_ptr<VulkanShader> ShaderBuilder::Create(const char *shadername, Vulk
         shader.setEnvClient(glslang::EShClientVulkan, glslang::EShTargetVulkan_1_0);
         shader.setEnvTarget(glslang::EShTargetSpv, glslang::EShTargetSpv_1_0);
     }
-	bool compileSuccess = shader.parse(&resources, 110, false, EShMsgVulkanRules);
+
+	ShaderBuilderIncluderImpl includer(this);
+	bool compileSuccess = shader.parse(&resources, 110, false, EShMsgVulkanRules, includer);
 	if (!compileSuccess)
 	{
-		throw std::runtime_error(std::string("Shader compile failed: ") + shader.getInfoLog());
+		VulkanError((std::string("Shader compile failed: ") + shader.getInfoLog()).c_str());
 	}
 
 	glslang::TProgram program;
@@ -173,13 +288,13 @@ std::unique_ptr<VulkanShader> ShaderBuilder::Create(const char *shadername, Vulk
 	bool linkSuccess = program.link(EShMsgDefault);
 	if (!linkSuccess)
 	{
-		throw std::runtime_error(std::string("Shader link failed: ") + program.getInfoLog());
+		VulkanError((std::string("Shader link failed: ") + program.getInfoLog()).c_str());
 	}
 
 	glslang::TIntermediate *intermediate = program.getIntermediate(stage);
 	if (!intermediate)
 	{
-		throw std::runtime_error("Internal shader compiler error");
+		VulkanError("Internal shader compiler error");
 	}
 
 	glslang::SpvOptions spvOptions;
@@ -199,7 +314,7 @@ std::unique_ptr<VulkanShader> ShaderBuilder::Create(const char *shadername, Vulk
 	VkShaderModule shaderModule;
 	VkResult result = vkCreateShaderModule(device->device, &createInfo, nullptr, &shaderModule);
 	if (result != VK_SUCCESS)
-		throw std::runtime_error("Could not create vulkan shader module");
+		VulkanError("Could not create vulkan shader module");
 
 	auto obj = std::make_unique<VulkanShader>(device, shaderModule);
 	if (debugName)
@@ -389,13 +504,15 @@ ImageViewBuilder& ImageViewBuilder::Type(VkImageViewType type)
 	return *this;
 }
 
-ImageViewBuilder& ImageViewBuilder::Image(VulkanImage* image, VkFormat format, VkImageAspectFlags aspectMask)
+ImageViewBuilder& ImageViewBuilder::Image(VulkanImage* image, VkFormat format, VkImageAspectFlags aspectMask, int mipLevel, int arrayLayer, int levelCount, int layerCount)
 {
 	viewInfo.image = image->image;
 	viewInfo.format = format;
-	viewInfo.subresourceRange.levelCount = image->mipLevels;
+	viewInfo.subresourceRange.levelCount = levelCount == 0 ? image->mipLevels : levelCount;
 	viewInfo.subresourceRange.aspectMask = aspectMask;
-	viewInfo.subresourceRange.layerCount = image->layerCount;
+	viewInfo.subresourceRange.layerCount = layerCount == 0 ? image->layerCount : layerCount;
+	viewInfo.subresourceRange.baseMipLevel = mipLevel;
+	viewInfo.subresourceRange.baseArrayLayer = arrayLayer;
 	return *this;
 }
 
@@ -588,7 +705,7 @@ std::unique_ptr<VulkanAccelerationStructure> AccelerationStructureBuilder::Creat
 	VkAccelerationStructureKHR hande = {};
 	VkResult result = vkCreateAccelerationStructureKHR(device->device, &createInfo, nullptr, &hande);
 	if (result != VK_SUCCESS)
-		throw std::runtime_error("vkCreateAccelerationStructureKHR failed");
+		VulkanError("vkCreateAccelerationStructureKHR failed");
 	auto obj = std::make_unique<VulkanAccelerationStructure>(device, hande);
 	if (debugName)
 		obj->SetDebugName(debugName);
@@ -1343,12 +1460,12 @@ PipelineBarrier& PipelineBarrier::AddBuffer(VulkanBuffer* buffer, VkDeviceSize o
 	return *this;
 }
 
-PipelineBarrier& PipelineBarrier::AddImage(VulkanImage* image, VkImageLayout oldLayout, VkImageLayout newLayout, VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask, VkImageAspectFlags aspectMask, int baseMipLevel, int levelCount)
+PipelineBarrier& PipelineBarrier::AddImage(VulkanImage* image, VkImageLayout oldLayout, VkImageLayout newLayout, VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask, VkImageAspectFlags aspectMask, int baseMipLevel, int levelCount, int baseArrayLayer, int layerCount)
 {
-	return AddImage(image->image, oldLayout, newLayout, srcAccessMask, dstAccessMask, aspectMask, baseMipLevel, levelCount);
+	return AddImage(image->image, oldLayout, newLayout, srcAccessMask, dstAccessMask, aspectMask, baseMipLevel, levelCount, baseArrayLayer, layerCount);
 }
 
-PipelineBarrier& PipelineBarrier::AddImage(VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout, VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask, VkImageAspectFlags aspectMask, int baseMipLevel, int levelCount)
+PipelineBarrier& PipelineBarrier::AddImage(VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout, VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask, VkImageAspectFlags aspectMask, int baseMipLevel, int levelCount, int baseArrayLayer, int layerCount)
 {
 	VkImageMemoryBarrier barrier = { };
 	barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -1362,8 +1479,8 @@ PipelineBarrier& PipelineBarrier::AddImage(VkImage image, VkImageLayout oldLayou
 	barrier.subresourceRange.aspectMask = aspectMask;
 	barrier.subresourceRange.baseMipLevel = baseMipLevel;
 	barrier.subresourceRange.levelCount = levelCount;
-	barrier.subresourceRange.baseArrayLayer = 0;
-	barrier.subresourceRange.layerCount = 1;
+	barrier.subresourceRange.baseArrayLayer = baseArrayLayer;
+	barrier.subresourceRange.layerCount = layerCount;
 	imageMemoryBarriers.push_back(barrier);
 	return *this;
 }
@@ -1707,7 +1824,8 @@ std::vector<VulkanCompatibleDevice> VulkanDeviceBuilder::FindDevices(const std::
 
 		// Check if all required features are there
 		if (info.Features.Features.samplerAnisotropy != VK_TRUE ||
-			info.Features.Features.fragmentStoresAndAtomics != VK_TRUE)
+			info.Features.Features.fragmentStoresAndAtomics != VK_TRUE ||
+			info.Features.Features.multiDrawIndirect != VK_TRUE)
 			continue;
 
 		VulkanCompatibleDevice dev;
@@ -1730,6 +1848,7 @@ std::vector<VulkanCompatibleDevice> VulkanDeviceBuilder::FindDevices(const std::
 		enabledFeatures.Features.fragmentStoresAndAtomics = deviceFeatures.Features.fragmentStoresAndAtomics;
 		enabledFeatures.Features.depthClamp = deviceFeatures.Features.depthClamp;
 		enabledFeatures.Features.shaderClipDistance = deviceFeatures.Features.shaderClipDistance;
+		enabledFeatures.Features.multiDrawIndirect = deviceFeatures.Features.multiDrawIndirect;
 		enabledFeatures.BufferDeviceAddress.bufferDeviceAddress = deviceFeatures.BufferDeviceAddress.bufferDeviceAddress;
 		enabledFeatures.AccelerationStructure.accelerationStructure = deviceFeatures.AccelerationStructure.accelerationStructure;
 		enabledFeatures.RayQuery.rayQuery = deviceFeatures.RayQuery.rayQuery;
@@ -1820,4 +1939,65 @@ VulkanSwapChainBuilder::VulkanSwapChainBuilder()
 std::shared_ptr<VulkanSwapChain> VulkanSwapChainBuilder::Create(VulkanDevice* device)
 {
 	return std::make_shared<VulkanSwapChain>(device);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
+BufferTransfer& BufferTransfer::AddBuffer(VulkanBuffer* buffer, size_t offset, const void* data, size_t size)
+{
+	bufferCopies.push_back({ buffer, offset, data, size, nullptr, 0 });
+	return *this;
+}
+
+BufferTransfer& BufferTransfer::AddBuffer(VulkanBuffer* buffer, const void* data, size_t size)
+{
+	bufferCopies.push_back({ buffer, 0, data, size, nullptr, 0 });
+	return *this;
+}
+
+BufferTransfer& BufferTransfer::AddBuffer(VulkanBuffer* buffer, const void* data0, size_t size0, const void* data1, size_t size1)
+{
+	bufferCopies.push_back({ buffer, 0, data0, size0, data1, size1 });
+	return *this;
+}
+
+std::unique_ptr<VulkanBuffer> BufferTransfer::Execute(VulkanDevice* device, VulkanCommandBuffer* cmdbuffer)
+{
+	size_t transferbuffersize = 0;
+	for (const auto& copy : bufferCopies)
+		transferbuffersize += copy.size0 + copy.size1;
+
+	if (transferbuffersize == 0)
+		return nullptr;
+
+	auto transferBuffer = BufferBuilder()
+		.Usage(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY)
+		.Size(transferbuffersize)
+		.DebugName("BufferTransfer.transferBuffer")
+		.Create(device);
+
+	uint8_t* data = (uint8_t*)transferBuffer->Map(0, transferbuffersize);
+	size_t pos = 0;
+	for (const auto& copy : bufferCopies)
+	{
+		memcpy(data + pos, copy.data0, copy.size0);
+		pos += copy.size0;
+		memcpy(data + pos, copy.data1, copy.size1);
+		pos += copy.size1;
+	}
+	transferBuffer->Unmap();
+
+	pos = 0;
+	for (const auto& copy : bufferCopies)
+	{
+		if (copy.size0 > 0)
+			cmdbuffer->copyBuffer(transferBuffer.get(), copy.buffer, pos, copy.offset, copy.size0);
+		pos += copy.size0;
+
+		if (copy.size1 > 0)
+			cmdbuffer->copyBuffer(transferBuffer.get(), copy.buffer, pos, copy.offset + copy.size0, copy.size1);
+		pos += copy.size1;
+	}
+
+	return transferBuffer;
 }

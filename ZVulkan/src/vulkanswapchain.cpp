@@ -34,13 +34,13 @@ void VulkanSwapChain::Create(int width, int height, int imageCount, bool vsync, 
 		uint32_t imageCount;
 		VkResult result = vkGetSwapchainImagesKHR(device->device, swapchain, &imageCount, nullptr);
 		if (result != VK_SUCCESS)
-			throw std::runtime_error("vkGetSwapchainImagesKHR failed");
+			VulkanError("vkGetSwapchainImagesKHR failed");
 
 		std::vector<VkImage> swapchainImages;
 		swapchainImages.resize(imageCount);
 		result = vkGetSwapchainImagesKHR(device->device, swapchain, &imageCount, swapchainImages.data());
 		if (result != VK_SUCCESS)
-			throw std::runtime_error("vkGetSwapchainImagesKHR failed (2)");
+			VulkanError("vkGetSwapchainImagesKHR failed (2)");
 
 		for (VkImage vkimage : swapchainImages)
 		{
@@ -103,7 +103,7 @@ bool VulkanSwapChain::CreateSwapchain(int width, int height, int imageCount, boo
 	}
 
 	if (caps.PresentModes.empty())
-		throw std::runtime_error("No surface present modes supported");
+		VulkanError("No surface present modes supported");
 
 	bool supportsFifoRelaxed = std::find(caps.PresentModes.begin(), caps.PresentModes.end(), VK_PRESENT_MODE_FIFO_RELAXED_KHR) != caps.PresentModes.end();
 	bool supportsMailbox = std::find(caps.PresentModes.begin(), caps.PresentModes.end(), VK_PRESENT_MODE_MAILBOX_KHR) != caps.PresentModes.end();
@@ -117,10 +117,20 @@ bool VulkanSwapChain::CreateSwapchain(int width, int height, int imageCount, boo
 	}
 	else
 	{
-		if (supportsImmediate)
-			presentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
-		else if (supportsMailbox)
-			presentMode = VK_PRESENT_MODE_MAILBOX_KHR;
+		if (exclusivefullscreen) // Exclusive full screen doesn't seem to support mailbox for some reason, even if it is advertised
+		{
+			if (supportsImmediate)
+				presentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
+			else if (supportsMailbox)
+				presentMode = VK_PRESENT_MODE_MAILBOX_KHR;
+		}
+		else
+		{
+			if (supportsMailbox)
+				presentMode = VK_PRESENT_MODE_MAILBOX_KHR;
+			else if (supportsImmediate)
+				presentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
+		}
 	}
 
 	SelectFormat(caps, hdr);
@@ -140,8 +150,8 @@ bool VulkanSwapChain::CreateSwapchain(int width, int height, int imageCount, boo
 	imageCount = std::max(caps.Capabilites.minImageCount, (uint32_t)imageCount);
 
 	VkSwapchainCreateInfoKHR swapChainCreateInfo = { VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR };
-	VkSurfaceFullScreenExclusiveInfoEXT exclusiveInfo = { VK_STRUCTURE_TYPE_SURFACE_FULL_SCREEN_EXCLUSIVE_INFO_EXT };
 #ifdef WIN32
+	VkSurfaceFullScreenExclusiveInfoEXT exclusiveInfo = { VK_STRUCTURE_TYPE_SURFACE_FULL_SCREEN_EXCLUSIVE_INFO_EXT };
 	VkSurfaceFullScreenExclusiveWin32InfoEXT exclusiveWin32Info = { VK_STRUCTURE_TYPE_SURFACE_FULL_SCREEN_EXCLUSIVE_WIN32_INFO_EXT };
 #endif
 
@@ -173,17 +183,15 @@ bool VulkanSwapChain::CreateSwapchain(int width, int height, int imageCount, boo
 	swapChainCreateInfo.clipped = VK_TRUE; // Applications SHOULD set this value to VK_TRUE if they do not expect to read back the content of presentable images before presenting them or after reacquiring them, and if their fragment shaders do not have any side effects that require them to run for all pixels in the presentable image
 	swapChainCreateInfo.oldSwapchain = swapchain;
 
+#ifdef WIN32
 	if (exclusivefullscreen)
 	{
 		swapChainCreateInfo.pNext = &exclusiveInfo;
-#ifdef WIN32
 		exclusiveInfo.pNext = &exclusiveWin32Info;
 		exclusiveInfo.fullScreenExclusive = VK_FULL_SCREEN_EXCLUSIVE_APPLICATION_CONTROLLED_EXT;
 		exclusiveWin32Info.hmonitor = MonitorFromWindow(device->Surface->Window, MONITOR_DEFAULTTONEAREST);
-#else
-		exclusiveInfo.fullScreenExclusive = VK_FULL_SCREEN_EXCLUSIVE_ALLOWED_EXT;
-#endif
 	}
+#endif
 
 	VkResult result = vkCreateSwapchainKHR(device->device, &swapChainCreateInfo, nullptr, &swapchain);
 
@@ -233,7 +241,8 @@ int VulkanSwapChain::AcquireImage(VulkanSemaphore* semaphore, VulkanFence* fence
 	}
 	else
 	{
-		throw std::runtime_error("Failed to acquire next image!");
+		VulkanError("Failed to acquire next image!");
+		return -1;
 	}
 }
 
@@ -262,15 +271,15 @@ void VulkanSwapChain::QueuePresent(int imageIndex, VulkanSemaphore* semaphore)
 		// The spec says we can recover from this.
 		// However, if we are out of memory it is better to crash now than in some other weird place further away from the source of the problem.
 
-		throw std::runtime_error("vkQueuePresentKHR failed: out of memory");
+		VulkanError("vkQueuePresentKHR failed: out of memory");
 	}
 	else if (result == VK_ERROR_DEVICE_LOST)
 	{
-		throw std::runtime_error("vkQueuePresentKHR failed: device lost");
+		VulkanError("vkQueuePresentKHR failed: device lost");
 	}
 	else
 	{
-		throw std::runtime_error("vkQueuePresentKHR failed");
+		VulkanError("vkQueuePresentKHR failed");
 	}
 }
 
@@ -281,20 +290,18 @@ VulkanSurfaceCapabilities VulkanSwapChain::GetSurfaceCapabilities(bool exclusive
 	VulkanSurfaceCapabilities caps;
 
 	VkPhysicalDeviceSurfaceInfo2KHR surfaceInfo = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SURFACE_INFO_2_KHR };
-	VkSurfaceFullScreenExclusiveInfoEXT exclusiveInfo = { VK_STRUCTURE_TYPE_SURFACE_FULL_SCREEN_EXCLUSIVE_INFO_EXT };
 #ifdef WIN32
+	VkSurfaceFullScreenExclusiveInfoEXT exclusiveInfo = { VK_STRUCTURE_TYPE_SURFACE_FULL_SCREEN_EXCLUSIVE_INFO_EXT };
 	VkSurfaceFullScreenExclusiveWin32InfoEXT exclusiveWin32Info = { VK_STRUCTURE_TYPE_SURFACE_FULL_SCREEN_EXCLUSIVE_WIN32_INFO_EXT };
 #endif
 
+#ifdef WIN32
 	if (exclusivefullscreen)
 	{
-#ifdef WIN32
 		exclusiveInfo.fullScreenExclusive = VK_FULL_SCREEN_EXCLUSIVE_APPLICATION_CONTROLLED_EXT;
 		exclusiveWin32Info.hmonitor = MonitorFromWindow(device->Surface->Window, MONITOR_DEFAULTTONEAREST);
-#else
-		exclusiveInfo.fullScreenExclusive = VK_FULL_SCREEN_EXCLUSIVE_ALLOWED_EXT;
-#endif
 	}
+#endif
 
 	surfaceInfo.surface = device->Surface->Surface;
 
@@ -302,28 +309,31 @@ VulkanSurfaceCapabilities VulkanSwapChain::GetSurfaceCapabilities(bool exclusive
 	{
 		const void** next = &surfaceInfo.pNext;
 
+#ifdef WIN32
 		if (exclusivefullscreen && device->SupportsExtension(VK_EXT_FULL_SCREEN_EXCLUSIVE_EXTENSION_NAME))
 		{
 			*next = &exclusiveInfo;
 			next = const_cast<const void**>(&exclusiveInfo.pNext);
 
-#ifdef WIN32
-			* next = &exclusiveWin32Info;
+			*next = &exclusiveWin32Info;
 			next = &exclusiveWin32Info.pNext;
-#endif
 		}
+#endif
 
 		VkSurfaceCapabilities2KHR caps2 = { VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_2_KHR };
 		next = const_cast<const void**>(&caps2.pNext);
+
+#ifdef WIN32
 		if (exclusivefullscreen && device->SupportsExtension(VK_EXT_FULL_SCREEN_EXCLUSIVE_EXTENSION_NAME))
 		{
 			*next = &caps.FullScreenExclusive;
 			next = const_cast<const void**>(&caps.FullScreenExclusive.pNext);
 		}
+#endif
 
 		VkResult result = vkGetPhysicalDeviceSurfaceCapabilities2KHR(device->PhysicalDevice.Device, &surfaceInfo, &caps2);
 		if (result != VK_SUCCESS)
-			throw std::runtime_error("vkGetPhysicalDeviceSurfaceCapabilities2KHR failed");
+			VulkanError("vkGetPhysicalDeviceSurfaceCapabilities2KHR failed");
 
 		caps.Capabilites = caps2.surfaceCapabilities;
 	}
@@ -331,9 +341,10 @@ VulkanSurfaceCapabilities VulkanSwapChain::GetSurfaceCapabilities(bool exclusive
 	{
 		VkResult result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device->PhysicalDevice.Device, device->Surface->Surface, &caps.Capabilites);
 		if (result != VK_SUCCESS)
-			throw std::runtime_error("vkGetPhysicalDeviceSurfaceCapabilitiesKHR failed");
+			VulkanError("vkGetPhysicalDeviceSurfaceCapabilitiesKHR failed");
 	}
 
+#ifdef WIN32
 	if (exclusivefullscreen && device->SupportsExtension(VK_EXT_FULL_SCREEN_EXCLUSIVE_EXTENSION_NAME))
 	{
 		const void** next = &surfaceInfo.pNext;
@@ -341,29 +352,30 @@ VulkanSurfaceCapabilities VulkanSwapChain::GetSurfaceCapabilities(bool exclusive
 		uint32_t presentModeCount = 0;
 		VkResult result = vkGetPhysicalDeviceSurfacePresentModes2EXT(device->PhysicalDevice.Device, &surfaceInfo, &presentModeCount, nullptr);
 		if (result != VK_SUCCESS)
-			throw std::runtime_error("vkGetPhysicalDeviceSurfacePresentModes2EXT failed");
+			VulkanError("vkGetPhysicalDeviceSurfacePresentModes2EXT failed");
 
 		if (presentModeCount > 0)
 		{
 			caps.PresentModes.resize(presentModeCount);
 			result = vkGetPhysicalDeviceSurfacePresentModes2EXT(device->PhysicalDevice.Device, &surfaceInfo, &presentModeCount, caps.PresentModes.data());
 			if (result != VK_SUCCESS)
-				throw std::runtime_error("vkGetPhysicalDeviceSurfacePresentModes2EXT failed");
+				VulkanError("vkGetPhysicalDeviceSurfacePresentModes2EXT failed");
 		}
 	}
 	else
+#endif
 	{
 		uint32_t presentModeCount = 0;
 		VkResult result = vkGetPhysicalDeviceSurfacePresentModesKHR(device->PhysicalDevice.Device, device->Surface->Surface, &presentModeCount, nullptr);
 		if (result != VK_SUCCESS)
-			throw std::runtime_error("vkGetPhysicalDeviceSurfacePresentModesKHR failed");
+			VulkanError("vkGetPhysicalDeviceSurfacePresentModesKHR failed");
 
 		if (presentModeCount > 0)
 		{
 			caps.PresentModes.resize(presentModeCount);
 			result = vkGetPhysicalDeviceSurfacePresentModesKHR(device->PhysicalDevice.Device, device->Surface->Surface, &presentModeCount, caps.PresentModes.data());
 			if (result != VK_SUCCESS)
-				throw std::runtime_error("vkGetPhysicalDeviceSurfacePresentModesKHR failed");
+				VulkanError("vkGetPhysicalDeviceSurfacePresentModesKHR failed");
 		}
 	}
 
@@ -372,14 +384,14 @@ VulkanSurfaceCapabilities VulkanSwapChain::GetSurfaceCapabilities(bool exclusive
 		uint32_t surfaceFormatCount = 0;
 		VkResult result = vkGetPhysicalDeviceSurfaceFormats2KHR(device->PhysicalDevice.Device, &surfaceInfo, &surfaceFormatCount, nullptr);
 		if (result != VK_SUCCESS)
-			throw std::runtime_error("vkGetPhysicalDeviceSurfaceFormats2KHR failed");
+			VulkanError("vkGetPhysicalDeviceSurfaceFormats2KHR failed");
 
 		if (surfaceFormatCount > 0)
 		{
 			std::vector<VkSurfaceFormat2KHR> formats(surfaceFormatCount, { VK_STRUCTURE_TYPE_SURFACE_FORMAT_2_KHR });
 			result = vkGetPhysicalDeviceSurfaceFormats2KHR(device->PhysicalDevice.Device, &surfaceInfo, &surfaceFormatCount, formats.data());
 			if (result != VK_SUCCESS)
-				throw std::runtime_error("vkGetPhysicalDeviceSurfaceFormats2KHR failed");
+				VulkanError("vkGetPhysicalDeviceSurfaceFormats2KHR failed");
 
 			for (VkSurfaceFormat2KHR& fmt : formats)
 				caps.Formats.push_back(fmt.surfaceFormat);
@@ -390,14 +402,14 @@ VulkanSurfaceCapabilities VulkanSwapChain::GetSurfaceCapabilities(bool exclusive
 		uint32_t surfaceFormatCount = 0;
 		VkResult result = vkGetPhysicalDeviceSurfaceFormatsKHR(device->PhysicalDevice.Device, device->Surface->Surface, &surfaceFormatCount, nullptr);
 		if (result != VK_SUCCESS)
-			throw std::runtime_error("vkGetPhysicalDeviceSurfaceFormatsKHR failed");
+			VulkanError("vkGetPhysicalDeviceSurfaceFormatsKHR failed");
 		
 		if (surfaceFormatCount > 0)
 		{
 			caps.Formats.resize(surfaceFormatCount);
 			result = vkGetPhysicalDeviceSurfaceFormatsKHR(device->PhysicalDevice.Device, device->Surface->Surface, &surfaceFormatCount, caps.Formats.data());
 			if (result != VK_SUCCESS)
-				throw std::runtime_error("vkGetPhysicalDeviceSurfaceFormatsKHR failed");
+				VulkanError("vkGetPhysicalDeviceSurfaceFormatsKHR failed");
 		}
 	}
 
