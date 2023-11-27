@@ -11,6 +11,9 @@ Property=(Config,Class=VulkanDrv.VulkanRenderDevice,Name=Coronas,Title="Coronas"
 Property=(Config,Class=VulkanDrv.VulkanRenderDevice,Name=ShinySurfaces,Title="Shiny Surfaces",Description="ShinySurfaces")
 Property=(Config,Class=VulkanDrv.VulkanRenderDevice,Name=VolumetricLighting,Title="Volumetric Lighting",Description="VolumetricLighting")
 
+Property=(Config,Class=VulkanDrv.VulkanRenderDevice,Name=Bloom,Title="Bloom",Description="Bloom overbright pixels")
+Property=(Config,Class=VulkanDrv.VulkanRenderDevice,Name=BloomAmount,Title="Bloom Amount",Description="Bloom amount")
+
 Property=(Config,Class=VulkanDrv.VulkanRenderDevice,Name=LinearBrightness,Title="Linear Brightness",Description="Adjust brightness for all pixels")
 Property=(Config,Class=VulkanDrv.VulkanRenderDevice,Name=Contrast,Title="Contrast",Description="Adjust pixel contrast")
 Property=(Config,Class=VulkanDrv.VulkanRenderDevice,Name=Saturation,Title="Saturation",Description="Adjust how saturated the colors are")

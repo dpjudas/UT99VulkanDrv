@@ -50,8 +50,8 @@ void UVulkanRenderDevice::StaticConstructor()
 
 	Hdr = 0;
 	OccludeLines = 0;
-	//Bloom = 0;
-	//BloomAmount = 128;
+	Bloom = 0;
+	BloomAmount = 128;
 
 	LODBias = -0.5f;
 	LightMode = 0;
@@ -76,8 +76,8 @@ void UVulkanRenderDevice::StaticConstructor()
 	new(GetClass(), TEXT("GrayFormula"), RF_Public) UIntProperty(CPP_PROPERTY(GrayFormula), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("Hdr"), RF_Public) UBoolProperty(CPP_PROPERTY(Hdr), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("OccludeLines"), RF_Public) UBoolProperty(CPP_PROPERTY(OccludeLines), TEXT("Display"), CPF_Config);
-	//new(GetClass(), TEXT("Bloom"), RF_Public) UBoolProperty(CPP_PROPERTY(Bloom), TEXT("Display"), CPF_Config);
-	//new(GetClass(), TEXT("BloomAmount"), RF_Public) UByteProperty(CPP_PROPERTY(BloomAmount), TEXT("Display"), CPF_Config);
+	new(GetClass(), TEXT("Bloom"), RF_Public) UBoolProperty(CPP_PROPERTY(Bloom), TEXT("Display"), CPF_Config);
+	new(GetClass(), TEXT("BloomAmount"), RF_Public) UByteProperty(CPP_PROPERTY(BloomAmount), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("LODBias"), RF_Public) UFloatProperty(CPP_PROPERTY(LODBias), TEXT("Display"), CPF_Config);
 
 	UEnum* AntialiasModes = new(GetClass(), TEXT("AntialiasModes"))UEnum(nullptr);
@@ -279,7 +279,7 @@ void UVulkanRenderDevice::Exit()
 void UVulkanRenderDevice::SubmitAndWait(bool present, int presentWidth, int presentHeight, bool presentFullscreen)
 {
 	if (UsesBindless)
-		DescriptorSets->UpdateBindlessDescriptorSet();
+		DescriptorSets->UpdateBindlessSet();
 
 	Commands->SubmitCommands(present, presentWidth, presentHeight, presentFullscreen);
 
@@ -486,7 +486,8 @@ void UVulkanRenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane Sc
 
 	try
 	{
-		if (!Textures->Scene || Textures->Scene->width != Viewport->SizeX || Textures->Scene->height != Viewport->SizeY ||Textures->Scene->multisample != GetSettingsMultisample())
+		// If frame textures no longer match the window or user settings, recreate them along with the swap chain
+		if (!Textures->Scene || Textures->Scene->Width != Viewport->SizeX || Textures->Scene->Height != Viewport->SizeY ||Textures->Scene->Multisample != GetSettingsMultisample())
 		{
 			Framebuffers->DestroySceneFramebuffer();
 			Textures->Scene.reset();
@@ -494,12 +495,7 @@ void UVulkanRenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane Sc
 			RenderPasses->CreateRenderPass();
 			RenderPasses->CreatePipelines();
 			Framebuffers->CreateSceneFramebuffer();
-
-			auto descriptors = DescriptorSets->GetPresentDescriptorSet();
-			WriteDescriptors()
-				.AddCombinedImageSampler(descriptors, 0, Textures->Scene->PPImageView.get(), Samplers->PPLinearClamp.get(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-				.AddCombinedImageSampler(descriptors, 1, Textures->DitherImageView.get(), Samplers->PPNearestRepeat.get(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-				.Execute(Device.get());
+			DescriptorSets->UpdateFrameDescriptors();
 		}
 
 		PipelineBarrier()
@@ -565,6 +561,10 @@ void UVulkanRenderDevice::Unlock(UBOOL Blit)
 		RenderPasses->EndScene(Commands->GetDrawCommands());
 
 		BlitSceneToPostprocess();
+		if (Bloom)
+		{
+			RunBloomPass();
+		}
 		SubmitAndWait(Blit ? true : false, Viewport->SizeX, Viewport->SizeY, Viewport->IsFullscreen());
 
 		if (HitData)
@@ -648,7 +648,7 @@ void UVulkanRenderDevice::DrawBatch(VulkanCommandBuffer* cmdbuffer)
 	size_t icount = SceneIndexPos - Batch.SceneIndexStart;
 	if (icount > 0)
 	{
-		auto layout = Batch.Bindless ? RenderPasses->SceneBindlessPipelineLayout.get() : RenderPasses->ScenePipelineLayout.get();
+		auto layout = Batch.Bindless ? RenderPasses->Scene.BindlessPipelineLayout.get() : RenderPasses->Scene.PipelineLayout.get();
 		cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, Batch.Pipeline);
 		cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, layout, 0, Batch.DescriptorSet);
 		cmdbuffer->pushConstants(layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ScenePushConstants), &pushconstants);
@@ -711,7 +711,7 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 		DetailVMult = GetVMult(*Surface.FogMap);
 	}
 
-	SetPipeline(RenderPasses->getPipeline(Surface.PolyFlags, UsesBindless));
+	SetPipeline(RenderPasses->GetPipeline(Surface.PolyFlags, UsesBindless));
 
 	ivec4 textureBinds = SetDescriptorSet(Surface.PolyFlags, tex, lightmap, macrotex, detailtex);
 	vec4 color(1.0f);
@@ -774,7 +774,7 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 
 		if (drawcount != 0)
 		{
-			SetPipeline(RenderPasses->getPipeline(PF_Highlighted, UsesBindless));
+			SetPipeline(RenderPasses->GetPipeline(PF_Highlighted, UsesBindless));
 			textureBinds = SetDescriptorSet(PF_Highlighted, nullptr);
 			color = vec4(0.0f, 0.0f, 0.05f, 0.20f);
 		}
@@ -791,7 +791,7 @@ void UVulkanRenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& In
 
 	if (NumPts < 3) return; // This can apparently happen!!
 
-	SetPipeline(RenderPasses->getPipeline(PolyFlags, UsesBindless));
+	SetPipeline(RenderPasses->GetPipeline(PolyFlags, UsesBindless));
 
 	CachedTexture* tex = Textures->GetTexture(&Info, !!(PolyFlags & PF_Masked));
 	ivec4 textureBinds = SetDescriptorSet(PolyFlags, tex);
@@ -891,7 +891,7 @@ void UVulkanRenderDevice::DrawGouraudTriangles(const FSceneNode* Frame, const FT
 
 	if (NumPts < 3) return; // This can apparently happen!!
 
-	SetPipeline(RenderPasses->getPipeline(PolyFlags, UsesBindless));
+	SetPipeline(RenderPasses->GetPipeline(PolyFlags, UsesBindless));
 
 	CachedTexture* tex = Textures->GetTexture(const_cast<FTextureInfo*>(&Info), !!(PolyFlags & PF_Masked));
 	ivec4 textureBinds = SetDescriptorSet(PolyFlags, tex);
@@ -1031,7 +1031,7 @@ void UVulkanRenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT 
 
 	CachedTexture* tex = Textures->GetTexture(&Info, !!(PolyFlags & PF_Masked));
 
-	SetPipeline(RenderPasses->getPipeline(PolyFlags, UsesBindless));
+	SetPipeline(RenderPasses->GetPipeline(PolyFlags, UsesBindless));
 
 	ivec4 textureBinds = SetDescriptorSet(PolyFlags, tex, true);
 
@@ -1055,7 +1055,7 @@ void UVulkanRenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT 
 	}
 	a = 1.0f;
 
-	if (Textures->Scene->multisample > 1)
+	if (Textures->Scene->Multisample > 1)
 	{
 		XL = std::floor(X + XL + 0.5f);
 		YL = std::floor(Y + YL + 0.5f);
@@ -1117,7 +1117,7 @@ void UVulkanRenderDevice::Draw3DLine(FSceneNode* Frame, FPlane Color, DWORD Line
 	}
 	else
 	{
-		SetPipeline(RenderPasses->getLinePipeline(OccludeLines, UsesBindless));
+		SetPipeline(RenderPasses->GetLinePipeline(OccludeLines, UsesBindless));
 
 		ivec4 textureBinds = SetDescriptorSet(PF_Highlighted, nullptr);
 
@@ -1148,7 +1148,7 @@ void UVulkanRenderDevice::Draw2DLine(FSceneNode* Frame, FPlane Color, DWORD Line
 {
 	guard(UVulkanRenderDevice::Draw2DLine);
 
-	SetPipeline(RenderPasses->getLinePipeline(OccludeLines, UsesBindless));
+	SetPipeline(RenderPasses->GetLinePipeline(OccludeLines, UsesBindless));
 
 	ivec4 textureBinds = SetDescriptorSet(PF_Highlighted, nullptr);
 
@@ -1174,7 +1174,7 @@ void UVulkanRenderDevice::Draw2DPoint(FSceneNode* Frame, FPlane Color, DWORD Lin
 	// Hack to fix UED selection problem with selection brush
 	if (GIsEditor) Z = 1.0f;
 
-	SetPipeline(RenderPasses->getPointPipeline(OccludeLines, UsesBindless));
+	SetPipeline(RenderPasses->GetPointPipeline(OccludeLines, UsesBindless));
 
 	ivec4 textureBinds = SetDescriptorSet(PF_Highlighted, nullptr);
 
@@ -1215,8 +1215,8 @@ void UVulkanRenderDevice::ClearZ(FSceneNode* Frame)
 	attachment.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
 	attachment.clearValue.depthStencil.depth = 1.0f;
 	rect.layerCount = 1;
-	rect.rect.extent.width = Textures->Scene->width;
-	rect.rect.extent.height = Textures->Scene->height;
+	rect.rect.extent.width = Textures->Scene->Width;
+	rect.rect.extent.height = Textures->Scene->Height;
 	Commands->GetDrawCommands()->clearAttachments(1, &attachment, 1, &rect);
 	unguard;
 }
@@ -1359,8 +1359,8 @@ void UVulkanRenderDevice::EndFlash()
 		pushconstants.objectToProjection = mat4::identity();
 		pushconstants.nearClip = vec4(0.0f, 0.0f, 0.0f, 1.0f);
 
-		SetPipeline(RenderPasses->getEndFlashPipeline());
-		SetDescriptorSet(DescriptorSets->GetTextureDescriptorSet(0, nullptr), false);
+		SetPipeline(RenderPasses->GetEndFlashPipeline());
+		SetDescriptorSet(DescriptorSets->GetTextureSet(0, nullptr), false);
 
 		SceneVertex* v = &Buffers->SceneVertices[SceneVertexPos];
 
@@ -1557,6 +1557,149 @@ void UVulkanRenderDevice::BlitSceneToPostprocess()
 	}
 }
 
+void UVulkanRenderDevice::RunBloomPass()
+{
+	float blurAmount = 0.6f + BloomAmount * (1.9f / 255.0f);
+	BloomPushConstants pushconstants;
+	ComputeBlurSamples(7, blurAmount, pushconstants.SampleWeights);
+
+	auto cmdbuffer = Commands->GetDrawCommands();
+
+	// Extract overbright pixels that we want to bloom:
+	BloomStep(cmdbuffer,
+		RenderPasses->Bloom.Extract.get(),
+		DescriptorSets->GetBloomPPImageSet(),
+		Framebuffers->BloomBlurLevels[0].VTextureFB.get(),
+		Textures->Scene->BloomBlurLevels[0].Width,
+		Textures->Scene->BloomBlurLevels[0].Height,
+		pushconstants);
+
+	// Blur and downscale:
+	for (int i = 0; i < NumBloomLevels - 1; i++)
+	{
+		// Gaussian blur
+		BloomStep(cmdbuffer,
+			RenderPasses->Bloom.BlurVertical.get(),
+			DescriptorSets->GetBloomVTextureSet(i),
+			Framebuffers->BloomBlurLevels[i].HTextureFB.get(),
+			Textures->Scene->BloomBlurLevels[i].Width,
+			Textures->Scene->BloomBlurLevels[i].Height,
+			pushconstants);
+		BloomStep(cmdbuffer,
+			RenderPasses->Bloom.BlurHorizontal.get(),
+			DescriptorSets->GetBloomHTextureSet(i),
+			Framebuffers->BloomBlurLevels[i].VTextureFB.get(),
+			Textures->Scene->BloomBlurLevels[i].Width,
+			Textures->Scene->BloomBlurLevels[i].Height,
+			pushconstants);
+
+		// Linear downscale
+		BloomStep(cmdbuffer,
+			RenderPasses->Bloom.Scale.get(),
+			DescriptorSets->GetBloomVTextureSet(i),
+			Framebuffers->BloomBlurLevels[i + 1].VTextureFB.get(),
+			Textures->Scene->BloomBlurLevels[i + 1].Width,
+			Textures->Scene->BloomBlurLevels[i + 1].Height,
+			pushconstants);
+	}
+
+	// Blur and upscale:
+	for (int i = NumBloomLevels - 1; i >= 0; i--)
+	{
+		// Gaussian blur
+		BloomStep(cmdbuffer,
+			RenderPasses->Bloom.BlurVertical.get(),
+			DescriptorSets->GetBloomVTextureSet(i),
+			Framebuffers->BloomBlurLevels[i].HTextureFB.get(),
+			Textures->Scene->BloomBlurLevels[i].Width,
+			Textures->Scene->BloomBlurLevels[i].Height,
+			pushconstants);
+		BloomStep(cmdbuffer,
+			RenderPasses->Bloom.BlurHorizontal.get(),
+			DescriptorSets->GetBloomHTextureSet(i),
+			Framebuffers->BloomBlurLevels[i].VTextureFB.get(),
+			Textures->Scene->BloomBlurLevels[i].Width,
+			Textures->Scene->BloomBlurLevels[i].Height,
+			pushconstants);
+
+		// Linear upscale
+		if (i > 0)
+		{
+			BloomStep(cmdbuffer,
+				RenderPasses->Bloom.Scale.get(),
+				DescriptorSets->GetBloomVTextureSet(i),
+				Framebuffers->BloomBlurLevels[i - 1].VTextureFB.get(),
+				Textures->Scene->BloomBlurLevels[i - 1].Width,
+				Textures->Scene->BloomBlurLevels[i - 1].Height,
+				pushconstants);
+		}
+	}
+
+	// Add bloom back to frame post process texture:
+	BloomStep(cmdbuffer,
+		RenderPasses->Bloom.Combine.get(),
+		DescriptorSets->GetBloomVTextureSet(0),
+		Framebuffers->BloomPPImageFB.get(),
+		Textures->Scene->Width,
+		Textures->Scene->Height,
+		pushconstants);
+}
+
+void UVulkanRenderDevice::BloomStep(VulkanCommandBuffer* cmdbuffer, VulkanPipeline* pipeline, VulkanDescriptorSet* input, VulkanFramebuffer* output, int width, int height, const BloomPushConstants& pushconstants)
+{
+	RenderPassBegin()
+		.RenderPass(pipeline != RenderPasses->Bloom.Combine.get() ? RenderPasses->Bloom.RenderPass.get() : RenderPasses->Bloom.RenderPassCombine.get())
+		.Framebuffer(output)
+		.RenderArea(0, 0, width, height)
+		.AddClearColor(0.0f, 0.0f, 0.0f, 1.0f)
+		.Execute(cmdbuffer);
+
+	VkViewport viewport = {};
+	viewport.width = (float)width;
+	viewport.height = (float)height;
+	viewport.maxDepth = 1.0f;
+
+	VkRect2D scissor = {};
+	scissor.extent.width = width;
+	scissor.extent.height = height;
+
+	cmdbuffer->setViewport(0, 1, &viewport);
+	cmdbuffer->setScissor(0, 1, &scissor);
+	cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+	cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, RenderPasses->Bloom.PipelineLayout.get(), 0, input);
+	cmdbuffer->pushConstants(RenderPasses->Bloom.PipelineLayout.get(), VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(BloomPushConstants), &pushconstants);
+	cmdbuffer->draw(6, 1, 0, 0);
+
+	cmdbuffer->endRenderPass();
+}
+
+float UVulkanRenderDevice::ComputeBlurGaussian(float n, float theta) // theta = Blur Amount
+{
+	return (float)((1.0f / std::sqrtf(2 * 3.14159265359f * theta)) * std::expf(-(n * n) / (2.0f * theta * theta)));
+}
+
+void UVulkanRenderDevice::ComputeBlurSamples(int sampleCount, float blurAmount, float* sampleWeights)
+{
+	sampleWeights[0] = ComputeBlurGaussian(0, blurAmount);
+
+	float totalWeights = sampleWeights[0];
+
+	for (int i = 0; i < sampleCount / 2; i++)
+	{
+		float weight = ComputeBlurGaussian(i + 1.0f, blurAmount);
+
+		sampleWeights[i * 2 + 1] = weight;
+		sampleWeights[i * 2 + 2] = weight;
+
+		totalWeights += weight * 2;
+	}
+
+	for (int i = 0; i < sampleCount; i++)
+	{
+		sampleWeights[i] /= totalWeights;
+	}
+}
+
 void UVulkanRenderDevice::DrawPresentTexture(int x, int y, int width, int height)
 {
 	PresentPushConstants pushconstants;
@@ -1635,9 +1778,9 @@ void UVulkanRenderDevice::DrawPresentTexture(int x, int y, int width, int height
 	RenderPasses->BeginPresent(cmdbuffer);
 	cmdbuffer->setViewport(0, 1, &viewport);
 	cmdbuffer->setScissor(0, 1, &scissor);
-	cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, RenderPasses->PresentPipeline[presentShader].get());
-	cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, RenderPasses->PresentPipelineLayout.get(), 0, DescriptorSets->GetPresentDescriptorSet());
-	cmdbuffer->pushConstants(RenderPasses->PresentPipelineLayout.get(), VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PresentPushConstants), &pushconstants);
+	cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, RenderPasses->Present.Pipeline[presentShader].get());
+	cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, RenderPasses->Present.PipelineLayout.get(), 0, DescriptorSets->GetPresentSet());
+	cmdbuffer->pushConstants(RenderPasses->Present.PipelineLayout.get(), VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PresentPushConstants), &pushconstants);
 	cmdbuffer->draw(6, 1, 0, 0);
 	RenderPasses->EndPresent(cmdbuffer);
 }

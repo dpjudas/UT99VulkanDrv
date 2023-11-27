@@ -33,6 +33,11 @@ struct PresentPushConstants
 	vec4 GammaCorrection;
 };
 
+struct BloomPushConstants
+{
+	float SampleWeights[8];
+};
+
 class ShaderManager
 {
 public:
@@ -46,8 +51,19 @@ public:
 		std::unique_ptr<VulkanShader> FragmentShaderAlphaTest;
 	} Scene, SceneBindless;
 
-	std::unique_ptr<VulkanShader> ppVertexShader;
-	std::unique_ptr<VulkanShader> ppFragmentPresentShader[16];
+	struct
+	{
+		std::unique_ptr<VulkanShader> VertexShader;
+		std::unique_ptr<VulkanShader> FragmentPresentShader[16];
+	} Postprocess;
+
+	struct
+	{
+		std::unique_ptr<VulkanShader> Extract;
+		std::unique_ptr<VulkanShader> Combine;
+		std::unique_ptr<VulkanShader> BlurVertical;
+		std::unique_ptr<VulkanShader> BlurHorizontal;
+	} Bloom;
 
 	static std::string LoadShaderCode(const std::string& filename, const std::string& defines = {});
 

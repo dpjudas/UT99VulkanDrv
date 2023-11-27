@@ -3,7 +3,7 @@
 #include "SceneTextures.h"
 #include "UVulkanRenderDevice.h"
 
-SceneTextures::SceneTextures(UVulkanRenderDevice* renderer, int width, int height, int multisample) : width(width), height(height), multisample(multisample)
+SceneTextures::SceneTextures(UVulkanRenderDevice* renderer, int width, int height, int multisample) : Width(width), Height(height), Multisample(multisample)
 {
 	SceneSamples = GetBestSampleCount(renderer->Device.get(), multisample);
 
@@ -73,32 +73,91 @@ SceneTextures::SceneTextures(UVulkanRenderDevice* renderer, int width, int heigh
 		.DebugName("stagingHitBuffer")
 		.Create(renderer->Device.get());
 
-	PipelineBarrier()
-		.AddImage(
-			ColorBuffer.get(),
+	int bloomWidth = width;
+	int bloomHeight = height;
+	for (int level = 0; level < NumBloomLevels; level++)
+	{
+		bloomWidth = (bloomWidth + 1) / 2;
+		bloomHeight = (bloomHeight + 1) / 2;
+
+		BloomBlurLevels[level].Width = bloomWidth;
+		BloomBlurLevels[level].Height = bloomHeight;
+
+		BloomBlurLevels[level].VTexture = ImageBuilder()
+			.Size(bloomWidth, bloomHeight)
+			.Samples(VK_SAMPLE_COUNT_1_BIT)
+			.Format(VK_FORMAT_R16G16B16A16_SFLOAT)
+			.Usage(VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)
+			.DebugName("BloomVTexture")
+			.Create(renderer->Device.get());
+
+		BloomBlurLevels[level].HTexture = ImageBuilder()
+			.Size(bloomWidth, bloomHeight)
+			.Samples(VK_SAMPLE_COUNT_1_BIT)
+			.Format(VK_FORMAT_R16G16B16A16_SFLOAT)
+			.Usage(VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)
+			.DebugName("BloomHTexture")
+			.Create(renderer->Device.get());
+
+		BloomBlurLevels[level].VTextureView = ImageViewBuilder()
+			.Image(BloomBlurLevels[level].VTexture.get(), VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_ASPECT_COLOR_BIT)
+			.DebugName("BloomVTextureView")
+			.Create(renderer->Device.get());
+
+		BloomBlurLevels[level].HTextureView = ImageViewBuilder()
+			.Image(BloomBlurLevels[level].HTexture.get(), VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_ASPECT_COLOR_BIT)
+			.DebugName("BloomHTextureView")
+			.Create(renderer->Device.get());
+	}
+
+	PipelineBarrier barrier;
+
+	barrier.AddImage(
+		ColorBuffer.get(),
+		VK_IMAGE_LAYOUT_UNDEFINED,
+		VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+		0,
+		VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+		VK_IMAGE_ASPECT_COLOR_BIT);
+
+	barrier.AddImage(
+		HitBuffer.get(),
+		VK_IMAGE_LAYOUT_UNDEFINED,
+		VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+		0,
+		VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+		VK_IMAGE_ASPECT_COLOR_BIT);
+
+	barrier.AddImage(
+		DepthBuffer.get(),
+		VK_IMAGE_LAYOUT_UNDEFINED,
+		VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+		0,
+		VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+		VK_IMAGE_ASPECT_DEPTH_BIT);
+
+	for (int level = 0; level < NumBloomLevels; level++)
+	{
+		barrier.AddImage(
+			BloomBlurLevels[level].VTexture.get(),
 			VK_IMAGE_LAYOUT_UNDEFINED,
 			VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 			0,
 			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-			VK_IMAGE_ASPECT_COLOR_BIT)
-		.AddImage(
-			HitBuffer.get(),
+			VK_IMAGE_ASPECT_COLOR_BIT);
+		barrier.AddImage(
+			BloomBlurLevels[level].HTexture.get(),
 			VK_IMAGE_LAYOUT_UNDEFINED,
 			VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 			0,
 			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-			VK_IMAGE_ASPECT_COLOR_BIT)
-		.AddImage(
-			DepthBuffer.get(),
-			VK_IMAGE_LAYOUT_UNDEFINED,
-			VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-			0,
-			VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-			VK_IMAGE_ASPECT_DEPTH_BIT)
-		.Execute(
-			renderer->Commands->GetDrawCommands(),
-			VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT);
+			VK_IMAGE_ASPECT_COLOR_BIT);
+	}
+
+	barrier.Execute(
+		renderer->Commands->GetDrawCommands(),
+		VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+		VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT);
 }
 
 SceneTextures::~SceneTextures()

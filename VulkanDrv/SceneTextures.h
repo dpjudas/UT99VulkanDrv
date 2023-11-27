@@ -6,6 +6,8 @@
 
 class UVulkanRenderDevice;
 
+enum { NumBloomLevels = 4 };
+
 class SceneTextures
 {
 public:
@@ -36,9 +38,20 @@ public:
 	std::unique_ptr<VulkanBuffer> StagingHitBuffer;
 
 	// Size of the scene framebuffer
-	int width = 0;
-	int height = 0;
-	int multisample = 0;
+	int Width = 0;
+	int Height = 0;
+	int Multisample = 0;
+
+	// Bloom post processing buffers
+	struct
+	{
+		std::unique_ptr<VulkanImage> VTexture;
+		std::unique_ptr<VulkanImageView> VTextureView;
+		std::unique_ptr<VulkanImage> HTexture;
+		std::unique_ptr<VulkanImageView> HTextureView;
+		int Width = 0;
+		int Height = 0;
+	} BloomBlurLevels[NumBloomLevels];
 
 private:
 	static VkSampleCountFlagBits GetBestSampleCount(VulkanDevice* device, int multisample);

@@ -288,6 +288,99 @@ std::string FileResource::readAllText(const std::string& filename)
 			}
 		)";
 	}
+	else if (filename == "shaders/BloomExtract.frag")
+	{
+		return R"(
+			layout(push_constant) uniform BloomPushConstants
+			{
+				float SampleWeights0;
+				float SampleWeights1;
+				float SampleWeights2;
+				float SampleWeights3;
+				float SampleWeights4;
+				float SampleWeights5;
+				float SampleWeights6;
+				float SampleWeights7;
+			};
+
+			layout(binding = 0) uniform sampler2D texSampler;
+			layout(location = 0) in vec2 texCoord;
+			layout(location = 0) out vec4 outColor;
+
+			void main()
+			{
+				outColor = vec4(max(texture(texSampler, texCoord).rgb - 1.0, 0.0), 0.0);
+			}
+		)";
+	}
+	else if (filename == "shaders/BloomCombine.frag")
+	{
+		return R"(
+			layout(push_constant) uniform BloomPushConstants
+			{
+				float SampleWeights0;
+				float SampleWeights1;
+				float SampleWeights2;
+				float SampleWeights3;
+				float SampleWeights4;
+				float SampleWeights5;
+				float SampleWeights6;
+				float SampleWeights7;
+			};
+
+			layout(binding = 0) uniform sampler2D texSampler;
+			layout(location = 0) in vec2 texCoord;
+			layout(location = 0) out vec4 outColor;
+
+			void main()
+			{
+				outColor = texture(texSampler, texCoord);
+			}
+		)";
+	}
+	else if (filename == "shaders/Blur.frag")
+	{
+		return R"(
+			layout(push_constant) uniform BloomPushConstants
+			{
+				float SampleWeights0;
+				float SampleWeights1;
+				float SampleWeights2;
+				float SampleWeights3;
+				float SampleWeights4;
+				float SampleWeights5;
+				float SampleWeights6;
+				float SampleWeights7;
+			};
+
+			layout(binding = 0) uniform sampler2D texSampler;
+			layout(location = 0) in vec2 texCoord;
+			layout(location = 0) out vec4 outColor;
+
+			void main()
+			{
+			#if defined(BLUR_HORIZONTAL)
+				outColor =
+					textureOffset(texSampler, texCoord, ivec2( 0, 0)) * SampleWeights0 +
+					textureOffset(texSampler, texCoord, ivec2( 1, 0)) * SampleWeights1 +
+					textureOffset(texSampler, texCoord, ivec2(-1, 0)) * SampleWeights2 +
+					textureOffset(texSampler, texCoord, ivec2( 2, 0)) * SampleWeights3 +
+					textureOffset(texSampler, texCoord, ivec2(-2, 0)) * SampleWeights4 +
+					textureOffset(texSampler, texCoord, ivec2( 3, 0)) * SampleWeights5 +
+					textureOffset(texSampler, texCoord, ivec2(-3, 0)) * SampleWeights6;
+			#else
+				outColor =
+					textureOffset(texSampler, texCoord, ivec2(0, 0)) * SampleWeights0 +
+					textureOffset(texSampler, texCoord, ivec2(0, 1)) * SampleWeights1 +
+					textureOffset(texSampler, texCoord, ivec2(0,-1)) * SampleWeights2 +
+					textureOffset(texSampler, texCoord, ivec2(0, 2)) * SampleWeights3 +
+					textureOffset(texSampler, texCoord, ivec2(0,-2)) * SampleWeights4 +
+					textureOffset(texSampler, texCoord, ivec2(0, 3)) * SampleWeights5 +
+					textureOffset(texSampler, texCoord, ivec2(0,-3)) * SampleWeights6;
+			#endif
+			}
+		)";
+	}
 
 	return {};
 }

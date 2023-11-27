@@ -47,7 +47,7 @@ ShaderManager::ShaderManager(UVulkanRenderDevice* renderer) : renderer(renderer)
 			.Create("fragmentShader", renderer->Device.get());
 	}
 
-	ppVertexShader = ShaderBuilder()
+	Postprocess.VertexShader = ShaderBuilder()
 		.Type(ShaderType::Vertex)
 		.AddSource("shaders/PPStep.vert", LoadShaderCode("shaders/PPStep.vert"))
 		.DebugName("ppVertexShader")
@@ -63,12 +63,36 @@ ShaderManager::ShaderManager(UVulkanRenderDevice* renderer) : renderer(renderer)
 		if (gammaModes[(i >> 1) & 1]) defines += std::string("#define ") + gammaModes[(i >> 1) & 1] + "\r\n";
 		if (colorModes[(i >> 2) & 3]) defines += std::string("#define ") + colorModes[(i >> 2) & 3] + "\r\n";
 
-		ppFragmentPresentShader[i] = ShaderBuilder()
+		Postprocess.FragmentPresentShader[i] = ShaderBuilder()
 			.Type(ShaderType::Fragment)
 			.AddSource("shaders/Present.frag", LoadShaderCode("shaders/Present.frag", defines))
 			.DebugName("ppFragmentPresentShader")
 			.Create("ppFragmentPresentShader", renderer->Device.get());
 	}
+
+	Bloom.Extract = ShaderBuilder()
+		.Type(ShaderType::Fragment)
+		.AddSource("shaders/BloomExtract.frag", LoadShaderCode("shaders/BloomExtract.frag"))
+		.DebugName("BloomPass.Extract")
+		.Create("BloomPass.Extract", renderer->Device.get());
+
+	Bloom.Combine = ShaderBuilder()
+		.Type(ShaderType::Fragment)
+		.AddSource("shaders/BloomCombine.frag", LoadShaderCode("shaders/BloomCombine.frag"))
+		.DebugName("BloomPass.Combine")
+		.Create("BloomPass.Combine", renderer->Device.get());
+
+	Bloom.BlurVertical = ShaderBuilder()
+		.Type(ShaderType::Fragment)
+		.AddSource("shaders/BlurVertical.frag", LoadShaderCode("shaders/Blur.frag", "#define BLUR_VERTICAL"))
+		.DebugName("BloomPass.BlurVertical")
+		.Create("BloomPass.BlurVertical", renderer->Device.get());
+
+	Bloom.BlurHorizontal = ShaderBuilder()
+		.Type(ShaderType::Fragment)
+		.AddSource("shaders/BlurHorizontal.frag", LoadShaderCode("shaders/Blur.frag", "#define BLUR_HORIZONTAL"))
+		.DebugName("BloomPass.BlurHorizontal")
+		.Create("BloomPass.BlurHorizontal", renderer->Device.get());
 }
 
 ShaderManager::~ShaderManager()

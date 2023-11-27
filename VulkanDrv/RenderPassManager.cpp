@@ -8,6 +8,9 @@ RenderPassManager::RenderPassManager(UVulkanRenderDevice* renderer) : renderer(r
 	CreateScenePipelineLayout();
 	CreateSceneBindlessPipelineLayout();
 	CreatePresentPipelineLayout();
+	CreateBloomPipelineLayout();
+	CreateBloomRenderPass();
+	CreateBloomPipeline();
 }
 
 RenderPassManager::~RenderPassManager()
@@ -16,8 +19,8 @@ RenderPassManager::~RenderPassManager()
 
 void RenderPassManager::CreateScenePipelineLayout()
 {
-	ScenePipelineLayout = PipelineLayoutBuilder()
-		.AddSetLayout(renderer->DescriptorSets->SceneDescriptorSetLayout.get())
+	Scene.PipelineLayout = PipelineLayoutBuilder()
+		.AddSetLayout(renderer->DescriptorSets->GetTextureLayout())
 		.AddPushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ScenePushConstants))
 		.DebugName("ScenePipelineLayout")
 		.Create(renderer->Device.get());
@@ -28,8 +31,8 @@ void RenderPassManager::CreateSceneBindlessPipelineLayout()
 	if (!renderer->SupportsBindless)
 		return;
 
-	SceneBindlessPipelineLayout = PipelineLayoutBuilder()
-		.AddSetLayout(renderer->DescriptorSets->SceneBindlessDescriptorSetLayout.get())
+	Scene.BindlessPipelineLayout = PipelineLayoutBuilder()
+		.AddSetLayout(renderer->DescriptorSets->GetTextureBindlessLayout())
 		.AddPushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ScenePushConstants))
 		.DebugName("SceneBindlessPipelineLayout")
 		.Create(renderer->Device.get());
@@ -37,19 +40,28 @@ void RenderPassManager::CreateSceneBindlessPipelineLayout()
 
 void RenderPassManager::CreatePresentPipelineLayout()
 {
-	PresentPipelineLayout = PipelineLayoutBuilder()
-		.AddSetLayout(renderer->DescriptorSets->PresentDescriptorSetLayout.get())
+	Present.PipelineLayout = PipelineLayoutBuilder()
+		.AddSetLayout(renderer->DescriptorSets->GetPresentLayout())
 		.AddPushConstantRange(VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PresentPushConstants))
 		.DebugName("PresentPipelineLayout")
+		.Create(renderer->Device.get());
+}
+
+void RenderPassManager::CreateBloomPipelineLayout()
+{
+	Bloom.PipelineLayout = PipelineLayoutBuilder()
+		.AddSetLayout(renderer->DescriptorSets->GetBloomLayout())
+		.AddPushConstantRange(VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(BloomPushConstants))
+		.DebugName("BloomPipelineLayout")
 		.Create(renderer->Device.get());
 }
 
 void RenderPassManager::BeginScene(VulkanCommandBuffer* cmdbuffer, float r, float g, float b, float a)
 {
 	RenderPassBegin()
-		.RenderPass(SceneRenderPass.get())
-		.Framebuffer(renderer->Framebuffers->sceneFramebuffer.get())
-		.RenderArea(0, 0, renderer->Textures->Scene->width, renderer->Textures->Scene->height)
+		.RenderPass(Scene.RenderPass.get())
+		.Framebuffer(renderer->Framebuffers->SceneFramebuffer.get())
+		.RenderArea(0, 0, renderer->Textures->Scene->Width, renderer->Textures->Scene->Height)
 		.AddClearColor(r, g, b, a)
 		.AddClearColor(0.0f, 0.0f, 0.0f, 0.0f)
 		.AddClearDepthStencil(1.0f, 0)
@@ -64,9 +76,9 @@ void RenderPassManager::EndScene(VulkanCommandBuffer* cmdbuffer)
 void RenderPassManager::BeginPresent(VulkanCommandBuffer* cmdbuffer)
 {
 	RenderPassBegin()
-		.RenderPass(PresentRenderPass.get())
+		.RenderPass(Present.RenderPass.get())
 		.Framebuffer(renderer->Framebuffers->GetSwapChainFramebuffer())
-		.RenderArea(0, 0, renderer->Textures->Scene->width, renderer->Textures->Scene->height)
+		.RenderArea(0, 0, renderer->Textures->Scene->Width, renderer->Textures->Scene->Height)
 		.AddClearColor(0.0f, 0.0f, 0.0f, 1.0f)
 		.Execute(cmdbuffer);
 }
@@ -76,7 +88,7 @@ void RenderPassManager::EndPresent(VulkanCommandBuffer* cmdbuffer)
 	cmdbuffer->endRenderPass();
 }
 
-VulkanPipeline* RenderPassManager::getPipeline(DWORD PolyFlags, bool bindless)
+VulkanPipeline* RenderPassManager::GetPipeline(DWORD PolyFlags, bool bindless)
 {
 	// Adjust PolyFlags according to Unreal's precedence rules.
 	if (!(PolyFlags & (PF_Translucent | PF_Modulated)))
@@ -115,12 +127,12 @@ VulkanPipeline* RenderPassManager::getPipeline(DWORD PolyFlags, bool bindless)
 		index |= 16;
 	}
 
-	return pipeline[bindless ? 1 : 0][index].get();
+	return Scene.Pipeline[bindless ? 1 : 0][index].get();
 }
 
-VulkanPipeline* RenderPassManager::getEndFlashPipeline()
+VulkanPipeline* RenderPassManager::GetEndFlashPipeline()
 {
-	return pipeline[0][2].get();
+	return Scene.Pipeline[0][2].get();
 }
 
 void RenderPassManager::CreatePipelines()
@@ -128,7 +140,7 @@ void RenderPassManager::CreatePipelines()
 	VulkanShader* vertShader[2] = { renderer->Shaders->Scene.VertexShader.get(), renderer->Shaders->SceneBindless.VertexShader.get() };
 	VulkanShader* fragShader[2] = { renderer->Shaders->Scene.FragmentShader.get(), renderer->Shaders->SceneBindless.FragmentShader.get() };
 	VulkanShader* fragShaderAlphaTest[2] = { renderer->Shaders->Scene.FragmentShaderAlphaTest.get(), renderer->Shaders->SceneBindless.FragmentShaderAlphaTest.get() };
-	VulkanPipelineLayout* layout[2] = { ScenePipelineLayout.get(), SceneBindlessPipelineLayout.get() };
+	VulkanPipelineLayout* layout[2] = { Scene.PipelineLayout.get(), Scene.BindlessPipelineLayout.get() };
 	static const char* debugName[2] = { "ScenePipeline", "SceneBindlessPipeline" };
 
 	for (int type = 0; type < 2; type++)
@@ -140,8 +152,8 @@ void RenderPassManager::CreatePipelines()
 		{
 			GraphicsPipelineBuilder builder;
 			builder.AddVertexShader(vertShader[type]);
-			builder.Viewport(0.0f, 0.0f, (float)renderer->Textures->Scene->width, (float)renderer->Textures->Scene->height);
-			builder.Scissor(0, 0, renderer->Textures->Scene->width, renderer->Textures->Scene->height);
+			builder.Viewport(0.0f, 0.0f, (float)renderer->Textures->Scene->Width, (float)renderer->Textures->Scene->Height);
+			builder.Scissor(0, 0, renderer->Textures->Scene->Width, renderer->Textures->Scene->Height);
 			builder.Topology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 			builder.Cull(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
 			builder.AddVertexBufferBinding(0, sizeof(SceneVertex));
@@ -156,7 +168,7 @@ void RenderPassManager::CreatePipelines()
 				builder.AddVertexAttribute(7, 0, VK_FORMAT_R32G32B32A32_SINT, offsetof(SceneVertex, TextureBinds));
 			builder.AddDynamicState(VK_DYNAMIC_STATE_VIEWPORT);
 			builder.Layout(layout[type]);
-			builder.RenderPass(SceneRenderPass.get());
+			builder.RenderPass(Scene.RenderPass.get());
 
 			// Avoid clipping the weapon. The UE1 engine clips the geometry anyway.
 			if (renderer->Device.get()->EnabledFeatures.Features.depthClamp)
@@ -207,7 +219,7 @@ void RenderPassManager::CreatePipelines()
 			builder.RasterizationSamples(renderer->Textures->Scene->SceneSamples);
 			builder.DebugName(debugName[type]);
 
-			pipeline[type][i] = builder.Create(renderer->Device.get());
+			Scene.Pipeline[type][i] = builder.Create(renderer->Device.get());
 		}
 
 		// Line pipeline
@@ -215,8 +227,8 @@ void RenderPassManager::CreatePipelines()
 		{
 			GraphicsPipelineBuilder builder;
 			builder.AddVertexShader(vertShader[type]);
-			builder.Viewport(0.0f, 0.0f, (float)renderer->Textures->Scene->width, (float)renderer->Textures->Scene->height);
-			builder.Scissor(0, 0, renderer->Textures->Scene->width, renderer->Textures->Scene->height);
+			builder.Viewport(0.0f, 0.0f, (float)renderer->Textures->Scene->Width, (float)renderer->Textures->Scene->Height);
+			builder.Scissor(0, 0, renderer->Textures->Scene->Width, renderer->Textures->Scene->Height);
 			builder.Topology(VK_PRIMITIVE_TOPOLOGY_LINE_LIST);
 			builder.Cull(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
 			builder.AddVertexBufferBinding(0, sizeof(SceneVertex));
@@ -231,7 +243,7 @@ void RenderPassManager::CreatePipelines()
 				builder.AddVertexAttribute(7, 0, VK_FORMAT_R32G32B32A32_SINT, offsetof(SceneVertex, TextureBinds));
 			builder.AddDynamicState(VK_DYNAMIC_STATE_VIEWPORT);
 			builder.Layout(layout[type]);
-			builder.RenderPass(SceneRenderPass.get());
+			builder.RenderPass(Scene.RenderPass.get());
 
 			builder.AddColorBlendAttachment(ColorBlendAttachmentBuilder().BlendMode(VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA).Create());
 			builder.AddColorBlendAttachment(ColorBlendAttachmentBuilder().Create());
@@ -242,7 +254,7 @@ void RenderPassManager::CreatePipelines()
 			builder.RasterizationSamples(renderer->Textures->Scene->SceneSamples);
 			builder.DebugName(debugName[type]);
 
-			linepipeline[i][type] = builder.Create(renderer->Device.get());
+			Scene.LinePipeline[i][type] = builder.Create(renderer->Device.get());
 		}
 
 		// Point pipeline
@@ -251,8 +263,8 @@ void RenderPassManager::CreatePipelines()
 			GraphicsPipelineBuilder builder;
 			builder.AddVertexShader(vertShader[type]);
 			builder.AddFragmentShader(fragShader[type]);
-			builder.Viewport(0.0f, 0.0f, (float)renderer->Textures->Scene->width, (float)renderer->Textures->Scene->height);
-			builder.Scissor(0, 0, renderer->Textures->Scene->width, renderer->Textures->Scene->height);
+			builder.Viewport(0.0f, 0.0f, (float)renderer->Textures->Scene->Width, (float)renderer->Textures->Scene->Height);
+			builder.Scissor(0, 0, renderer->Textures->Scene->Width, renderer->Textures->Scene->Height);
 			builder.Topology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 			builder.Cull(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
 			builder.AddVertexBufferBinding(0, sizeof(SceneVertex));
@@ -267,7 +279,7 @@ void RenderPassManager::CreatePipelines()
 				builder.AddVertexAttribute(7, 0, VK_FORMAT_R32G32B32A32_SINT, offsetof(SceneVertex, TextureBinds));
 			builder.AddDynamicState(VK_DYNAMIC_STATE_VIEWPORT);
 			builder.Layout(layout[type]);
-			builder.RenderPass(SceneRenderPass.get());
+			builder.RenderPass(Scene.RenderPass.get());
 
 			builder.AddColorBlendAttachment(ColorBlendAttachmentBuilder().BlendMode(VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA).Create());
 			builder.AddColorBlendAttachment(ColorBlendAttachmentBuilder().Create());
@@ -276,14 +288,14 @@ void RenderPassManager::CreatePipelines()
 			builder.RasterizationSamples(renderer->Textures->Scene->SceneSamples);
 			builder.DebugName(debugName[type]);
 
-			pointpipeline[i][type] = builder.Create(renderer->Device.get());
+			Scene.PointPipeline[i][type] = builder.Create(renderer->Device.get());
 		}
 	}
 }
 
 void RenderPassManager::CreateRenderPass()
 {
-	SceneRenderPass = RenderPassBuilder()
+	Scene.RenderPass = RenderPassBuilder()
 		.AddAttachment(
 			VK_FORMAT_R16G16B16A16_SFLOAT,
 			renderer->Textures->Scene->SceneSamples,
@@ -308,10 +320,10 @@ void RenderPassManager::CreateRenderPass()
 			VK_IMAGE_LAYOUT_UNDEFINED,
 			VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
 		.AddExternalSubpassDependency(
-			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT)
+			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT,
+			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT)
 		.AddSubpass()
 		.AddSubpassColorAttachmentRef(0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
 		.AddSubpassColorAttachmentRef(1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
@@ -322,7 +334,7 @@ void RenderPassManager::CreateRenderPass()
 
 void RenderPassManager::CreatePresentRenderPass()
 {
-	PresentRenderPass = RenderPassBuilder()
+	Present.RenderPass = RenderPassBuilder()
 		.AddAttachment(
 			renderer->Commands->SwapChain->Format().format,
 			VK_SAMPLE_COUNT_1_BIT,
@@ -331,10 +343,10 @@ void RenderPassManager::CreatePresentRenderPass()
 			VK_IMAGE_LAYOUT_UNDEFINED,
 			VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
 		.AddExternalSubpassDependency(
-			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT)
+			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT,
+			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT)
 		.AddSubpass()
 		.AddSubpassColorAttachmentRef(0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
 		.DebugName("PresentRenderPass")
@@ -345,18 +357,107 @@ void RenderPassManager::CreatePresentPipeline()
 {
 	for (int i = 0; i < 16; i++)
 	{
-		PresentPipeline[i] = GraphicsPipelineBuilder()
-			.AddVertexShader(renderer->Shaders->ppVertexShader.get())
-			.AddFragmentShader(renderer->Shaders->ppFragmentPresentShader[i].get())
+		Present.Pipeline[i] = GraphicsPipelineBuilder()
+			.AddVertexShader(renderer->Shaders->Postprocess.VertexShader.get())
+			.AddFragmentShader(renderer->Shaders->Postprocess.FragmentPresentShader[i].get())
 			.AddDynamicState(VK_DYNAMIC_STATE_VIEWPORT)
 			.AddDynamicState(VK_DYNAMIC_STATE_SCISSOR)
-			.Viewport(0.0f, 0.0f, 0.0f, 0.0f) // Note: the actual values are ignored since we use dynamic viewport+scissor states
-			.Scissor(0.0f, 0.0f, 0.0f, 0.0f)
-			.Topology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
-			.RasterizationSamples(VK_SAMPLE_COUNT_1_BIT)
-			.Layout(PresentPipelineLayout.get())
-			.RenderPass(PresentRenderPass.get())
+			.Layout(Present.PipelineLayout.get())
+			.RenderPass(Present.RenderPass.get())
 			.DebugName("PresentPipeline")
 			.Create(renderer->Device.get());
 	}
+}
+
+void RenderPassManager::CreateBloomRenderPass()
+{
+	Bloom.RenderPass = RenderPassBuilder()
+		.AddAttachment(
+			VK_FORMAT_R16G16B16A16_SFLOAT,
+			VK_SAMPLE_COUNT_1_BIT,
+			VK_ATTACHMENT_LOAD_OP_CLEAR,
+			VK_ATTACHMENT_STORE_OP_STORE,
+			VK_IMAGE_LAYOUT_UNDEFINED,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+		.AddExternalSubpassDependency(
+			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT,
+			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT)
+		.AddSubpass()
+		.AddSubpassColorAttachmentRef(0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+		.DebugName("BloomRenderPass")
+		.Create(renderer->Device.get());
+
+	Bloom.RenderPassCombine = RenderPassBuilder()
+		.AddAttachment(
+			VK_FORMAT_R16G16B16A16_SFLOAT,
+			VK_SAMPLE_COUNT_1_BIT,
+			VK_ATTACHMENT_LOAD_OP_LOAD,
+			VK_ATTACHMENT_STORE_OP_STORE,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+		.AddExternalSubpassDependency(
+			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT,
+			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT)
+		.AddSubpass()
+		.AddSubpassColorAttachmentRef(0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+		.DebugName("BloomRenderPassCombine")
+		.Create(renderer->Device.get());
+}
+
+void RenderPassManager::CreateBloomPipeline()
+{
+	Bloom.Extract = GraphicsPipelineBuilder()
+		.AddVertexShader(renderer->Shaders->Postprocess.VertexShader.get())
+		.AddFragmentShader(renderer->Shaders->Bloom.Extract.get())
+		.AddDynamicState(VK_DYNAMIC_STATE_VIEWPORT)
+		.AddDynamicState(VK_DYNAMIC_STATE_SCISSOR)
+		.Layout(Bloom.PipelineLayout.get())
+		.RenderPass(Bloom.RenderPass.get())
+		.DebugName("Bloom.Extract")
+		.Create(renderer->Device.get());
+
+	Bloom.Combine = GraphicsPipelineBuilder()
+		.AddVertexShader(renderer->Shaders->Postprocess.VertexShader.get())
+		.AddFragmentShader(renderer->Shaders->Bloom.Combine.get())
+		.AddDynamicState(VK_DYNAMIC_STATE_VIEWPORT)
+		.AddDynamicState(VK_DYNAMIC_STATE_SCISSOR)
+		.AddColorBlendAttachment(ColorBlendAttachmentBuilder().BlendMode(VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE).Create())
+		.Layout(Bloom.PipelineLayout.get())
+		.RenderPass(Bloom.RenderPass.get())
+		.DebugName("Bloom.Combine")
+		.Create(renderer->Device.get());
+
+	Bloom.Scale = GraphicsPipelineBuilder()
+		.AddVertexShader(renderer->Shaders->Postprocess.VertexShader.get())
+		.AddFragmentShader(renderer->Shaders->Bloom.Combine.get())
+		.AddDynamicState(VK_DYNAMIC_STATE_VIEWPORT)
+		.AddDynamicState(VK_DYNAMIC_STATE_SCISSOR)
+		.Layout(Bloom.PipelineLayout.get())
+		.RenderPass(Bloom.RenderPass.get())
+		.DebugName("Bloom.Copy")
+		.Create(renderer->Device.get());
+
+	Bloom.BlurVertical = GraphicsPipelineBuilder()
+		.AddVertexShader(renderer->Shaders->Postprocess.VertexShader.get())
+		.AddFragmentShader(renderer->Shaders->Bloom.BlurVertical.get())
+		.AddDynamicState(VK_DYNAMIC_STATE_VIEWPORT)
+		.AddDynamicState(VK_DYNAMIC_STATE_SCISSOR)
+		.Layout(Bloom.PipelineLayout.get())
+		.RenderPass(Bloom.RenderPass.get())
+		.DebugName("Bloom.BlurVertical")
+		.Create(renderer->Device.get());
+
+	Bloom.BlurHorizontal = GraphicsPipelineBuilder()
+		.AddVertexShader(renderer->Shaders->Postprocess.VertexShader.get())
+		.AddFragmentShader(renderer->Shaders->Bloom.BlurHorizontal.get())
+		.AddDynamicState(VK_DYNAMIC_STATE_VIEWPORT)
+		.AddDynamicState(VK_DYNAMIC_STATE_SCISSOR)
+		.Layout(Bloom.PipelineLayout.get())
+		.RenderPass(Bloom.RenderPass.get())
+		.DebugName("Bloom.BlurHorizontal")
+		.Create(renderer->Device.get());
 }

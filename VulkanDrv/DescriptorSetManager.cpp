@@ -6,37 +6,39 @@
 
 DescriptorSetManager::DescriptorSetManager(UVulkanRenderDevice* renderer) : renderer(renderer)
 {
-	CreateBindlessSceneDescriptorSet();
-	CreateSceneDescriptorSetLayout();
-	CreatePresentDescriptorSetLayout();
-	CreatePresentDescriptorSet();
+	CreateBindlessTextureSet();
+	CreateTextureLayout();
+	CreatePresentLayout();
+	CreatePresentSet();
+	CreateBloomLayout();
+	CreateBloomSets();
 }
 
 DescriptorSetManager::~DescriptorSetManager()
 {
 }
 
-VulkanDescriptorSet* DescriptorSetManager::GetTextureDescriptorSet(DWORD PolyFlags, CachedTexture* tex, CachedTexture* lightmap, CachedTexture* macrotex, CachedTexture* detailtex, bool clamp)
+VulkanDescriptorSet* DescriptorSetManager::GetTextureSet(DWORD PolyFlags, CachedTexture* tex, CachedTexture* lightmap, CachedTexture* macrotex, CachedTexture* detailtex, bool clamp)
 {
 	uint32_t samplermode = 0;
 	if (PolyFlags & PF_NoSmooth) samplermode |= 1;
 	if (clamp) samplermode |= 2;
 
-	auto& descriptorSet = TextureDescriptorSets[{ tex, lightmap, detailtex, macrotex, samplermode }];
+	auto& descriptorSet = Textures.Sets[{ tex, lightmap, detailtex, macrotex, samplermode }];
 	if (!descriptorSet)
 	{
-		if (SceneDescriptorPoolSetsLeft == 0)
+		if (Textures.PoolSetsLeft == 0)
 		{
-			SceneDescriptorPool.push_back(DescriptorPoolBuilder()
+			Textures.Pool.push_back(DescriptorPoolBuilder()
 				.AddPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 * 4)
 				.MaxSets(1000)
-				.DebugName("SceneDescriptorPool")
+				.DebugName("TexturePool")
 				.Create(renderer->Device.get()));
-			SceneDescriptorPoolSetsLeft = 1000;
+			Textures.PoolSetsLeft = 1000;
 		}
 
-		descriptorSet = SceneDescriptorPool.back()->allocate(SceneDescriptorSetLayout.get());
-		SceneDescriptorPoolSetsLeft--;
+		descriptorSet = Textures.Pool.back()->allocate(Textures.Layout.get());
+		Textures.PoolSetsLeft--;
 
 		WriteDescriptors writes;
 		int i = 0;
@@ -56,21 +58,21 @@ VulkanDescriptorSet* DescriptorSetManager::GetTextureDescriptorSet(DWORD PolyFla
 
 void DescriptorSetManager::ClearCache()
 {
-	TextureDescriptorSets.clear();
+	Textures.Sets.clear();
 
-	SceneDescriptorPool.clear();
-	SceneDescriptorPoolSetsLeft = 0;
+	Textures.Pool.clear();
+	Textures.PoolSetsLeft = 0;
 
-	WriteBindless = WriteDescriptors();
-	NextBindlessIndex = 0;
+	Textures.WriteBindless = WriteDescriptors();
+	Textures.NextBindlessIndex = 0;
 }
 
 int DescriptorSetManager::GetTextureArrayIndex(DWORD PolyFlags, CachedTexture* tex, bool clamp)
 {
-	if (NextBindlessIndex == 0)
+	if (Textures.NextBindlessIndex == 0)
 	{
-		WriteBindless.AddCombinedImageSampler(SceneBindlessDescriptorSet.get(), 0, 0, renderer->Textures->NullTextureView.get(), renderer->Samplers->Samplers[0].get(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-		NextBindlessIndex = 1;
+		Textures.WriteBindless.AddCombinedImageSampler(Textures.BindlessSet.get(), 0, 0, renderer->Textures->NullTextureView.get(), renderer->Samplers->Samplers[0].get(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+		Textures.NextBindlessIndex = 1;
 	}
 
 	if (!tex)
@@ -84,72 +86,115 @@ int DescriptorSetManager::GetTextureArrayIndex(DWORD PolyFlags, CachedTexture* t
 	if (index != -1)
 		return index;
 
-	index = NextBindlessIndex++;
+	index = Textures.NextBindlessIndex++;
 
 	VulkanSampler* sampler = renderer->Samplers->Samplers[samplermode].get();
-	WriteBindless.AddCombinedImageSampler(SceneBindlessDescriptorSet.get(), 0, index, tex->imageView.get(), sampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	Textures.WriteBindless.AddCombinedImageSampler(Textures.BindlessSet.get(), 0, index, tex->imageView.get(), sampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
 	tex->BindlessIndex[samplermode] = index;
 	return index;
 }
 
-void DescriptorSetManager::UpdateBindlessDescriptorSet()
+void DescriptorSetManager::UpdateBindlessSet()
 {
-	WriteBindless.Execute(renderer->Device.get());
-	WriteBindless = WriteDescriptors();
+	Textures.WriteBindless.Execute(renderer->Device.get());
+	Textures.WriteBindless = WriteDescriptors();
 }
 
-void DescriptorSetManager::CreateBindlessSceneDescriptorSet()
+void DescriptorSetManager::CreateBindlessTextureSet()
 {
 	if (!renderer->SupportsBindless)
 		return;
 
-	SceneBindlessDescriptorPool = DescriptorPoolBuilder()
+	Textures.BindlessPool = DescriptorPoolBuilder()
 		.Flags(VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT_EXT)
 		.AddPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, MaxBindlessTextures)
 		.MaxSets(MaxBindlessTextures)
-		.DebugName("SceneBindlessDescriptorPool")
+		.DebugName("TextureBindlessPool")
 		.Create(renderer->Device.get());
 
-	SceneBindlessDescriptorSetLayout = DescriptorSetLayoutBuilder()
+	Textures.BindlessLayout = DescriptorSetLayoutBuilder()
 		.Flags(VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT_EXT)
 		.AddBinding(
 			0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 			MaxBindlessTextures,
 			VK_SHADER_STAGE_FRAGMENT_BIT,
 			VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT | VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT_EXT | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT_EXT)
-		.DebugName("SceneBindlessDescriptorSetLayout")
+		.DebugName("TextureBindlessLayout")
 		.Create(renderer->Device.get());
 
-	SceneBindlessDescriptorSet = SceneBindlessDescriptorPool->allocate(SceneBindlessDescriptorSetLayout.get(), MaxBindlessTextures);
+	Textures.BindlessSet = Textures.BindlessPool->allocate(Textures.BindlessLayout.get(), MaxBindlessTextures);
 }
 
-void DescriptorSetManager::CreateSceneDescriptorSetLayout()
+void DescriptorSetManager::CreateTextureLayout()
 {
-	SceneDescriptorSetLayout = DescriptorSetLayoutBuilder()
+	Textures.Layout = DescriptorSetLayoutBuilder()
 		.AddBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT)
 		.AddBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT)
 		.AddBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT)
 		.AddBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT)
-		.DebugName("SceneDescriptorSetLayout")
+		.DebugName("TextureLayout")
 		.Create(renderer->Device.get());
 }
 
-void DescriptorSetManager::CreatePresentDescriptorSetLayout()
+void DescriptorSetManager::CreatePresentLayout()
 {
-	PresentDescriptorSetLayout = DescriptorSetLayoutBuilder()
+	Present.Layout = DescriptorSetLayoutBuilder()
 		.AddBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT)
 		.AddBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT)
-		.DebugName("PresentDescriptorSetLayout")
+		.DebugName("PresentLayout")
 		.Create(renderer->Device.get());
 }
 
-void DescriptorSetManager::CreatePresentDescriptorSet()
+void DescriptorSetManager::CreatePresentSet()
 {
-	PresentDescriptorPool = DescriptorPoolBuilder()
+	Present.Pool = DescriptorPoolBuilder()
 		.AddPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2)
 		.MaxSets(1)
-		.DebugName("PresentDescriptorPool")
+		.DebugName("PresentPool")
 		.Create(renderer->Device.get());
-	PresentDescriptorSet = PresentDescriptorPool->allocate(PresentDescriptorSetLayout.get());
+	Present.Set = Present.Pool->allocate(Present.Layout.get());
+}
+
+void DescriptorSetManager::CreateBloomLayout()
+{
+	Bloom.Layout = DescriptorSetLayoutBuilder()
+		.AddBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT)
+		.AddBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT)
+		.DebugName("BloomLayout")
+		.Create(renderer->Device.get());
+}
+
+void DescriptorSetManager::CreateBloomSets()
+{
+	Bloom.Pool = DescriptorPoolBuilder()
+		.AddPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, NumBloomLevels * 2 + 1)
+		.MaxSets(NumBloomLevels * 2 + 1)
+		.DebugName("BloomPool")
+		.Create(renderer->Device.get());
+
+	for (int level = 0; level < NumBloomLevels; level++)
+	{
+		Bloom.HTextureSets[level] = Bloom.Pool->allocate(Bloom.Layout.get());
+		Bloom.VTextureSets[level] = Bloom.Pool->allocate(Bloom.Layout.get());
+	}
+
+	Bloom.PPImageSet = Bloom.Pool->allocate(Bloom.Layout.get());
+}
+
+void DescriptorSetManager::UpdateFrameDescriptors()
+{
+	auto textures = renderer->Textures.get();
+	auto samplers = renderer->Samplers.get();
+
+	WriteDescriptors write;
+	write.AddCombinedImageSampler(Present.Set.get(), 0, textures->Scene->PPImageView.get(), samplers->PPLinearClamp.get(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	write.AddCombinedImageSampler(Present.Set.get(), 1, textures->DitherImageView.get(), samplers->PPNearestRepeat.get(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	for (int level = 0; level < NumBloomLevels; level++)
+	{
+		write.AddCombinedImageSampler(GetBloomHTextureSet(level), 0, textures->Scene->BloomBlurLevels[level].HTextureView.get(), samplers->PPLinearClamp.get(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+		write.AddCombinedImageSampler(GetBloomVTextureSet(level), 0, textures->Scene->BloomBlurLevels[level].VTextureView.get(), samplers->PPLinearClamp.get(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	}
+	write.AddCombinedImageSampler(Bloom.PPImageSet.get(), 0, textures->Scene->PPImageView.get(), samplers->PPLinearClamp.get(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	write.Execute(renderer->Device.get());
 }

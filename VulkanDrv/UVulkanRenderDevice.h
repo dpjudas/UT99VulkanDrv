@@ -96,8 +96,8 @@ public:
 	INT GrayFormula;
 	BITFIELD Hdr;
 	BITFIELD OccludeLines;
-	//BITFIELD Bloom;
-	//BYTE BloomAmount;
+	BITFIELD Bloom;
+	BYTE BloomAmount;
 	FLOAT LODBias;
 	BYTE AntialiasMode;
 	BYTE GammaMode;
@@ -106,6 +106,11 @@ public:
 	INT VkDeviceIndex;
 	BITFIELD VkDebug;
 	BITFIELD VkExclusiveFullscreen;
+
+	void RunBloomPass();
+	void BloomStep(VulkanCommandBuffer* cmdbuffer, VulkanPipeline* pipeline, VulkanDescriptorSet* input, VulkanFramebuffer* output, int width, int height, const BloomPushConstants &pushconstants);
+	static float ComputeBlurGaussian(float n, float theta);
+	static void ComputeBlurSamples(int sampleCount, float blurAmount, float* sampleWeights);
 
 	void DrawPresentTexture(int x, int y, int width, int height);
 
@@ -194,12 +199,12 @@ inline ivec4 UVulkanRenderDevice::SetDescriptorSet(DWORD PolyFlags, CachedTextur
 {
 	if (UsesBindless)
 	{
-		SetDescriptorSet(DescriptorSets->GetBindlessDescriptorSet(), true);
+		SetDescriptorSet(DescriptorSets->GetBindlessSet(), true);
 		return ivec4(DescriptorSets->GetTextureArrayIndex(PolyFlags, tex, clamp), 0, 0, 0);
 	}
 	else
 	{
-		SetDescriptorSet(DescriptorSets->GetTextureDescriptorSet(PolyFlags, tex, nullptr, nullptr, nullptr, clamp), false);
+		SetDescriptorSet(DescriptorSets->GetTextureSet(PolyFlags, tex, nullptr, nullptr, nullptr, clamp), false);
 		return ivec4(0);
 	}
 }
@@ -214,7 +219,7 @@ inline ivec4 UVulkanRenderDevice::SetDescriptorSet(DWORD PolyFlags, CachedTextur
 		textureBinds.z = DescriptorSets->GetTextureArrayIndex(0, detailtex);
 		textureBinds.w = DescriptorSets->GetTextureArrayIndex(0, lightmap);
 
-		SetDescriptorSet(DescriptorSets->GetBindlessDescriptorSet(), true);
+		SetDescriptorSet(DescriptorSets->GetBindlessSet(), true);
 	}
 	else
 	{
@@ -223,7 +228,7 @@ inline ivec4 UVulkanRenderDevice::SetDescriptorSet(DWORD PolyFlags, CachedTextur
 		textureBinds.z = 0.0f;
 		textureBinds.w = 0.0f;
 
-		SetDescriptorSet(DescriptorSets->GetTextureDescriptorSet(PolyFlags, tex, lightmap, macrotex, detailtex), false);
+		SetDescriptorSet(DescriptorSets->GetTextureSet(PolyFlags, tex, lightmap, macrotex, detailtex), false);
 	}
 	return textureBinds;
 }
