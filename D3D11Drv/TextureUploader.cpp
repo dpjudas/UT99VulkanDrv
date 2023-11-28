@@ -3,6 +3,12 @@
 #include "TextureUploader.h"
 #include <map>
 
+#define USE_SSE2
+
+#ifdef USE_SSE2
+#include <immintrin.h>
+#endif
+
 TextureUploader* TextureUploader::GetUploader(ETextureFormat format)
 {
 	static std::map<ETextureFormat, std::unique_ptr<TextureUploader>> Uploaders;
@@ -257,6 +263,49 @@ int TextureUploader_BGRA8_LM::GetUploadSize(int x, int y, int w, int h)
 
 void TextureUploader_BGRA8_LM::UploadRect(void* dst, FMipmapBase* mip, int x, int y, int w, int h, FColor* palette, bool masked)
 {
+#ifdef USE_SSE2
+	int pitch = mip->USize;
+	FColor* src = ((FColor*)mip->DataPtr) + x + y * pitch;
+	auto Ptr = (FColor*)dst;
+	if (w % 4 == 0)
+	{
+		for (int i = 0; i < h; i++)
+		{
+			for (int j = 0; j < w; j += 4)
+			{
+				__m128i p = _mm_loadu_si128((const __m128i*)(src + j));
+				__m128i p_hi = _mm_unpackhi_epi8(p, _mm_setzero_si128());
+				__m128i p_lo = _mm_unpacklo_epi8(p, _mm_setzero_si128());
+				p_hi = _mm_shufflehi_epi16(p_hi, _MM_SHUFFLE(3, 0, 1, 2));
+				p_hi = _mm_shufflelo_epi16(p_hi, _MM_SHUFFLE(3, 0, 1, 2));
+				p_hi = _mm_slli_epi16(p_hi, 1);
+				p_lo = _mm_shufflehi_epi16(p_lo, _MM_SHUFFLE(3, 0, 1, 2));
+				p_lo = _mm_shufflelo_epi16(p_lo, _MM_SHUFFLE(3, 0, 1, 2));
+				p_lo = _mm_slli_epi16(p_lo, 1);
+				p = _mm_packus_epi16(p_lo, p_hi);
+				_mm_storeu_si128((__m128i*)(Ptr + j), p);
+			}
+			Ptr += w;
+			src += pitch;
+		}
+	}
+	else
+	{
+		for (int i = 0; i < h; i++)
+		{
+			for (int j = 0; j < w; j++)
+			{
+				FColor Src = src[j];
+				Ptr->R = Src.B << 1;
+				Ptr->G = Src.G << 1;
+				Ptr->B = Src.R << 1;
+				Ptr->A = Src.A << 1;
+				Ptr++;
+			}
+			src += pitch;
+		}
+	}
+#else
 	int pitch = mip->USize;
 	FColor* src = ((FColor*)mip->DataPtr) + x + y * pitch;
 	auto Ptr = (FColor*)dst;
@@ -273,6 +322,7 @@ void TextureUploader_BGRA8_LM::UploadRect(void* dst, FMipmapBase* mip, int x, in
 		}
 		src += pitch;
 	}
+#endif
 }
 
 /////////////////////////////////////////////////////////////////////////////
