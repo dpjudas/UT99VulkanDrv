@@ -634,11 +634,11 @@ UBOOL UVulkanRenderDevice::SupportsTextureFormat(ETextureFormat Format)
 
 void UVulkanRenderDevice::UpdateTextureRect(FTextureInfo& Info, INT U, INT V, INT UL, INT VL)
 {
-	guard(UVulkanRenderDevice::UpdateTextureRect);
+	guardSlow(UVulkanRenderDevice::UpdateTextureRect);
 
 	Textures->UpdateTextureRect(&Info, U, V, UL, VL);
 
-	unguard;
+	unguardSlow;
 }
 
 #endif
@@ -660,7 +660,7 @@ void UVulkanRenderDevice::DrawBatch(VulkanCommandBuffer* cmdbuffer)
 
 void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Surface, FSurfaceFacet& Facet)
 {
-	guard(UVulkanRenderDevice::DrawComplexSurface);
+	guardSlow(UVulkanRenderDevice::DrawComplexSurface);
 
 	CachedTexture* tex = Textures->GetTexture(Surface.Texture, !!(Surface.PolyFlags & PF_Masked));
 	CachedTexture* lightmap = Textures->GetTexture(Surface.LightMap, false);
@@ -782,12 +782,12 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 
 	Stats.ComplexSurfaces++;
 
-	unguard;
+	unguardSlow;
 }
 
 void UVulkanRenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& Info, FTransTexture** Pts, int NumPts, DWORD PolyFlags, FSpanBuffer* Span)
 {
-	guard(UVulkanRenderDevice::DrawGouraudPolygon);
+	guardSlow(UVulkanRenderDevice::DrawGouraudPolygon);
 
 	if (NumPts < 3) return; // This can apparently happen!!
 
@@ -873,7 +873,7 @@ void UVulkanRenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& In
 
 	Stats.GouraudPolygons++;
 
-	unguard;
+	unguardSlow;
 }
 
 #if defined(OLDUNREAL469SDK)
@@ -887,7 +887,7 @@ static void EnviroMap(const FSceneNode* Frame, FTransTexture& P, FLOAT UScale, F
 
 void UVulkanRenderDevice::DrawGouraudTriangles(const FSceneNode* Frame, const FTextureInfo& Info, FTransTexture* const Pts, INT NumPts, DWORD PolyFlags, DWORD DataFlags, FSpanBuffer* Span)
 {
-	guard(UVulkanRenderDevice::DrawGouraudTriangles);
+	guardSlow(UVulkanRenderDevice::DrawGouraudTriangles);
 
 	if (NumPts < 3) return; // This can apparently happen!!
 
@@ -1011,14 +1011,14 @@ void UVulkanRenderDevice::DrawGouraudTriangles(const FSceneNode* Frame, const FT
 
 	Stats.GouraudPolygons++;
 
-	unguard;
+	unguardSlow;
 }
 
 #endif
 
 void UVulkanRenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT X, FLOAT Y, FLOAT XL, FLOAT YL, FLOAT U, FLOAT V, FLOAT UL, FLOAT VL, class FSpanBuffer* Span, FLOAT Z, FPlane Color, FPlane Fog, DWORD PolyFlags)
 {
-	guard(UVulkanRenderDevice::DrawTile);
+	guardSlow(UVulkanRenderDevice::DrawTile);
 
 	// stijn: fix for invisible actor icons in ortho viewports
 	if (GIsEditor && Frame->Viewport->Actor && (Frame->Viewport->IsOrtho() || Abs(Z) <= SMALL_NUMBER))
@@ -1088,7 +1088,7 @@ void UVulkanRenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT 
 
 	Stats.Tiles++;
 
-	unguard;
+	unguardSlow;
 }
 
 void UVulkanRenderDevice::Draw3DLine(FSceneNode* Frame, FPlane Color, DWORD LineFlags, FVector P1, FVector P2)
@@ -1393,7 +1393,7 @@ void UVulkanRenderDevice::EndFlash()
 
 void UVulkanRenderDevice::SetSceneNode(FSceneNode* Frame)
 {
-	guard(UVulkanRenderDevice::SetSceneNode);
+	guardSlow(UVulkanRenderDevice::SetSceneNode);
 
 	auto commands = Commands->GetDrawCommands();
 	DrawBatch(commands);
@@ -1416,7 +1416,7 @@ void UVulkanRenderDevice::SetSceneNode(FSceneNode* Frame)
 	pushconstants.objectToProjection = mat4::frustum(-RProjZ, RProjZ, -Aspect * RProjZ, Aspect * RProjZ, 1.0f, 32768.0f, handedness::left, clipzrange::zero_positive_w);
 	pushconstants.nearClip = vec4(Frame->NearClip.X, Frame->NearClip.Y, Frame->NearClip.Z, Frame->NearClip.W);
 
-	unguard;
+	unguardSlow;
 }
 
 void UVulkanRenderDevice::PrecacheTexture(FTextureInfo& Info, DWORD PolyFlags)

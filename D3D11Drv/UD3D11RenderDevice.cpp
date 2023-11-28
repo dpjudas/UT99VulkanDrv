@@ -1577,18 +1577,18 @@ UBOOL UD3D11RenderDevice::SupportsTextureFormat(ETextureFormat Format)
 
 void UD3D11RenderDevice::UpdateTextureRect(FTextureInfo& Info, INT U, INT V, INT UL, INT VL)
 {
-	guard(UD3D11RenderDevice::UpdateTextureRect);
+	guardSlow(UD3D11RenderDevice::UpdateTextureRect);
 
 	Textures->UpdateTextureRect(&Info, U, V, UL, VL);
 
-	unguard;
+	unguardSlow;
 }
 
 #endif
 
 void UD3D11RenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Surface, FSurfaceFacet& Facet)
 {
-	guard(UD3D11RenderDevice::DrawComplexSurface);
+	guardSlow(UD3D11RenderDevice::DrawComplexSurface);
 
 	CachedTexture* tex = Textures->GetTexture(Surface.Texture, !!(Surface.PolyFlags & PF_Masked));
 	CachedTexture* lightmap = Textures->GetTexture(Surface.LightMap, false);
@@ -1715,12 +1715,12 @@ void UD3D11RenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Sur
 
 	Stats.ComplexSurfaces++;
 
-	unguard;
+	unguardSlow;
 }
 
 void UD3D11RenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& Info, FTransTexture** Pts, int NumPts, DWORD PolyFlags, FSpanBuffer* Span)
 {
-	guard(UD3D11RenderDevice::DrawGouraudPolygon);
+	guardSlow(UD3D11RenderDevice::DrawGouraudPolygon);
 
 	if (NumPts < 3) return; // This can apparently happen!!
 	if (SceneVertexPos + NumPts > SceneVertexBufferSize || SceneIndexPos + NumPts * 3 > SceneIndexBufferSize) NextSceneBuffers();
@@ -1807,7 +1807,7 @@ void UD3D11RenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& Inf
 
 	Stats.GouraudPolygons++;
 
-	unguard;
+	unguardSlow;
 }
 
 #if defined(OLDUNREAL469SDK)
@@ -1821,7 +1821,7 @@ static void EnviroMap(const FSceneNode* Frame, FTransTexture& P, FLOAT UScale, F
 
 void UD3D11RenderDevice::DrawGouraudTriangles(const FSceneNode* Frame, const FTextureInfo& Info, FTransTexture* const Pts, INT NumPts, DWORD PolyFlags, DWORD DataFlags, FSpanBuffer* Span)
 {
-	guard(UD3D11RenderDevice::DrawGouraudTriangles);
+	guardSlow(UD3D11RenderDevice::DrawGouraudTriangles);
 
 	if (NumPts < 3) return; // This can apparently happen!!
 	if (SceneVertexPos + NumPts > SceneVertexBufferSize || SceneIndexPos + NumPts * 3 > SceneIndexBufferSize) NextSceneBuffers();
@@ -1946,14 +1946,14 @@ void UD3D11RenderDevice::DrawGouraudTriangles(const FSceneNode* Frame, const FTe
 
 	Stats.GouraudPolygons++;
 
-	unguard;
+	unguardSlow;
 }
 
 #endif
 
 void UD3D11RenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT X, FLOAT Y, FLOAT XL, FLOAT YL, FLOAT U, FLOAT V, FLOAT UL, FLOAT VL, class FSpanBuffer* Span, FLOAT Z, FPlane Color, FPlane Fog, DWORD PolyFlags)
 {
-	guard(UD3D11RenderDevice::DrawTile);
+	guardSlow(UD3D11RenderDevice::DrawTile);
 
 	if (SceneVertexPos + 4 > SceneVertexBufferSize || SceneIndexPos + 6 > SceneIndexBufferSize) NextSceneBuffers();
 
@@ -2026,7 +2026,7 @@ void UD3D11RenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT X
 
 	Stats.Tiles++;
 
-	unguard;
+	unguardSlow;
 }
 
 void UD3D11RenderDevice::Draw3DLine(FSceneNode* Frame, FPlane Color, DWORD LineFlags, FVector P1, FVector P2)
@@ -2294,7 +2294,7 @@ void UD3D11RenderDevice::EndFlash()
 
 void UD3D11RenderDevice::SetSceneNode(FSceneNode* Frame)
 {
-	guard(UD3D11RenderDevice::SetSceneNode);
+	guardSlow(UD3D11RenderDevice::SetSceneNode);
 
 	DrawBatches();
 
@@ -2318,7 +2318,7 @@ void UD3D11RenderDevice::SetSceneNode(FSceneNode* Frame)
 
 	Context->UpdateSubresource(ScenePass.ConstantBuffer, 0, nullptr, &SceneConstants, 0, 0);
 
-	unguard;
+	unguardSlow;
 }
 
 void UD3D11RenderDevice::PrecacheTexture(FTextureInfo& Info, DWORD PolyFlags)
