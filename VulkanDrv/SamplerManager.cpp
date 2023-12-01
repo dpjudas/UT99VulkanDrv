@@ -26,7 +26,7 @@ SamplerManager::SamplerManager(UVulkanRenderDevice* renderer) : renderer(rendere
 
 		if (i & 2)
 		{
-			builder.AddressMode(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
+			builder.AddressMode(VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE);
 		}
 		else
 		{

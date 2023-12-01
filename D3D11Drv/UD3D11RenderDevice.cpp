@@ -634,7 +634,7 @@ void UD3D11RenderDevice::CreateScenePass()
 	{
 		int dummyMipmapCount = (i >> 2) & 3;
 		D3D11_FILTER filter = (i & 1) ? D3D11_FILTER_MIN_MAG_MIP_POINT : D3D11_FILTER_ANISOTROPIC;
-		D3D11_TEXTURE_ADDRESS_MODE addressmode = (i & 2) ? D3D11_TEXTURE_ADDRESS_CLAMP : D3D11_TEXTURE_ADDRESS_WRAP;
+		D3D11_TEXTURE_ADDRESS_MODE addressmode = (i & 2) ? D3D11_TEXTURE_ADDRESS_MIRROR_ONCE : D3D11_TEXTURE_ADDRESS_WRAP;
 		D3D11_SAMPLER_DESC samplerDesc = {};
 		samplerDesc.MinLOD = dummyMipmapCount;
 		samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;

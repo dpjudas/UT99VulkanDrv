@@ -134,6 +134,7 @@ UBOOL UVulkanRenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT N
 		Device = VulkanDeviceBuilder()
 			.Surface(surface)
 			.OptionalDescriptorIndexing()
+			.RequireExtension(VK_KHR_SAMPLER_MIRROR_CLAMP_TO_EDGE_EXTENSION_NAME)
 			.SelectDevice(VkDeviceIndex)
 			.Create(instance);
 
