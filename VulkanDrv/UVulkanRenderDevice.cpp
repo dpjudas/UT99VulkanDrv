@@ -1713,7 +1713,7 @@ void UVulkanRenderDevice::DrawPresentTexture(int x, int y, int width, int height
 	}
 	else
 	{
-		float brightness = GIsEditor ? 1.0f : Clamp(Viewport->GetOuterUClient()->Brightness * 2.0, 0.05, 2.99);
+		float brightness = Clamp(Viewport->GetOuterUClient()->Brightness * 2.0, 0.05, 2.99);
 
 		if (GammaMode == 0)
 		{
