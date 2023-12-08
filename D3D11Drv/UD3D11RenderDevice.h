@@ -270,6 +270,8 @@ private:
 	void CreatePixelShader(ID3D11PixelShader*& outShader, const std::string& shaderName, const std::string& filename, const std::vector<std::string> defines = {});
 	std::vector<uint8_t> CompileHlsl(const std::string& filename, const std::string& shadertype, const std::vector<std::string> defines = {});
 
+	vec4 ApplyInverseGamma(vec4 color);
+
 	template<typename T>
 	void ReleaseObject(T*& obj) { if (obj) { obj->Release(); obj = nullptr; } }
 

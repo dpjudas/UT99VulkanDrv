@@ -157,6 +157,8 @@ private:
 	void DrawBatch(VulkanCommandBuffer* cmdbuffer);
 	void SubmitAndWait(bool present, int presentWidth, int presentHeight, bool presentFullscreen);
 
+	vec4 ApplyInverseGamma(vec4 color);
+
 	struct
 	{
 		size_t SceneIndexStart = 0;

@@ -2029,6 +2029,19 @@ void UD3D11RenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT X
 	unguardSlow;
 }
 
+static float square_f(float f) { return f * f; }
+static float max3(vec3 v) { return Max(Max(v.x, v.y), v.z); }
+static float max3(vec4 v) { return Max(Max(v.x, v.y), v.z); }
+
+vec4 UD3D11RenderDevice::ApplyInverseGamma(vec4 color)
+{
+	float brightness = Clamp(Viewport->GetOuterUClient()->Brightness * 2.0, 0.05, 2.99);
+	float gammaRed = Max(brightness + GammaOffset + GammaOffsetRed, 0.001f);
+	float gammaGreen = Max(brightness + GammaOffset + GammaOffsetGreen, 0.001f);
+	float gammaBlue = Max(brightness + GammaOffset + GammaOffsetBlue, 0.001f);
+	return vec4(pow(color.r, gammaRed), pow(color.g, gammaGreen), pow(color.b, gammaBlue), color.a);
+}
+
 void UD3D11RenderDevice::Draw3DLine(FSceneNode* Frame, FPlane Color, DWORD LineFlags, FVector P1, FVector P2)
 {
 	guard(UD3D11RenderDevice::Draw3DLine);
@@ -2070,8 +2083,10 @@ void UD3D11RenderDevice::Draw3DLine(FSceneNode* Frame, FPlane Color, DWORD LineF
 		SceneVertex* v = &SceneVertices[SceneVertexPos];
 		uint32_t* iptr = &SceneIndexes[SceneIndexPos];
 
-		v[0] = { 0, vec3(P1.X, P1.Y, P1.Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec4(Color.X, Color.Y, Color.Z, 1.0f) };
-		v[1] = { 0, vec3(P2.X, P2.Y, P2.Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec4(Color.X, Color.Y, Color.Z, 1.0f) };
+		vec4 color = ApplyInverseGamma(vec4(Color.X, Color.Y, Color.Z, 1.0f));
+
+		v[0] = { 0, vec3(P1.X, P1.Y, P1.Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), color };
+		v[1] = { 0, vec3(P2.X, P2.Y, P2.Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), color };
 
 		iptr[0] = SceneVertexPos;
 		iptr[1] = SceneVertexPos + 1;
@@ -2109,8 +2124,10 @@ void UD3D11RenderDevice::Draw2DLine(FSceneNode* Frame, FPlane Color, DWORD LineF
 	SceneVertex* v = &SceneVertices[SceneVertexPos];
 	uint32_t* iptr = &SceneIndexes[SceneIndexPos];
 
-	v[0] = { 0, vec3(RFX2 * P1.Z * (P1.X - Frame->FX2), RFY2 * P1.Z * (P1.Y - Frame->FY2), P1.Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec4(Color.X, Color.Y, Color.Z, 1.0f) };
-	v[1] = { 0, vec3(RFX2 * P2.Z * (P2.X - Frame->FX2), RFY2 * P2.Z * (P2.Y - Frame->FY2), P2.Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec4(Color.X, Color.Y, Color.Z, 1.0f) };
+	vec4 color = ApplyInverseGamma(vec4(Color.X, Color.Y, Color.Z, 1.0f));
+
+	v[0] = { 0, vec3(RFX2 * P1.Z * (P1.X - Frame->FX2), RFY2 * P1.Z * (P1.Y - Frame->FY2), P1.Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), color };
+	v[1] = { 0, vec3(RFX2 * P2.Z * (P2.X - Frame->FX2), RFY2 * P2.Z * (P2.Y - Frame->FY2), P2.Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), color };
 
 	iptr[0] = SceneVertexPos;
 	iptr[1] = SceneVertexPos + 1;
@@ -2142,10 +2159,12 @@ void UD3D11RenderDevice::Draw2DPoint(FSceneNode* Frame, FPlane Color, DWORD Line
 
 	SceneVertex* v = &SceneVertices[SceneVertexPos];
 
-	v[0] = { 0, vec3(RFX2 * Z * (X1 - Frame->FX2 - 0.5f), RFY2 * Z * (Y1 - Frame->FY2 - 0.5f), Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec4(Color.X, Color.Y, Color.Z, 1.0f) };
-	v[1] = { 0, vec3(RFX2 * Z * (X2 - Frame->FX2 + 0.5f), RFY2 * Z * (Y1 - Frame->FY2 - 0.5f), Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec4(Color.X, Color.Y, Color.Z, 1.0f) };
-	v[2] = { 0, vec3(RFX2 * Z * (X2 - Frame->FX2 + 0.5f), RFY2 * Z * (Y2 - Frame->FY2 + 0.5f), Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec4(Color.X, Color.Y, Color.Z, 1.0f) };
-	v[3] = { 0, vec3(RFX2 * Z * (X1 - Frame->FX2 - 0.5f), RFY2 * Z * (Y2 - Frame->FY2 + 0.5f), Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec4(Color.X, Color.Y, Color.Z, 1.0f) };
+	vec4 color = ApplyInverseGamma(vec4(Color.X, Color.Y, Color.Z, 1.0f));
+
+	v[0] = { 0, vec3(RFX2 * Z * (X1 - Frame->FX2 - 0.5f), RFY2 * Z * (Y1 - Frame->FY2 - 0.5f), Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), color };
+	v[1] = { 0, vec3(RFX2 * Z * (X2 - Frame->FX2 + 0.5f), RFY2 * Z * (Y1 - Frame->FY2 - 0.5f), Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), color };
+	v[2] = { 0, vec3(RFX2 * Z * (X2 - Frame->FX2 + 0.5f), RFY2 * Z * (Y2 - Frame->FY2 + 0.5f), Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), color };
+	v[3] = { 0, vec3(RFX2 * Z * (X1 - Frame->FX2 - 0.5f), RFY2 * Z * (Y2 - Frame->FY2 + 0.5f), Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), color };
 
 	size_t vstart = SceneVertexPos;
 	size_t vcount = 4;
