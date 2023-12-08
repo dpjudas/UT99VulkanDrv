@@ -1181,10 +1181,10 @@ void UVulkanRenderDevice::Draw2DPoint(FSceneNode* Frame, FPlane Color, DWORD Lin
 
 	SceneVertex* v = &Buffers->SceneVertices[SceneVertexPos];
 
-	v[0] = { 0, vec3(RFX2 * Z * (X1 - Frame->FX2), RFY2 * Z * (Y1 - Frame->FY2), Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec4(Color.X, Color.Y, Color.Z, 1.0f), textureBinds };
-	v[1] = { 0, vec3(RFX2 * Z * (X2 - Frame->FX2), RFY2 * Z * (Y1 - Frame->FY2), Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec4(Color.X, Color.Y, Color.Z, 1.0f), textureBinds };
-	v[2] = { 0, vec3(RFX2 * Z * (X2 - Frame->FX2), RFY2 * Z * (Y2 - Frame->FY2), Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec4(Color.X, Color.Y, Color.Z, 1.0f), textureBinds };
-	v[3] = { 0, vec3(RFX2 * Z * (X1 - Frame->FX2), RFY2 * Z * (Y2 - Frame->FY2), Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec4(Color.X, Color.Y, Color.Z, 1.0f), textureBinds };
+	v[0] = { 0, vec3(RFX2 * Z * (X1 - Frame->FX2 - 0.5f), RFY2 * Z * (Y1 - Frame->FY2 - 0.5f), Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec4(Color.X, Color.Y, Color.Z, 1.0f), textureBinds };
+	v[1] = { 0, vec3(RFX2 * Z * (X2 - Frame->FX2 + 0.5f), RFY2 * Z * (Y1 - Frame->FY2 - 0.5f), Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec4(Color.X, Color.Y, Color.Z, 1.0f), textureBinds };
+	v[2] = { 0, vec3(RFX2 * Z * (X2 - Frame->FX2 + 0.5f), RFY2 * Z * (Y2 - Frame->FY2 + 0.5f), Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec4(Color.X, Color.Y, Color.Z, 1.0f), textureBinds };
+	v[3] = { 0, vec3(RFX2 * Z * (X1 - Frame->FX2 - 0.5f), RFY2 * Z * (Y2 - Frame->FY2 + 0.5f), Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec4(Color.X, Color.Y, Color.Z, 1.0f), textureBinds };
 
 	size_t vstart = SceneVertexPos;
 	size_t vcount = 4;
