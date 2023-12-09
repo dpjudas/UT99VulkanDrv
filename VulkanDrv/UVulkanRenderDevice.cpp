@@ -1092,12 +1092,10 @@ void UVulkanRenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT 
 	unguardSlow;
 }
 
-static float square_f(float f) { return f * f; }
-static float max3(vec3 v) { return Max(Max(v.x, v.y), v.z); }
-static float max3(vec4 v) { return Max(Max(v.x, v.y), v.z); }
-
 vec4 UVulkanRenderDevice::ApplyInverseGamma(vec4 color)
 {
+	if (Viewport->IsOrtho())
+		return color;
 	float brightness = Clamp(Viewport->GetOuterUClient()->Brightness * 2.0, 0.05, 2.99);
 	float gammaRed = Max(brightness + GammaOffset + GammaOffsetRed, 0.001f);
 	float gammaGreen = Max(brightness + GammaOffset + GammaOffsetGreen, 0.001f);
