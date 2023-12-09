@@ -106,7 +106,7 @@ std::string FileResource::readAllText(const std::string& filename)
 				float actorXBlending = (flags & 32) != 0 ? 1.5 : 1.0;
 				float oneXBlending = (flags & 64) != 0 ? 1.0 : 2.0;
 
-				outColor = darkClamp(textureTex(texCoord)) * darkClamp(color) * actorXBlending;
+				outColor = darkClamp(textureTex(texCoord)) * color * actorXBlending;
 
 				if ((flags & 2) != 0) // Macro texture
 				{
