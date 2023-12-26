@@ -1,8 +1,8 @@
 # License information
 
-## License for the VulkanDrv folder
+## License for the VulkanDrv/D3D11Drv/HRTFAudio folders
 
-	// Copyright (c) 2020 Magnus Norddahl
+	// Copyright (c) 2020-2023 Magnus Norddahl
 	// 
 	// This software is provided 'as-is', without any express or implied
 	// warranty.  In no event will the authors be held liable for any damages
