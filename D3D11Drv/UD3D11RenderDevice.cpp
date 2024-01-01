@@ -1594,7 +1594,8 @@ void UD3D11RenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Sur
 	CachedTexture* lightmap = Textures->GetTexture(Surface.LightMap, false);
 	CachedTexture* macrotex = Textures->GetTexture(Surface.MacroTexture, false);
 	CachedTexture* detailtex = Textures->GetTexture(Surface.DetailTexture, false);
-	CachedTexture* fogmap = Textures->GetTexture(Surface.FogMap, false);
+	CachedTexture* fogmap = (Surface.FogMap && Surface.FogMap->Mips[0] && Surface.FogMap->Mips[0]->DataPtr) ? 
+		Textures->GetTexture(Surface.FogMap, false) : nullptr;
 
 #if defined(UNREALGOLD)
 	if (Surface.DetailTexture && Surface.FogMap) detailtex = nullptr;
