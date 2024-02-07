@@ -7,6 +7,7 @@
 #include "halffloat.h"
 #include <set>
 #include <emmintrin.h>
+#include <functional>
 
 IMPLEMENT_CLASS(UD3D11RenderDevice);
 
@@ -61,12 +62,15 @@ void UD3D11RenderDevice::StaticConstructor()
 	LightMode = 0;
 	RefreshRate = 0;
 
+	GammaCorrectScreenshots = 1;
+
 #if defined(OLDUNREAL469SDK)
 	new(GetClass(), TEXT("UseLightmapAtlas"), RF_Public) UBoolProperty(CPP_PROPERTY(UseLightmapAtlas), TEXT("Display"), CPF_Config);
 #endif
 
 	new(GetClass(), TEXT("UseVSync"), RF_Public) UBoolProperty(CPP_PROPERTY(UseVSync), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("UsePrecache"), RF_Public) UBoolProperty(CPP_PROPERTY(UsePrecache), TEXT("Display"), CPF_Config);
+	new(GetClass(), TEXT("GammaCorrectScreenshots"), RF_Public) UBoolProperty(CPP_PROPERTY(GammaCorrectScreenshots), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("GammaOffset"), RF_Public) UFloatProperty(CPP_PROPERTY(GammaOffset), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("GammaOffsetRed"), RF_Public) UFloatProperty(CPP_PROPERTY(GammaOffsetRed), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("GammaOffsetGreen"), RF_Public) UFloatProperty(CPP_PROPERTY(GammaOffsetGreen), TEXT("Display"), CPF_Config);
@@ -367,67 +371,10 @@ void UD3D11RenderDevice::Exit()
 
 	Uploads.reset();
 	Textures.reset();
-	ReleaseObject(PresentPass.PPStepLayout);
-	ReleaseObject(PresentPass.PPStep);
-	ReleaseObject(PresentPass.PPStepVertexBuffer);
-	ReleaseObject(PresentPass.HitResolve);
-	for (auto& shader : PresentPass.Present) ReleaseObject(shader);
-	ReleaseObject(PresentPass.PresentConstantBuffer);
-	ReleaseObject(PresentPass.DitherTextureView);
-	ReleaseObject(PresentPass.DitherTexture);
-	ReleaseObject(PresentPass.BlendState);
-	ReleaseObject(PresentPass.DepthStencilState);
-	ReleaseObject(BloomPass.Extract);
-	ReleaseObject(BloomPass.Combine);
-	ReleaseObject(BloomPass.BlurVertical);
-	ReleaseObject(BloomPass.BlurHorizontal);
-	ReleaseObject(ScenePass.VertexShader);
-	ReleaseObject(ScenePass.InputLayout);
-	ReleaseObject(ScenePass.VertexBuffer);
-	ReleaseObject(ScenePass.IndexBuffer);
-	ReleaseObject(ScenePass.ConstantBuffer);
-	ReleaseObject(ScenePass.RasterizerState[0]);
-	ReleaseObject(ScenePass.RasterizerState[1]);
-	ReleaseObject(ScenePass.PixelShader);
-	ReleaseObject(ScenePass.PixelShaderAlphaTest);
-	for (auto& sampler : ScenePass.Samplers)
-	{
-		ReleaseObject(sampler);
-	}
-	for (auto& pipeline : ScenePass.Pipelines)
-	{
-		ReleaseObject(pipeline.BlendState);
-		ReleaseObject(pipeline.DepthStencilState);
-	}
-	for (int i = 0; i < 2; i++)
-	{
-		ReleaseObject(ScenePass.LinePipeline[i].BlendState);
-		ReleaseObject(ScenePass.LinePipeline[i].DepthStencilState);
-	}
-	ReleaseObject(ScenePass.PointPipeline.BlendState);
-	ReleaseObject(ScenePass.PointPipeline.DepthStencilState);
-	ReleaseObject(SceneBuffers.ColorBufferView);
-	ReleaseObject(SceneBuffers.HitBufferView);
-	ReleaseObject(SceneBuffers.HitBufferShaderView);
-	ReleaseObject(SceneBuffers.PPHitBufferView);
-	ReleaseObject(SceneBuffers.DepthBufferView);
-	ReleaseObject(SceneBuffers.PPImageShaderView);
-	ReleaseObject(SceneBuffers.PPImageView);
-	ReleaseObject(SceneBuffers.ColorBuffer);
-	ReleaseObject(SceneBuffers.StagingHitBuffer);
-	ReleaseObject(SceneBuffers.PPHitBuffer);
-	ReleaseObject(SceneBuffers.HitBuffer);
-	ReleaseObject(SceneBuffers.DepthBuffer);
-	ReleaseObject(SceneBuffers.PPImage);
-	for (PPBlurLevel& level : SceneBuffers.BlurLevels)
-	{
-		ReleaseObject(level.VTexture);
-		ReleaseObject(level.VTextureRTV);
-		ReleaseObject(level.VTextureSRV);
-		ReleaseObject(level.HTexture);
-		ReleaseObject(level.HTextureRTV);
-		ReleaseObject(level.HTextureSRV);
-	}
+	ReleasePresentPass();
+	ReleaseBloomPass();
+	ReleaseScenePass();
+	ReleaseSceneBuffers();
 	ReleaseObject(BackBufferView);
 	ReleaseObject(BackBuffer);
 	ReleaseObject(SwapChain);
@@ -441,7 +388,7 @@ void UD3D11RenderDevice::ResizeSceneBuffers(int width, int height, int multisamp
 {
 	multisample = std::max(multisample, 1);
 
-	if (SceneBuffers.Width == width && SceneBuffers.Height == height && multisample == SceneBuffers.Multisample && SceneBuffers.ColorBuffer && SceneBuffers.HitBuffer && SceneBuffers.PPHitBuffer && SceneBuffers.StagingHitBuffer && SceneBuffers.DepthBuffer && SceneBuffers.PPImage)
+	if (SceneBuffers.Width == width && SceneBuffers.Height == height && multisample == SceneBuffers.Multisample && SceneBuffers.ColorBuffer && SceneBuffers.HitBuffer && SceneBuffers.PPHitBuffer && SceneBuffers.StagingHitBuffer && SceneBuffers.DepthBuffer && SceneBuffers.PPImage[0] && SceneBuffers.PPImage[1])
 		return;
 
 	ReleaseObject(SceneBuffers.ColorBufferView);
@@ -449,14 +396,17 @@ void UD3D11RenderDevice::ResizeSceneBuffers(int width, int height, int multisamp
 	ReleaseObject(SceneBuffers.HitBufferShaderView);
 	ReleaseObject(SceneBuffers.PPHitBufferView);
 	ReleaseObject(SceneBuffers.DepthBufferView);
-	ReleaseObject(SceneBuffers.PPImageShaderView);
-	ReleaseObject(SceneBuffers.PPImageView);
+	for (int i = 0; i < 2; i++)
+	{
+		ReleaseObject(SceneBuffers.PPImageShaderView[i]);
+		ReleaseObject(SceneBuffers.PPImageView[i]);
+		ReleaseObject(SceneBuffers.PPImage[i]);
+	}
 	ReleaseObject(SceneBuffers.ColorBuffer);
 	ReleaseObject(SceneBuffers.StagingHitBuffer);
 	ReleaseObject(SceneBuffers.PPHitBuffer);
 	ReleaseObject(SceneBuffers.HitBuffer);
 	ReleaseObject(SceneBuffers.DepthBuffer);
-	ReleaseObject(SceneBuffers.PPImage);
 
 	for (PPBlurLevel& level : SceneBuffers.BlurLevels)
 	{
@@ -538,18 +488,21 @@ void UD3D11RenderDevice::ResizeSceneBuffers(int width, int height, int multisamp
 	result = Device->CreateTexture2D(&texDesc, nullptr, &SceneBuffers.DepthBuffer);
 	ThrowIfFailed(result, "CreateTexture2D(DepthBuffer) failed");
 
-	texDesc = {};
-	texDesc.Usage = D3D11_USAGE_DEFAULT;
-	texDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
-	texDesc.Width = SceneBuffers.Width;
-	texDesc.Height = SceneBuffers.Height;
-	texDesc.MipLevels = 1;
-	texDesc.ArraySize = 1;
-	texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
-	texDesc.SampleDesc.Count = 1;
-	texDesc.SampleDesc.Quality = 0;
-	result = Device->CreateTexture2D(&texDesc, nullptr, &SceneBuffers.PPImage);
-	ThrowIfFailed(result, "CreateTexture2D(PPImage) failed");
+	for (int i = 0; i < 2; i++)
+	{
+		texDesc = {};
+		texDesc.Usage = D3D11_USAGE_DEFAULT;
+		texDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+		texDesc.Width = SceneBuffers.Width;
+		texDesc.Height = SceneBuffers.Height;
+		texDesc.MipLevels = 1;
+		texDesc.ArraySize = 1;
+		texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+		texDesc.SampleDesc.Count = 1;
+		texDesc.SampleDesc.Quality = 0;
+		result = Device->CreateTexture2D(&texDesc, nullptr, &SceneBuffers.PPImage[i]);
+		ThrowIfFailed(result, "CreateTexture2D(PPImage) failed");
+	}
 
 	result = Device->CreateRenderTargetView(SceneBuffers.ColorBuffer, nullptr, &SceneBuffers.ColorBufferView);
 	ThrowIfFailed(result, "CreateRenderTargetView(ColorBuffer) failed");
@@ -566,11 +519,14 @@ void UD3D11RenderDevice::ResizeSceneBuffers(int width, int height, int multisamp
 	result = Device->CreateDepthStencilView(SceneBuffers.DepthBuffer, nullptr, &SceneBuffers.DepthBufferView);
 	ThrowIfFailed(result, "CreateDepthStencilView(DepthBuffer) failed");
 
-	result = Device->CreateRenderTargetView(SceneBuffers.PPImage, nullptr, &SceneBuffers.PPImageView);
-	ThrowIfFailed(result, "CreateRenderTargetView(PPImage) failed");
+	for (int i = 0; i < 2; i++)
+	{
+		result = Device->CreateRenderTargetView(SceneBuffers.PPImage[i], nullptr, &SceneBuffers.PPImageView[i]);
+		ThrowIfFailed(result, "CreateRenderTargetView(PPImage) failed");
 
-	result = Device->CreateShaderResourceView(SceneBuffers.PPImage, nullptr, &SceneBuffers.PPImageShaderView);
-	ThrowIfFailed(result, "CreateShaderResourceView(PPImage) failed");
+		result = Device->CreateShaderResourceView(SceneBuffers.PPImage[i], nullptr, &SceneBuffers.PPImageShaderView[i]);
+		ThrowIfFailed(result, "CreateShaderResourceView(PPImage) failed");
+	}
 
 	int bloomWidth = width;
 	int bloomHeight = height;
@@ -630,28 +586,7 @@ void UD3D11RenderDevice::CreateScenePass()
 	CreatePixelShader(ScenePass.PixelShader, "ScenePass.PixelShader", "shaders/Scene.frag");
 	CreatePixelShader(ScenePass.PixelShaderAlphaTest, "ScenePass.PixelShaderAlphaTest", "shaders/Scene.frag", { "ALPHATEST" });
 
-	for (int i = 0; i < 16; i++)
-	{
-		int dummyMipmapCount = (i >> 2) & 3;
-		D3D11_FILTER filter = (i & 1) ? D3D11_FILTER_MIN_MAG_MIP_POINT : D3D11_FILTER_ANISOTROPIC;
-		D3D11_TEXTURE_ADDRESS_MODE addressmode = (i & 2) ? D3D11_TEXTURE_ADDRESS_MIRROR_ONCE : D3D11_TEXTURE_ADDRESS_WRAP;
-		D3D11_SAMPLER_DESC samplerDesc = {};
-		samplerDesc.MinLOD = dummyMipmapCount;
-		samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
-		samplerDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
-		samplerDesc.BorderColor[0] = 1.0f;
-		samplerDesc.BorderColor[1] = 1.0f;
-		samplerDesc.BorderColor[2] = 1.0f;
-		samplerDesc.BorderColor[3] = 1.0f;
-		samplerDesc.MaxAnisotropy = 8.0f;
-		samplerDesc.MipLODBias = (float)dummyMipmapCount + LODBias;
-		samplerDesc.Filter = filter;
-		samplerDesc.AddressU = addressmode;
-		samplerDesc.AddressV = addressmode;
-		samplerDesc.AddressW = addressmode;
-		HRESULT result = Device->CreateSamplerState(&samplerDesc, &ScenePass.Samplers[i]);
-		ThrowIfFailed(result, "CreateSamplerState(ScenePass.Samplers) failed");
-	}
+	CreateSceneSamplers();
 
 	for (int i = 0; i < 2; i++)
 	{
@@ -813,6 +748,129 @@ void UD3D11RenderDevice::CreateScenePass()
 	ThrowIfFailed(result, "CreateBuffer(ScenePass.ConstantBuffer) failed");
 }
 
+void UD3D11RenderDevice::CreateSceneSamplers()
+{
+	for (int i = 0; i < 16; i++)
+	{
+		int dummyMipmapCount = (i >> 2) & 3;
+		D3D11_FILTER filter = (i & 1) ? D3D11_FILTER_MIN_MAG_MIP_POINT : D3D11_FILTER_ANISOTROPIC;
+		D3D11_TEXTURE_ADDRESS_MODE addressmode = (i & 2) ? D3D11_TEXTURE_ADDRESS_MIRROR_ONCE : D3D11_TEXTURE_ADDRESS_WRAP;
+		D3D11_SAMPLER_DESC samplerDesc = {};
+		samplerDesc.MinLOD = dummyMipmapCount;
+		samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
+		samplerDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
+		samplerDesc.BorderColor[0] = 1.0f;
+		samplerDesc.BorderColor[1] = 1.0f;
+		samplerDesc.BorderColor[2] = 1.0f;
+		samplerDesc.BorderColor[3] = 1.0f;
+		samplerDesc.MaxAnisotropy = 8.0f;
+		samplerDesc.MipLODBias = (float)dummyMipmapCount + LODBias;
+		samplerDesc.Filter = filter;
+		samplerDesc.AddressU = addressmode;
+		samplerDesc.AddressV = addressmode;
+		samplerDesc.AddressW = addressmode;
+		HRESULT result = Device->CreateSamplerState(&samplerDesc, &ScenePass.Samplers[i]);
+		ThrowIfFailed(result, "CreateSamplerState(ScenePass.Samplers) failed");
+	}
+
+	ScenePass.LODBias = LODBias;
+}
+
+void UD3D11RenderDevice::ReleaseSceneSamplers()
+{
+	for (auto& sampler : ScenePass.Samplers)
+	{
+		ReleaseObject(sampler);
+	}
+	ScenePass.LODBias = 0.0f;
+}
+
+void UD3D11RenderDevice::UpdateLODBias()
+{
+	if (ScenePass.LODBias != LODBias)
+	{
+		ReleaseSceneSamplers();
+		CreateSceneSamplers();
+	}
+}
+
+void UD3D11RenderDevice::ReleaseScenePass()
+{
+	ReleaseObject(ScenePass.VertexShader);
+	ReleaseObject(ScenePass.InputLayout);
+	ReleaseObject(ScenePass.VertexBuffer);
+	ReleaseObject(ScenePass.IndexBuffer);
+	ReleaseObject(ScenePass.ConstantBuffer);
+	ReleaseObject(ScenePass.RasterizerState[0]);
+	ReleaseObject(ScenePass.RasterizerState[1]);
+	ReleaseObject(ScenePass.PixelShader);
+	ReleaseObject(ScenePass.PixelShaderAlphaTest);
+	ReleaseSceneSamplers();
+	for (auto& pipeline : ScenePass.Pipelines)
+	{
+		ReleaseObject(pipeline.BlendState);
+		ReleaseObject(pipeline.DepthStencilState);
+	}
+	for (int i = 0; i < 2; i++)
+	{
+		ReleaseObject(ScenePass.LinePipeline[i].BlendState);
+		ReleaseObject(ScenePass.LinePipeline[i].DepthStencilState);
+	}
+	ReleaseObject(ScenePass.PointPipeline.BlendState);
+	ReleaseObject(ScenePass.PointPipeline.DepthStencilState);
+}
+
+void UD3D11RenderDevice::ReleaseBloomPass()
+{
+	ReleaseObject(BloomPass.Extract);
+	ReleaseObject(BloomPass.Combine);
+	ReleaseObject(BloomPass.BlurVertical);
+	ReleaseObject(BloomPass.BlurHorizontal);
+}
+
+void UD3D11RenderDevice::ReleasePresentPass()
+{
+	ReleaseObject(PresentPass.PPStepLayout);
+	ReleaseObject(PresentPass.PPStep);
+	ReleaseObject(PresentPass.PPStepVertexBuffer);
+	ReleaseObject(PresentPass.HitResolve);
+	for (auto& shader : PresentPass.Present) ReleaseObject(shader);
+	ReleaseObject(PresentPass.PresentConstantBuffer);
+	ReleaseObject(PresentPass.DitherTextureView);
+	ReleaseObject(PresentPass.DitherTexture);
+	ReleaseObject(PresentPass.BlendState);
+	ReleaseObject(PresentPass.DepthStencilState);
+}
+
+void UD3D11RenderDevice::ReleaseSceneBuffers()
+{
+	ReleaseObject(SceneBuffers.ColorBufferView);
+	ReleaseObject(SceneBuffers.HitBufferView);
+	ReleaseObject(SceneBuffers.HitBufferShaderView);
+	ReleaseObject(SceneBuffers.PPHitBufferView);
+	ReleaseObject(SceneBuffers.DepthBufferView);
+	for (int i = 0; i < 2; i++)
+	{
+		ReleaseObject(SceneBuffers.PPImageShaderView[i]);
+		ReleaseObject(SceneBuffers.PPImageView[i]);
+		ReleaseObject(SceneBuffers.PPImage[i]);
+	}
+	ReleaseObject(SceneBuffers.ColorBuffer);
+	ReleaseObject(SceneBuffers.StagingHitBuffer);
+	ReleaseObject(SceneBuffers.PPHitBuffer);
+	ReleaseObject(SceneBuffers.HitBuffer);
+	ReleaseObject(SceneBuffers.DepthBuffer);
+	for (PPBlurLevel& level : SceneBuffers.BlurLevels)
+	{
+		ReleaseObject(level.VTexture);
+		ReleaseObject(level.VTextureRTV);
+		ReleaseObject(level.VTextureSRV);
+		ReleaseObject(level.HTexture);
+		ReleaseObject(level.HTextureRTV);
+		ReleaseObject(level.HTextureSRV);
+	}
+}
+
 UD3D11RenderDevice::ScenePipelineState* UD3D11RenderDevice::GetPipeline(DWORD PolyFlags)
 {
 	// Adjust PolyFlags according to Unreal's precedence rules.
@@ -882,7 +940,7 @@ void UD3D11RenderDevice::RunBloomPass()
 	Context->OMSetRenderTargets(1, &SceneBuffers.BlurLevels[0].VTextureRTV, nullptr);
 	Context->RSSetViewports(1, &viewport);
 	Context->PSSetShader(BloomPass.Extract, nullptr, 0);
-	Context->PSSetShaderResources(0, 1, &SceneBuffers.PPImageShaderView);
+	Context->PSSetShaderResources(0, 1, &SceneBuffers.PPImageShaderView[0]);
 	Context->Draw(6, 0);
 
 	// Blur and downscale:
@@ -938,7 +996,7 @@ void UD3D11RenderDevice::RunBloomPass()
 	// Add bloom back to scene post process texture:
 	viewport.Width = SceneBuffers.Width;
 	viewport.Height = SceneBuffers.Height;
-	Context->OMSetRenderTargets(1, &SceneBuffers.PPImageView, nullptr);
+	Context->OMSetRenderTargets(1, &SceneBuffers.PPImageView[0], nullptr);
 	Context->OMSetBlendState(BloomPass.AdditiveBlendState, nullptr, 0xffffffff);
 	Context->RSSetViewports(1, &viewport);
 	Context->PSSetShader(BloomPass.Combine, nullptr, 0);
@@ -1290,6 +1348,61 @@ void UD3D11RenderDevice::DrawStats(FSceneNode* Frame)
 	Stats.BuffersUsed = 1;
 }
 
+PresentPushConstants UD3D11RenderDevice::GetPresentPushConstants()
+{
+	PresentPushConstants pushconstants;
+	if (Viewport->IsOrtho())
+	{
+		pushconstants.GammaCorrection = { 1.0f };
+		pushconstants.Contrast = 1.0f;
+		pushconstants.Saturation = 1.0f;
+		pushconstants.Brightness = 0.0f;
+	}
+	else
+	{
+		float brightness = Clamp(Viewport->GetOuterUClient()->Brightness * 2.0, 0.05, 2.99);
+
+		if (GammaMode == 0)
+		{
+			float invGammaRed = 1.0f / Max(brightness + GammaOffset + GammaOffsetRed, 0.001f);
+			float invGammaGreen = 1.0f / Max(brightness + GammaOffset + GammaOffsetGreen, 0.001f);
+			float invGammaBlue = 1.0f / Max(brightness + GammaOffset + GammaOffsetBlue, 0.001f);
+			pushconstants.GammaCorrection = vec4(invGammaRed, invGammaGreen, invGammaBlue, 0.0f);
+		}
+		else
+		{
+			float invGammaRed = (GammaOffset + GammaOffsetRed + 2.0f) > 0.0f ? 1.0f / (GammaOffset + GammaOffsetRed + 1.0f) : 1.0f;
+			float invGammaGreen = (GammaOffset + GammaOffsetGreen + 2.0f) > 0.0f ? 1.0f / (GammaOffset + GammaOffsetGreen + 1.0f) : 1.0f;
+			float invGammaBlue = (GammaOffset + GammaOffsetBlue + 2.0f) > 0.0f ? 1.0f / (GammaOffset + GammaOffsetBlue + 1.0f) : 1.0f;
+			pushconstants.GammaCorrection = vec4(invGammaRed, invGammaGreen, invGammaBlue, brightness);
+		}
+
+		// pushconstants.Contrast = clamp(Contrast, 0.1f, 3.f);
+		if (Contrast >= 128)
+		{
+			pushconstants.Contrast = 1.0f + (Contrast - 128) / 127.0f * 3.0f;
+		}
+		else
+		{
+			pushconstants.Contrast = Max(Contrast / 128.0f, 0.1f);
+		}
+
+		// pushconstants.Saturation = clamp(Saturation, -1.0f, 1.0f);
+		pushconstants.Saturation = 1.0f - 2.0f * (255 - Saturation) / 255.0f;
+
+		// pushconstants.Brightness = clamp(LinearBrightness, -1.8f, 1.8f);
+		if (LinearBrightness >= 128)
+		{
+			pushconstants.Brightness = (LinearBrightness - 128) / 127.0f * 1.8f;
+		}
+		else
+		{
+			pushconstants.Brightness = (128 - LinearBrightness) / 128.0f * -1.8f;
+		}
+	}
+	return pushconstants;
+}
+
 void UD3D11RenderDevice::Unlock(UBOOL Blit)
 {
 	guard(UD3D11RenderDevice::Unlock);
@@ -1301,11 +1414,11 @@ void UD3D11RenderDevice::Unlock(UBOOL Blit)
 	{
 		if (SceneBuffers.Multisample > 1)
 		{
-			Context->ResolveSubresource(SceneBuffers.PPImage, 0, SceneBuffers.ColorBuffer, 0, DXGI_FORMAT_R16G16B16A16_FLOAT);
+			Context->ResolveSubresource(SceneBuffers.PPImage[0], 0, SceneBuffers.ColorBuffer, 0, DXGI_FORMAT_R16G16B16A16_FLOAT);
 		}
 		else
 		{
-			Context->CopyResource(SceneBuffers.PPImage, SceneBuffers.ColorBuffer);
+			Context->CopyResource(SceneBuffers.PPImage[0], SceneBuffers.ColorBuffer);
 		}
 
 		if (Bloom)
@@ -1321,56 +1434,7 @@ void UD3D11RenderDevice::Unlock(UBOOL Blit)
 		viewport.MaxDepth = 1.0f;
 		Context->RSSetViewports(1, &viewport);
 
-		PresentPushConstants pushconstants;
-		if (Viewport->IsOrtho())
-		{
-			pushconstants.GammaCorrection = { 1.0f };
-			pushconstants.Contrast = 1.0f;
-			pushconstants.Saturation = 1.0f;
-			pushconstants.Brightness = 0.0f;
-		}
-		else
-		{
-			float brightness = Clamp(Viewport->GetOuterUClient()->Brightness * 2.0, 0.05, 2.99);
-
-			if (GammaMode == 0)
-			{
-				float invGammaRed = 1.0f / Max(brightness + GammaOffset + GammaOffsetRed, 0.001f);
-				float invGammaGreen = 1.0f / Max(brightness + GammaOffset + GammaOffsetGreen, 0.001f);
-				float invGammaBlue = 1.0f / Max(brightness + GammaOffset + GammaOffsetBlue, 0.001f);
-				pushconstants.GammaCorrection = vec4(invGammaRed, invGammaGreen, invGammaBlue, 0.0f);
-			}
-			else
-			{
-				float invGammaRed = (GammaOffset + GammaOffsetRed + 2.0f) > 0.0f ? 1.0f / (GammaOffset + GammaOffsetRed + 1.0f) : 1.0f;
-				float invGammaGreen = (GammaOffset + GammaOffsetGreen + 2.0f) > 0.0f ? 1.0f / (GammaOffset + GammaOffsetGreen + 1.0f) : 1.0f;
-				float invGammaBlue = (GammaOffset + GammaOffsetBlue + 2.0f) > 0.0f ? 1.0f / (GammaOffset + GammaOffsetBlue + 1.0f) : 1.0f;
-				pushconstants.GammaCorrection = vec4(invGammaRed, invGammaGreen, invGammaBlue, brightness);
-			}
-
-			// pushconstants.Contrast = clamp(Contrast, 0.1f, 3.f);
-			if (Contrast >= 128)
-			{
-				pushconstants.Contrast = 1.0f + (Contrast - 128) / 127.0f * 3.0f;
-			}
-			else
-			{
-				pushconstants.Contrast = Max(Contrast / 128.0f, 0.1f);
-			}
-
-			// pushconstants.Saturation = clamp(Saturation, -1.0f, 1.0f);
-			pushconstants.Saturation = 1.0f - 2.0f * (255 - Saturation) / 255.0f;
-
-			// pushconstants.Brightness = clamp(LinearBrightness, -1.8f, 1.8f);
-			if (LinearBrightness >= 128)
-			{
-				pushconstants.Brightness = (LinearBrightness - 128) / 127.0f * 1.8f;
-			}
-			else
-			{
-				pushconstants.Brightness = (128 - LinearBrightness) / 128.0f * -1.8f;
-			}
-		}
+		PresentPushConstants pushconstants = GetPresentPushConstants();
 
 		// Select present shader based on what the user is actually using
 		int presentShader = 0;
@@ -1380,7 +1444,7 @@ void UD3D11RenderDevice::Unlock(UBOOL Blit)
 
 		UINT stride = sizeof(vec2);
 		UINT offset = 0;
-		ID3D11ShaderResourceView* psResources[] = { SceneBuffers.PPImageShaderView, PresentPass.DitherTextureView };
+		ID3D11ShaderResourceView* psResources[] = { SceneBuffers.PPImageShaderView[0], PresentPass.DitherTextureView};
 		Context->IASetVertexBuffers(0, 1, &PresentPass.PPStepVertexBuffer, &stride, &offset);
 		Context->IASetInputLayout(PresentPass.PPStepLayout);
 		Context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -1425,6 +1489,8 @@ void UD3D11RenderDevice::Unlock(UBOOL Blit)
 
 		SceneVertexPos = 0;
 		SceneIndexPos = 0;
+
+		UpdateLODBias();
 	}
 
 	if (HitData)
@@ -2223,7 +2289,46 @@ void UD3D11RenderDevice::ReadPixels(FColor* Pixels)
 	if (FAILED(result))
 		return;
 
-	Context->CopyResource(stagingTexture, SceneBuffers.PPImage);
+	if (GammaCorrectScreenshots)
+	{
+		Context->OMSetRenderTargets(1, &SceneBuffers.PPImageView[1], nullptr);
+
+		D3D11_VIEWPORT viewport = {};
+		viewport.Width = Viewport->SizeX;
+		viewport.Height = Viewport->SizeY;
+		viewport.MaxDepth = 1.0f;
+		Context->RSSetViewports(1, &viewport);
+
+		PresentPushConstants pushconstants = GetPresentPushConstants();
+
+		// Select present shader based on what the user is actually using
+		int presentShader = 0;
+		if (ActiveHdr) presentShader |= 1;
+		if (GammaMode == 1) presentShader |= 2;
+		if (pushconstants.Brightness != 0.0f || pushconstants.Contrast != 1.0f || pushconstants.Saturation != 1.0f) presentShader |= (Clamp(GrayFormula, 0, 2) + 1) << 2;
+
+		UINT stride = sizeof(vec2);
+		UINT offset = 0;
+		ID3D11ShaderResourceView* psResources[] = { SceneBuffers.PPImageShaderView[0], PresentPass.DitherTextureView };
+		Context->IASetVertexBuffers(0, 1, &PresentPass.PPStepVertexBuffer, &stride, &offset);
+		Context->IASetInputLayout(PresentPass.PPStepLayout);
+		Context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+		Context->VSSetShader(PresentPass.PPStep, nullptr, 0);
+		Context->RSSetState(PresentPass.RasterizerState);
+		Context->PSSetShader(PresentPass.Present[presentShader], nullptr, 0);
+		Context->PSSetConstantBuffers(0, 1, &PresentPass.PresentConstantBuffer);
+		Context->PSSetShaderResources(0, 2, psResources);
+		Context->OMSetDepthStencilState(PresentPass.DepthStencilState, 0);
+		Context->OMSetBlendState(PresentPass.BlendState, nullptr, 0xffffffff);
+		Context->UpdateSubresource(PresentPass.PresentConstantBuffer, 0, nullptr, &pushconstants, 0, 0);
+		Context->Draw(6, 0);
+
+		Context->CopyResource(stagingTexture, SceneBuffers.PPImage[1]);
+	}
+	else
+	{
+		Context->CopyResource(stagingTexture, SceneBuffers.PPImage[0]);
+	}
 
 	D3D11_MAPPED_SUBRESOURCE mapped = {};
 	result = Context->Map(stagingTexture, 0, D3D11_MAP_READ, 0, &mapped);
@@ -2234,17 +2339,22 @@ void UD3D11RenderDevice::ReadPixels(FColor* Pixels)
 		int h = Viewport->SizeY;
 		void* data = Pixels;
 
-		int i = 0;
 		for (int y = 0; y < h; y++)
 		{
-			uint8_t* dest = (uint8_t*)data + (h - y - 1) * w * 4;
+			int desty = GammaCorrectScreenshots ? y : (h - y - 1);
+			uint8_t* dest = (uint8_t*)data + desty * w * 4;
 			uint16_t* src = (uint16_t*)(srcpixels + y * mapped.RowPitch);
 			for (int x = 0; x < w; x++)
 			{
-				dest[2] = (int)clamp(std::round(halfToFloatSimple(*(src++)) * 255.0f), 0.0f, 255.0f);
-				dest[1] = (int)clamp(std::round(halfToFloatSimple(*(src++)) * 255.0f), 0.0f, 255.0f);
-				dest[0] = (int)clamp(std::round(halfToFloatSimple(*(src++)) * 255.0f), 0.0f, 255.0f);
-				dest[3] = (int)clamp(std::round(halfToFloatSimple(*(src++)) * 255.0f), 0.0f, 255.0f);
+				float red = halfToFloatSimple(*(src++));
+				float green = halfToFloatSimple(*(src++));
+				float blue = halfToFloatSimple(*(src++));
+				float alpha = halfToFloatSimple(*(src++));
+
+				dest[0] = (int)clamp(std::round(blue * 255.0f), 0.0f, 255.0f);
+				dest[1] = (int)clamp(std::round(green * 255.0f), 0.0f, 255.0f);
+				dest[2] = (int)clamp(std::round(red * 255.0f), 0.0f, 255.0f);
+				dest[3] = (int)clamp(std::round(alpha * 255.0f), 0.0f, 255.0f);
 				dest += 4;
 			}
 		}

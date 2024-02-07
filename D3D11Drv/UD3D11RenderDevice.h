@@ -118,16 +118,16 @@ public:
 		ID3D11Texture2D* ColorBuffer = nullptr;
 		ID3D11Texture2D* HitBuffer = nullptr;
 		ID3D11Texture2D* DepthBuffer = nullptr;
-		ID3D11Texture2D* PPImage = nullptr;
+		ID3D11Texture2D* PPImage[2] = {};
 		ID3D11Texture2D* PPHitBuffer = nullptr;
 		ID3D11Texture2D* StagingHitBuffer = nullptr;
 		ID3D11RenderTargetView* ColorBufferView = nullptr;
 		ID3D11RenderTargetView* HitBufferView = nullptr;
 		ID3D11DepthStencilView* DepthBufferView = nullptr;
 		ID3D11RenderTargetView* PPHitBufferView = nullptr;
-		ID3D11RenderTargetView* PPImageView = nullptr;
+		ID3D11RenderTargetView* PPImageView[2] = {};
 		ID3D11ShaderResourceView* HitBufferShaderView = nullptr;
-		ID3D11ShaderResourceView* PPImageShaderView = nullptr;
+		ID3D11ShaderResourceView* PPImageShaderView[2] = {};
 		enum { NumBloomLevels = 4 };
 		PPBlurLevel BlurLevels[NumBloomLevels];
 		int Width = 0;
@@ -157,6 +157,7 @@ public:
 		ScenePipelineState Pipelines[32];
 		ScenePipelineState LinePipeline[2];
 		ScenePipelineState PointPipeline;
+		FLOAT LODBias = 0.0f;
 	} ScenePass;
 
 	static const int SceneVertexBufferSize = 16 * 1024;
@@ -230,6 +231,7 @@ public:
 	BYTE GammaMode;
 	BYTE LightMode;
 	INT RefreshRate;
+	BITFIELD GammaCorrectScreenshots;
 
 	struct
 	{
@@ -245,9 +247,19 @@ public:
 private:
 	void ResizeSceneBuffers(int width, int height, int multisample);
 	void ClearTextureCache();
+
 	void CreatePresentPass();
 	void CreateBloomPass();
 	void CreateScenePass();
+	void ReleaseScenePass();
+	void ReleaseBloomPass();
+	void ReleasePresentPass();
+
+	void CreateSceneSamplers();
+	void ReleaseSceneSamplers();
+	void UpdateLODBias();
+
+	void ReleaseSceneBuffers();
 
 	void RunBloomPass();
 	void BlurStep(ID3D11ShaderResourceView* input, ID3D11RenderTargetView* output, bool vertical);
@@ -271,6 +283,8 @@ private:
 	std::vector<uint8_t> CompileHlsl(const std::string& filename, const std::string& shadertype, const std::vector<std::string> defines = {});
 
 	vec4 ApplyInverseGamma(vec4 color);
+
+	PresentPushConstants GetPresentPushConstants();
 
 	template<typename T>
 	void ReleaseObject(T*& obj) { if (obj) { obj->Release(); obj = nullptr; } }
