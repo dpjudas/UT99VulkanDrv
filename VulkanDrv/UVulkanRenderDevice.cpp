@@ -576,6 +576,7 @@ void UVulkanRenderDevice::Unlock(UBOOL Blit)
 		if (Samplers->LODBias != LODBias)
 		{
 			DescriptorSets->ClearCache();
+			Textures->ClearAllBindlessIndexes();
 			Samplers->CreateSceneSamplers();
 		}
 

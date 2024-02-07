@@ -61,6 +61,18 @@ void TextureManager::ClearCache()
 	}
 }
 
+void TextureManager::ClearAllBindlessIndexes()
+{
+	for (auto& cache : TextureCache)
+	{
+		for (auto& it : cache)
+		{
+			for (int& index : it.second->BindlessIndex)
+				index = -1;
+		}
+	}
+}
+
 void TextureManager::CreateNullTexture()
 {
 	auto cmdbuffer = renderer->Commands->GetTransferCommands();
