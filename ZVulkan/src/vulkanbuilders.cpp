@@ -666,7 +666,7 @@ std::unique_ptr<VulkanBuffer> BufferBuilder::Create(VulkanDevice* device)
 		CheckVulkanError(result, "Could not allocate memory for vulkan buffer");
 	}
 
-	auto obj = std::make_unique<VulkanBuffer>(device, buffer, allocation, bufferInfo.size);
+	auto obj = std::make_unique<VulkanBuffer>(device, buffer, allocation, (size_t)bufferInfo.size);
 	if (debugName)
 		obj->SetDebugName(debugName);
 	return obj;
@@ -1912,6 +1912,12 @@ std::vector<VulkanCompatibleDevice> VulkanDeviceBuilder::FindDevices(const std::
 		static const int typeSort[] = { 4, 1, 0, 2, 3 };
 		int sortA = a.Device->Properties.Properties.deviceType < 5 ? typeSort[a.Device->Properties.Properties.deviceType] : (int)a.Device->Properties.Properties.deviceType;
 		int sortB = b.Device->Properties.Properties.deviceType < 5 ? typeSort[b.Device->Properties.Properties.deviceType] : (int)b.Device->Properties.Properties.deviceType;
+		if (sortA != sortB)
+			return sortA < sortB;
+
+		// Any driver that is emulating vulkan (i.e. via Direct3D 12) should only be chosen as the last option within each GPU type
+		sortA = a.Device->Properties.LayeredDriver.underlyingAPI;
+		sortB = b.Device->Properties.LayeredDriver.underlyingAPI;
 		if (sortA != sortB)
 			return sortA < sortB;
 
