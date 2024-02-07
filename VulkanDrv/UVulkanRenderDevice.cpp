@@ -26,7 +26,9 @@ void UVulkanRenderDevice::StaticConstructor()
 	UsePrecache = 1;
 	Coronas = 1;
 	ShinySurfaces = 1;
+#if !defined(UNREALGOLD)
 	DetailTextures = 1;
+#endif
 	HighDetailActors = 1;
 	VolumetricLighting = 1;
 
@@ -786,7 +788,25 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 		{
 			SetPipeline(RenderPasses->GetPipeline(PF_Highlighted, UsesBindless));
 			textureBinds = SetDescriptorSet(PF_Highlighted, nullptr);
-			color = vec4(0.0f, 0.0f, 0.05f, 0.20f);
+
+			if (Surface.PolyFlags & PF_FlatShaded)
+			{
+				color.x = Surface.FlatColor.R / 255.0f;
+				color.y = Surface.FlatColor.G / 255.0f;
+				color.z = Surface.FlatColor.B / 255.0f;
+				color.w = 0.85f;
+				if (Surface.PolyFlags & PF_Selected)
+				{
+					color.x *= 1.5f;
+					color.y *= 1.5f;
+					color.z *= 1.5f;
+					color.w = 1.0f;
+				}
+			}
+			else
+			{
+				color = vec4(0.0f, 0.0f, 0.05f, 0.20f);
+			}
 		}
 	}
 

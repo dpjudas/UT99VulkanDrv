@@ -31,7 +31,9 @@ void UD3D11RenderDevice::StaticConstructor()
 	UsePrecache = 1;
 	Coronas = 1;
 	ShinySurfaces = 1;
+#if !defined(UNREALGOLD)
 	DetailTextures = 1;
+#endif
 	HighDetailActors = 1;
 	VolumetricLighting = 1;
 
@@ -1712,7 +1714,7 @@ void UD3D11RenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Sur
 	vec4 color(1.0f);
 
 	// Draw the surface twice if the editor selected it. Second time highlighted without textures
-	int drawcount = (Surface.PolyFlags & PF_Selected) && GIsEditor ? 2 : 1;
+	int drawcount = (Surface.PolyFlags & (PF_Selected | PF_FlatShaded)) && GIsEditor ? 2 : 1;
 	while (drawcount-- > 0)
 	{
 		for (FSavedPoly* Poly = Facet.Polys; Poly; Poly = Poly->Next)
@@ -1776,7 +1778,25 @@ void UD3D11RenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Sur
 		{
 			SetPipeline(PF_Highlighted);
 			SetDescriptorSet(PF_Highlighted);
-			color = vec4(0.0f, 0.0f, 0.05f, 0.20f);
+
+			if (Surface.PolyFlags & PF_FlatShaded)
+			{
+				color.x = Surface.FlatColor.R / 255.0f;
+				color.y = Surface.FlatColor.G / 255.0f;
+				color.z = Surface.FlatColor.B / 255.0f;
+				color.w = 0.85f;
+				if (Surface.PolyFlags & PF_Selected)
+				{
+					color.x *= 1.5f;
+					color.y *= 1.5f;
+					color.z *= 1.5f;
+					color.w = 1.0f;
+				}
+			}
+			else
+			{
+				color = vec4(0.0f, 0.0f, 0.05f, 0.20f);
+			}
 		}
 	}
 
