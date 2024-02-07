@@ -1713,94 +1713,148 @@ void UD3D11RenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Sur
 
 	vec4 color(1.0f);
 
-	// Draw the surface twice if the editor selected it. Second time highlighted without textures
-	int drawcount = (Surface.PolyFlags & (PF_Selected | PF_FlatShaded)) && GIsEditor ? 2 : 1;
-	while (drawcount-- > 0)
+	for (FSavedPoly* Poly = Facet.Polys; Poly; Poly = Poly->Next)
 	{
-		for (FSavedPoly* Poly = Facet.Polys; Poly; Poly = Poly->Next)
+		auto pts = Poly->Pts;
+		uint32_t vcount = Poly->NumPts;
+		if (vcount < 3) continue;
+
+		uint32_t icount = (vcount - 2) * 3;
+
+		if (SceneVertexPos + vcount > SceneVertexBufferSize || SceneIndexPos + vcount * 3 > SceneIndexBufferSize)
 		{
-			auto pts = Poly->Pts;
-			uint32_t vcount = Poly->NumPts;
-			if (vcount < 3) continue;
-
-			uint32_t icount = (vcount - 2) * 3;
-
-			if (SceneVertexPos + vcount > SceneVertexBufferSize || SceneIndexPos + vcount * 3 > SceneIndexBufferSize)
-			{
-				NextSceneBuffers();
-				if (SceneVertexPos + vcount > SceneVertexBufferSize || SceneIndexPos + vcount * 3 > SceneIndexBufferSize) return; // Surface is too large for our buffers
-				SetPipeline(Surface.PolyFlags);
-				SetDescriptorSet(Surface.PolyFlags, tex, lightmap, macrotex, detailtex);
-			}
-
-			if (!SceneVertices || !SceneIndexes) return;
-
-			uint32_t vpos = SceneVertexPos;
-			uint32_t ipos = SceneIndexPos;
-
-			SceneVertex* vptr = SceneVertices + vpos;
-			uint32_t* iptr = SceneIndexes + ipos;
-
-			for (uint32_t i = 0; i < vcount; i++)
-			{
-				FVector point = pts[i]->Point;
-				FLOAT u = Facet.MapCoords.XAxis | point;
-				FLOAT v = Facet.MapCoords.YAxis | point;
-
-				vptr->Flags = flags;
-				vptr->Position.x = point.X;
-				vptr->Position.y = point.Y;
-				vptr->Position.z = point.Z;
-				vptr->TexCoord.s = (u - UPan) * UMult;
-				vptr->TexCoord.t = (v - VPan) * VMult;
-				vptr->TexCoord2.s = (u - LMUPan) * LMUMult;
-				vptr->TexCoord2.t = (v - LMVPan) * LMVMult;
-				vptr->TexCoord3.s = (u - MacroUPan) * MacroUMult;
-				vptr->TexCoord3.t = (v - MacroVPan) * MacroVMult;
-				vptr->TexCoord4.s = (u - DetailUPan) * DetailUMult;
-				vptr->TexCoord4.t = (v - DetailVPan) * DetailVMult;
-				vptr->Color = color;
-				vptr++;
-			}
-
-			for (uint32_t i = vpos + 2; i < vpos + vcount; i++)
-			{
-				*(iptr++) = vpos;
-				*(iptr++) = i - 1;
-				*(iptr++) = i;
-			}
-
-			SceneVertexPos += vcount;
-			SceneIndexPos += icount;
+			NextSceneBuffers();
+			if (SceneVertexPos + vcount > SceneVertexBufferSize || SceneIndexPos + vcount * 3 > SceneIndexBufferSize) return; // Surface is too large for our buffers
+			SetPipeline(Surface.PolyFlags);
+			SetDescriptorSet(Surface.PolyFlags, tex, lightmap, macrotex, detailtex);
 		}
 
-		if (drawcount != 0)
-		{
-			SetPipeline(PF_Highlighted);
-			SetDescriptorSet(PF_Highlighted);
+		if (!SceneVertices || !SceneIndexes) return;
 
-			if (Surface.PolyFlags & PF_FlatShaded)
-			{
-				color.x = Surface.FlatColor.R / 255.0f;
-				color.y = Surface.FlatColor.G / 255.0f;
-				color.z = Surface.FlatColor.B / 255.0f;
-				color.w = 0.85f;
-				if (Surface.PolyFlags & PF_Selected)
-				{
-					color.x *= 1.5f;
-					color.y *= 1.5f;
-					color.z *= 1.5f;
-					color.w = 1.0f;
-				}
-			}
-			else
-			{
-				color = vec4(0.0f, 0.0f, 0.05f, 0.20f);
-			}
+		uint32_t vpos = SceneVertexPos;
+		uint32_t ipos = SceneIndexPos;
+
+		SceneVertex* vptr = SceneVertices + vpos;
+		uint32_t* iptr = SceneIndexes + ipos;
+
+		for (uint32_t i = 0; i < vcount; i++)
+		{
+			FVector point = pts[i]->Point;
+			FLOAT u = Facet.MapCoords.XAxis | point;
+			FLOAT v = Facet.MapCoords.YAxis | point;
+
+			vptr->Flags = flags;
+			vptr->Position.x = point.X;
+			vptr->Position.y = point.Y;
+			vptr->Position.z = point.Z;
+			vptr->TexCoord.s = (u - UPan) * UMult;
+			vptr->TexCoord.t = (v - VPan) * VMult;
+			vptr->TexCoord2.s = (u - LMUPan) * LMUMult;
+			vptr->TexCoord2.t = (v - LMVPan) * LMVMult;
+			vptr->TexCoord3.s = (u - MacroUPan) * MacroUMult;
+			vptr->TexCoord3.t = (v - MacroVPan) * MacroVMult;
+			vptr->TexCoord4.s = (u - DetailUPan) * DetailUMult;
+			vptr->TexCoord4.t = (v - DetailVPan) * DetailVMult;
+			vptr->Color = color;
+			vptr++;
 		}
+
+		for (uint32_t i = vpos + 2; i < vpos + vcount; i++)
+		{
+			*(iptr++) = vpos;
+			*(iptr++) = i - 1;
+			*(iptr++) = i;
+		}
+
+		SceneVertexPos += vcount;
+		SceneIndexPos += icount;
 	}
 
 	Stats.ComplexSurfaces++;
+
+	if (!GIsEditor || (Surface.PolyFlags & (PF_Selected | PF_FlatShaded)) == 0)
+		return;
+
+	// Editor highlight surface (so stupid this is delegated to the renderdev as the engine could just issue a second call):
+
+	SetPipeline(PF_Highlighted);
+	SetDescriptorSet(PF_Highlighted);
+
+	if (Surface.PolyFlags & PF_FlatShaded)
+	{
+		color.x = Surface.FlatColor.R / 255.0f;
+		color.y = Surface.FlatColor.G / 255.0f;
+		color.z = Surface.FlatColor.B / 255.0f;
+		color.w = 0.85f;
+		if (Surface.PolyFlags & PF_Selected)
+		{
+			color.x *= 1.5f;
+			color.y *= 1.5f;
+			color.z *= 1.5f;
+			color.w = 1.0f;
+		}
+	}
+	else
+	{
+		color = vec4(0.0f, 0.0f, 0.05f, 0.20f);
+	}
+
+	for (FSavedPoly* Poly = Facet.Polys; Poly; Poly = Poly->Next)
+	{
+		auto pts = Poly->Pts;
+		uint32_t vcount = Poly->NumPts;
+		if (vcount < 3) continue;
+
+		uint32_t icount = (vcount - 2) * 3;
+
+		if (SceneVertexPos + vcount > SceneVertexBufferSize || SceneIndexPos + vcount * 3 > SceneIndexBufferSize)
+		{
+			NextSceneBuffers();
+			if (SceneVertexPos + vcount > SceneVertexBufferSize || SceneIndexPos + vcount * 3 > SceneIndexBufferSize) return; // Surface is too large for our buffers
+			SetPipeline(PF_Highlighted);
+			SetDescriptorSet(PF_Highlighted);
+		}
+
+		if (!SceneVertices || !SceneIndexes) return;
+
+		uint32_t vpos = SceneVertexPos;
+		uint32_t ipos = SceneIndexPos;
+
+		SceneVertex* vptr = SceneVertices + vpos;
+		uint32_t* iptr = SceneIndexes + ipos;
+
+		for (uint32_t i = 0; i < vcount; i++)
+		{
+			FVector point = pts[i]->Point;
+			FLOAT u = Facet.MapCoords.XAxis | point;
+			FLOAT v = Facet.MapCoords.YAxis | point;
+
+			vptr->Flags = flags;
+			vptr->Position.x = point.X;
+			vptr->Position.y = point.Y;
+			vptr->Position.z = point.Z;
+			vptr->TexCoord.s = (u - UPan) * UMult;
+			vptr->TexCoord.t = (v - VPan) * VMult;
+			vptr->TexCoord2.s = (u - LMUPan) * LMUMult;
+			vptr->TexCoord2.t = (v - LMVPan) * LMVMult;
+			vptr->TexCoord3.s = (u - MacroUPan) * MacroUMult;
+			vptr->TexCoord3.t = (v - MacroVPan) * MacroVMult;
+			vptr->TexCoord4.s = (u - DetailUPan) * DetailUMult;
+			vptr->TexCoord4.t = (v - DetailVPan) * DetailVMult;
+			vptr->Color = color;
+			vptr++;
+		}
+
+		for (uint32_t i = vpos + 2; i < vpos + vcount; i++)
+		{
+			*(iptr++) = vpos;
+			*(iptr++) = i - 1;
+			*(iptr++) = i;
+		}
+
+		SceneVertexPos += vcount;
+		SceneIndexPos += icount;
+	}
 
 	unguardSlow;
 }

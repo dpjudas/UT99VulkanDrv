@@ -728,89 +728,138 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 	ivec4 textureBinds = SetDescriptorSet(Surface.PolyFlags, tex, lightmap, macrotex, detailtex);
 	vec4 color(1.0f);
 
-	// Draw the surface twice if the editor selected it. Second time highlighted without textures
-	int drawcount = (Surface.PolyFlags & PF_Selected) && GIsEditor ? 2 : 1;
-	while (drawcount-- > 0)
+	uint32_t vpos = SceneVertexPos;
+	uint32_t ipos = SceneIndexPos;
+
+	SceneVertex* vptr = Buffers->SceneVertices + vpos;
+	uint32_t* iptr = Buffers->SceneIndexes + ipos;
+
+	uint32_t istart = ipos;
+	uint32_t icount = 0;
+
+	for (FSavedPoly* Poly = Facet.Polys; Poly; Poly = Poly->Next)
 	{
-		uint32_t vpos = SceneVertexPos;
-		uint32_t ipos = SceneIndexPos;
+		auto pts = Poly->Pts;
+		uint32_t vcount = Poly->NumPts;
+		if (vcount < 3) continue;
 
-		SceneVertex* vptr = Buffers->SceneVertices + vpos;
-		uint32_t* iptr = Buffers->SceneIndexes + ipos;
-
-		uint32_t istart = ipos;
-		uint32_t icount = 0;
-
-		for (FSavedPoly* Poly = Facet.Polys; Poly; Poly = Poly->Next)
+		for (uint32_t i = 0; i < vcount; i++)
 		{
-			auto pts = Poly->Pts;
-			uint32_t vcount = Poly->NumPts;
-			if (vcount < 3) continue;
+			FVector point = pts[i]->Point;
+			FLOAT u = Facet.MapCoords.XAxis | point;
+			FLOAT v = Facet.MapCoords.YAxis | point;
 
-			for (uint32_t i = 0; i < vcount; i++)
-			{
-				FVector point = pts[i]->Point;
-				FLOAT u = Facet.MapCoords.XAxis | point;
-				FLOAT v = Facet.MapCoords.YAxis | point;
-
-				vptr->Flags = flags;
-				vptr->Position.x = point.X;
-				vptr->Position.y = point.Y;
-				vptr->Position.z = point.Z;
-				vptr->TexCoord.s = (u - UPan) * UMult;
-				vptr->TexCoord.t = (v - VPan) * VMult;
-				vptr->TexCoord2.s = (u - LMUPan) * LMUMult;
-				vptr->TexCoord2.t = (v - LMVPan) * LMVMult;
-				vptr->TexCoord3.s = (u - MacroUPan) * MacroUMult;
-				vptr->TexCoord3.t = (v - MacroVPan) * MacroVMult;
-				vptr->TexCoord4.s = (u - DetailUPan) * DetailUMult;
-				vptr->TexCoord4.t = (v - DetailVPan) * DetailVMult;
-				vptr->Color = color;
-				vptr->TextureBinds = textureBinds;
-				vptr++;
-			}
-
-			for (uint32_t i = vpos + 2; i < vpos + vcount; i++)
-			{
-				*(iptr++) = vpos;
-				*(iptr++) = i - 1;
-				*(iptr++) = i;
-			}
-
-			vpos += vcount;
-			icount += (vcount - 2) * 3;
+			vptr->Flags = flags;
+			vptr->Position.x = point.X;
+			vptr->Position.y = point.Y;
+			vptr->Position.z = point.Z;
+			vptr->TexCoord.s = (u - UPan) * UMult;
+			vptr->TexCoord.t = (v - VPan) * VMult;
+			vptr->TexCoord2.s = (u - LMUPan) * LMUMult;
+			vptr->TexCoord2.t = (v - LMVPan) * LMVMult;
+			vptr->TexCoord3.s = (u - MacroUPan) * MacroUMult;
+			vptr->TexCoord3.t = (v - MacroVPan) * MacroVMult;
+			vptr->TexCoord4.s = (u - DetailUPan) * DetailUMult;
+			vptr->TexCoord4.t = (v - DetailVPan) * DetailVMult;
+			vptr->Color = color;
+			vptr->TextureBinds = textureBinds;
+			vptr++;
 		}
 
-		SceneVertexPos = vpos;
-		SceneIndexPos = ipos + icount;
-
-		if (drawcount != 0)
+		for (uint32_t i = vpos + 2; i < vpos + vcount; i++)
 		{
-			SetPipeline(RenderPasses->GetPipeline(PF_Highlighted, UsesBindless));
-			textureBinds = SetDescriptorSet(PF_Highlighted, nullptr);
-
-			if (Surface.PolyFlags & PF_FlatShaded)
-			{
-				color.x = Surface.FlatColor.R / 255.0f;
-				color.y = Surface.FlatColor.G / 255.0f;
-				color.z = Surface.FlatColor.B / 255.0f;
-				color.w = 0.85f;
-				if (Surface.PolyFlags & PF_Selected)
-				{
-					color.x *= 1.5f;
-					color.y *= 1.5f;
-					color.z *= 1.5f;
-					color.w = 1.0f;
-				}
-			}
-			else
-			{
-				color = vec4(0.0f, 0.0f, 0.05f, 0.20f);
-			}
+			*(iptr++) = vpos;
+			*(iptr++) = i - 1;
+			*(iptr++) = i;
 		}
+
+		vpos += vcount;
+		icount += (vcount - 2) * 3;
 	}
 
 	Stats.ComplexSurfaces++;
+
+	if (!GIsEditor || (Surface.PolyFlags & (PF_Selected | PF_FlatShaded)) == 0)
+		return;
+
+	// Editor highlight surface (so stupid this is delegated to the renderdev as the engine could just issue a second call):
+
+	SceneVertexPos = vpos;
+	SceneIndexPos = ipos + icount;
+
+	SetPipeline(RenderPasses->GetPipeline(PF_Highlighted, UsesBindless));
+	textureBinds = SetDescriptorSet(PF_Highlighted, nullptr);
+
+	if (Surface.PolyFlags & PF_FlatShaded)
+	{
+		color.x = Surface.FlatColor.R / 255.0f;
+		color.y = Surface.FlatColor.G / 255.0f;
+		color.z = Surface.FlatColor.B / 255.0f;
+		color.w = 0.85f;
+		if (Surface.PolyFlags & PF_Selected)
+		{
+			color.x *= 1.5f;
+			color.y *= 1.5f;
+			color.z *= 1.5f;
+			color.w = 1.0f;
+		}
+	}
+	else
+	{
+		color = vec4(0.0f, 0.0f, 0.05f, 0.20f);
+	}
+
+	vpos = SceneVertexPos;
+	ipos = SceneIndexPos;
+
+	vptr = Buffers->SceneVertices + vpos;
+	iptr = Buffers->SceneIndexes + ipos;
+
+	istart = ipos;
+	icount = 0;
+
+	for (FSavedPoly* Poly = Facet.Polys; Poly; Poly = Poly->Next)
+	{
+		auto pts = Poly->Pts;
+		uint32_t vcount = Poly->NumPts;
+		if (vcount < 3) continue;
+
+		for (uint32_t i = 0; i < vcount; i++)
+		{
+			FVector point = pts[i]->Point;
+			FLOAT u = Facet.MapCoords.XAxis | point;
+			FLOAT v = Facet.MapCoords.YAxis | point;
+
+			vptr->Flags = flags;
+			vptr->Position.x = point.X;
+			vptr->Position.y = point.Y;
+			vptr->Position.z = point.Z;
+			vptr->TexCoord.s = (u - UPan) * UMult;
+			vptr->TexCoord.t = (v - VPan) * VMult;
+			vptr->TexCoord2.s = (u - LMUPan) * LMUMult;
+			vptr->TexCoord2.t = (v - LMVPan) * LMVMult;
+			vptr->TexCoord3.s = (u - MacroUPan) * MacroUMult;
+			vptr->TexCoord3.t = (v - MacroVPan) * MacroVMult;
+			vptr->TexCoord4.s = (u - DetailUPan) * DetailUMult;
+			vptr->TexCoord4.t = (v - DetailVPan) * DetailVMult;
+			vptr->Color = color;
+			vptr->TextureBinds = textureBinds;
+			vptr++;
+		}
+
+		for (uint32_t i = vpos + 2; i < vpos + vcount; i++)
+		{
+			*(iptr++) = vpos;
+			*(iptr++) = i - 1;
+			*(iptr++) = i;
+		}
+
+		vpos += vcount;
+		icount += (vcount - 2) * 3;
+	}
+
+	SceneVertexPos = vpos;
+	SceneIndexPos = ipos + icount;
 
 	unguardSlow;
 }
