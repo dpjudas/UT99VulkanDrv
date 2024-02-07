@@ -46,18 +46,21 @@ SceneTextures::SceneTextures(UVulkanRenderDevice* renderer, int width, int heigh
 		.DebugName("depthBufferView")
 		.Create(renderer->Device.get());
 
-	PPImage = ImageBuilder()
-		.Size(width, height)
-		.Samples(VK_SAMPLE_COUNT_1_BIT)
-		.Format(VK_FORMAT_R16G16B16A16_SFLOAT)
-		.Usage(VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
-		.DebugName("ppImage")
-		.Create(renderer->Device.get());
-	
-	PPImageView = ImageViewBuilder()
-		.Image(PPImage.get(), VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_ASPECT_COLOR_BIT)
-		.DebugName("ppImageView")
-		.Create(renderer->Device.get());
+	for (int i = 0; i < 2; i++)
+	{
+		PPImage[i] = ImageBuilder()
+			.Size(width, height)
+			.Samples(VK_SAMPLE_COUNT_1_BIT)
+			.Format(VK_FORMAT_R16G16B16A16_SFLOAT)
+			.Usage(VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
+			.DebugName("ppImage")
+			.Create(renderer->Device.get());
+
+		PPImageView[i] = ImageViewBuilder()
+			.Image(PPImage[i].get(), VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_ASPECT_COLOR_BIT)
+			.DebugName("ppImageView")
+			.Create(renderer->Device.get());
+	}
 
 	PPHitBuffer = ImageBuilder()
 		.Size(width, height)

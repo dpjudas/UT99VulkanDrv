@@ -30,8 +30,8 @@ public:
 	std::unique_ptr<VulkanImageView> DepthBufferView;
 
 	// Post processing image buffers
-	std::unique_ptr<VulkanImage> PPImage;
-	std::unique_ptr<VulkanImageView> PPImageView;
+	std::unique_ptr<VulkanImage> PPImage[2];
+	std::unique_ptr<VulkanImageView> PPImageView[2];
 
 	// Texture and buffer used to download the hitbuffer
 	std::unique_ptr<VulkanImage> PPHitBuffer;

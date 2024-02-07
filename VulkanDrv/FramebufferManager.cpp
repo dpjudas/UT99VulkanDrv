@@ -21,26 +21,29 @@ void FramebufferManager::CreateSceneFramebuffer()
 	for (int level = 0; level < NumBloomLevels; level++)
 	{
 		BloomBlurLevels[level].VTextureFB = FramebufferBuilder()
-			.RenderPass(renderer->RenderPasses->Bloom.RenderPass.get())
+			.RenderPass(renderer->RenderPasses->Postprocess.RenderPass.get())
 			.Size(renderer->Textures->Scene->BloomBlurLevels[level].Width, renderer->Textures->Scene->BloomBlurLevels[level].Height)
 			.AddAttachment(renderer->Textures->Scene->BloomBlurLevels[level].VTextureView.get())
 			.DebugName("VTextureFB")
 			.Create(renderer->Device.get());
 
 		BloomBlurLevels[level].HTextureFB = FramebufferBuilder()
-			.RenderPass(renderer->RenderPasses->Bloom.RenderPass.get())
+			.RenderPass(renderer->RenderPasses->Postprocess.RenderPass.get())
 			.Size(renderer->Textures->Scene->BloomBlurLevels[level].Width, renderer->Textures->Scene->BloomBlurLevels[level].Height)
 			.AddAttachment(renderer->Textures->Scene->BloomBlurLevels[level].HTextureView.get())
 			.DebugName("HTextureFB")
 			.Create(renderer->Device.get());
 	}
 
-	BloomPPImageFB = FramebufferBuilder()
-		.RenderPass(renderer->RenderPasses->Bloom.RenderPass.get())
-		.Size(renderer->Textures->Scene->Width, renderer->Textures->Scene->Height)
-		.AddAttachment(renderer->Textures->Scene->PPImageView.get())
-		.DebugName("BloomPPImageFB")
-		.Create(renderer->Device.get());
+	for (int i = 0; i < 2; i++)
+	{
+		PPImageFB[i] = FramebufferBuilder()
+			.RenderPass(renderer->RenderPasses->Postprocess.RenderPass.get())
+			.Size(renderer->Textures->Scene->Width, renderer->Textures->Scene->Height)
+			.AddAttachment(renderer->Textures->Scene->PPImageView[i].get())
+			.DebugName("BloomPPImageFB")
+			.Create(renderer->Device.get());
+	}
 }
 
 void FramebufferManager::DestroySceneFramebuffer()
@@ -51,7 +54,9 @@ void FramebufferManager::DestroySceneFramebuffer()
 		BloomBlurLevels[level].VTextureFB.reset();
 		BloomBlurLevels[level].HTextureFB.reset();
 	}
-	BloomPPImageFB.reset();
+
+	for (int i = 0; i < 2; i++)
+		PPImageFB[i].reset();
 }
 
 void FramebufferManager::CreateSwapChainFramebuffers()

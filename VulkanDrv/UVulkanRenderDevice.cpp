@@ -56,6 +56,8 @@ void UVulkanRenderDevice::StaticConstructor()
 	LODBias = -0.5f;
 	LightMode = 0;
 
+	GammaCorrectScreenshots = 1;
+
 	VkDeviceIndex = 0;
 	VkDebug = 0;
 	VkExclusiveFullscreen = 0;
@@ -66,6 +68,7 @@ void UVulkanRenderDevice::StaticConstructor()
 
 	new(GetClass(), TEXT("UseVSync"), RF_Public) UBoolProperty(CPP_PROPERTY(UseVSync), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("UsePrecache"), RF_Public) UBoolProperty(CPP_PROPERTY(UsePrecache), TEXT("Display"), CPF_Config);
+	new(GetClass(), TEXT("GammaCorrectScreenshots"), RF_Public) UBoolProperty(CPP_PROPERTY(GammaCorrectScreenshots), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("GammaOffset"), RF_Public) UFloatProperty(CPP_PROPERTY(GammaOffset), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("GammaOffsetRed"), RF_Public) UFloatProperty(CPP_PROPERTY(GammaOffsetRed), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("GammaOffsetGreen"), RF_Public) UFloatProperty(CPP_PROPERTY(GammaOffsetGreen), TEXT("Display"), CPF_Config);
@@ -567,6 +570,12 @@ void UVulkanRenderDevice::Unlock(UBOOL Blit)
 			RunBloomPass();
 		}
 		SubmitAndWait(Blit ? true : false, Viewport->SizeX, Viewport->SizeY, Viewport->IsFullscreen());
+
+		if (Samplers->LODBias != LODBias)
+		{
+			DescriptorSets->ClearCache();
+			Samplers->CreateSceneSamplers();
+		}
 
 		if (HitData)
 		{
@@ -1293,6 +1302,53 @@ void UVulkanRenderDevice::ReadPixels(FColor* Pixels)
 {
 	guard(UVulkanRenderDevice::GetStats);
 
+	auto cmdbuffer = Commands->GetDrawCommands();
+
+	DrawBatch(cmdbuffer);
+
+	if (GammaCorrectScreenshots)
+	{
+		PresentPushConstants pushconstants = GetPresentPushConstants();
+
+		bool ActiveHdr = false; // (Commands->SwapChain->Format().colorSpace == VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT) ? 1 : 0;
+
+		// Select present shader based on what the user is actually using
+		int presentShader = 0;
+		if (ActiveHdr) presentShader |= 1;
+		if (GammaMode == 1) presentShader |= 2;
+		if (pushconstants.Brightness != 0.0f || pushconstants.Contrast != 1.0f || pushconstants.Saturation != 1.0f) presentShader |= (Clamp(GrayFormula, 0, 2) + 1) << 2;
+
+		VkViewport viewport = {};
+		viewport.width = Textures->Scene->Width;
+		viewport.height = Textures->Scene->Height;
+		viewport.maxDepth = 1.0f;
+
+		VkRect2D scissor = {};
+		scissor.extent.width = Textures->Scene->Width;
+		scissor.extent.height = Textures->Scene->Height;
+
+		auto cmdbuffer = Commands->GetDrawCommands();
+
+		RenderPassBegin()
+			.RenderPass(RenderPasses->Postprocess.RenderPass.get())
+			.Framebuffer(Framebuffers->PPImageFB[1].get())
+			.RenderArea(0, 0, Textures->Scene->Width, Textures->Scene->Height)
+			.AddClearColor(0.0f, 0.0f, 0.0f, 1.0f)
+			.Execute(cmdbuffer);
+
+		cmdbuffer->setViewport(0, 1, &viewport);
+		cmdbuffer->setScissor(0, 1, &scissor);
+		cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, RenderPasses->Present.ScreenshotPipeline[presentShader].get());
+		cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, RenderPasses->Present.PipelineLayout.get(), 0, DescriptorSets->GetPresentSet());
+		cmdbuffer->pushConstants(RenderPasses->Present.PipelineLayout.get(), VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PresentPushConstants), &pushconstants);
+		cmdbuffer->draw(6, 1, 0, 0);
+
+		cmdbuffer->endRenderPass();
+	}
+
+	// Convert from rgba16f to bgra8 using the GPU:
+	auto srcimage = Textures->Scene->PPImage[GammaCorrectScreenshots ? 1 : 0].get();
+
 	int w = Viewport->SizeX;
 	int h = Viewport->SizeY;
 	void* data = Pixels;
@@ -1303,12 +1359,6 @@ void UVulkanRenderDevice::ReadPixels(FColor* Pixels)
 		.Size(w, h)
 		.DebugName("ReadPixelsDstImage")
 		.Create(Device.get());
-
-	// Convert from rgba16f to bgra8 using the GPU:
-	auto srcimage = Textures->Scene->PPImage.get();
-	auto cmdbuffer = Commands->GetDrawCommands();
-
-	DrawBatch(cmdbuffer);
 
 	PipelineBarrier()
 		.AddImage(srcimage, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_READ_BIT)
@@ -1478,7 +1528,7 @@ void UVulkanRenderDevice::BlitSceneToPostprocess()
 			VK_ACCESS_TRANSFER_WRITE_BIT);
 	}
 	barrer0.AddImage(
-		buffers->PPImage.get(),
+		buffers->PPImage[0].get(),
 		VK_IMAGE_LAYOUT_UNDEFINED,
 		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 		VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
@@ -1498,7 +1548,7 @@ void UVulkanRenderDevice::BlitSceneToPostprocess()
 		resolve.extent = { (uint32_t)buffers->ColorBuffer->width, (uint32_t)buffers->ColorBuffer->height, 1 };
 		cmdbuffer->resolveImage(
 			buffers->ColorBuffer->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-			buffers->PPImage->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			buffers->PPImage[0]->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 			1, &resolve);
 		if (HitData)
 		{
@@ -1522,7 +1572,7 @@ void UVulkanRenderDevice::BlitSceneToPostprocess()
 		blit.dstSubresource.layerCount = 1;
 		cmdbuffer->blitImage(
 			colorBuffer->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-			buffers->PPImage->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			buffers->PPImage[0]->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 			1, &blit, VK_FILTER_NEAREST);
 		if (HitData)
 		{
@@ -1541,7 +1591,7 @@ void UVulkanRenderDevice::BlitSceneToPostprocess()
 
 	PipelineBarrier barrier1;
 	barrier1.AddImage(
-		buffers->PPImage.get(),
+		buffers->PPImage[0].get(),
 		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 		VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 		VK_ACCESS_TRANSFER_WRITE_BIT,
@@ -1657,7 +1707,7 @@ void UVulkanRenderDevice::RunBloomPass()
 	BloomStep(cmdbuffer,
 		RenderPasses->Bloom.Combine.get(),
 		DescriptorSets->GetBloomVTextureSet(0),
-		Framebuffers->BloomPPImageFB.get(),
+		Framebuffers->PPImageFB[0].get(),
 		Textures->Scene->Width,
 		Textures->Scene->Height,
 		pushconstants);
@@ -1666,7 +1716,7 @@ void UVulkanRenderDevice::RunBloomPass()
 void UVulkanRenderDevice::BloomStep(VulkanCommandBuffer* cmdbuffer, VulkanPipeline* pipeline, VulkanDescriptorSet* input, VulkanFramebuffer* output, int width, int height, const BloomPushConstants& pushconstants)
 {
 	RenderPassBegin()
-		.RenderPass(pipeline != RenderPasses->Bloom.Combine.get() ? RenderPasses->Bloom.RenderPass.get() : RenderPasses->Bloom.RenderPassCombine.get())
+		.RenderPass(pipeline != RenderPasses->Bloom.Combine.get() ? RenderPasses->Postprocess.RenderPass.get() : RenderPasses->Postprocess.RenderPassCombine.get())
 		.Framebuffer(output)
 		.RenderArea(0, 0, width, height)
 		.AddClearColor(0.0f, 0.0f, 0.0f, 1.0f)
@@ -1718,7 +1768,7 @@ void UVulkanRenderDevice::ComputeBlurSamples(int sampleCount, float blurAmount, 
 	}
 }
 
-void UVulkanRenderDevice::DrawPresentTexture(int x, int y, int width, int height)
+PresentPushConstants UVulkanRenderDevice::GetPresentPushConstants()
 {
 	PresentPushConstants pushconstants;
 	if (Viewport->IsOrtho())
@@ -1770,6 +1820,12 @@ void UVulkanRenderDevice::DrawPresentTexture(int x, int y, int width, int height
 			pushconstants.Brightness = (128 - LinearBrightness) / 128.0f * -1.8f;
 		}
 	}
+	return pushconstants;
+}
+
+void UVulkanRenderDevice::DrawPresentTexture(int x, int y, int width, int height)
+{
+	PresentPushConstants pushconstants = GetPresentPushConstants();
 
 	bool ActiveHdr = (Commands->SwapChain->Format().colorSpace == VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT) ? 1 : 0;
 

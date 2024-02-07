@@ -7,9 +7,10 @@ RenderPassManager::RenderPassManager(UVulkanRenderDevice* renderer) : renderer(r
 {
 	CreateScenePipelineLayout();
 	CreateSceneBindlessPipelineLayout();
+	CreatePostprocessRenderPass();
 	CreatePresentPipelineLayout();
+	CreateScreenshotPipeline();
 	CreateBloomPipelineLayout();
-	CreateBloomRenderPass();
 	CreateBloomPipeline();
 }
 
@@ -369,9 +370,25 @@ void RenderPassManager::CreatePresentPipeline()
 	}
 }
 
-void RenderPassManager::CreateBloomRenderPass()
+void RenderPassManager::CreateScreenshotPipeline()
 {
-	Bloom.RenderPass = RenderPassBuilder()
+	for (int i = 0; i < 16; i++)
+	{
+		Present.ScreenshotPipeline[i] = GraphicsPipelineBuilder()
+			.AddVertexShader(renderer->Shaders->Postprocess.VertexShader.get())
+			.AddFragmentShader(renderer->Shaders->Postprocess.FragmentPresentShader[i].get())
+			.AddDynamicState(VK_DYNAMIC_STATE_VIEWPORT)
+			.AddDynamicState(VK_DYNAMIC_STATE_SCISSOR)
+			.Layout(Present.PipelineLayout.get())
+			.RenderPass(Postprocess.RenderPass.get())
+			.DebugName("ScreenshotPipeline")
+			.Create(renderer->Device.get());
+	}
+}
+
+void RenderPassManager::CreatePostprocessRenderPass()
+{
+	Postprocess.RenderPass = RenderPassBuilder()
 		.AddAttachment(
 			VK_FORMAT_R16G16B16A16_SFLOAT,
 			VK_SAMPLE_COUNT_1_BIT,
@@ -386,10 +403,10 @@ void RenderPassManager::CreateBloomRenderPass()
 			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT)
 		.AddSubpass()
 		.AddSubpassColorAttachmentRef(0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
-		.DebugName("BloomRenderPass")
+		.DebugName("PPRenderPass")
 		.Create(renderer->Device.get());
 
-	Bloom.RenderPassCombine = RenderPassBuilder()
+	Postprocess.RenderPassCombine = RenderPassBuilder()
 		.AddAttachment(
 			VK_FORMAT_R16G16B16A16_SFLOAT,
 			VK_SAMPLE_COUNT_1_BIT,
@@ -404,7 +421,7 @@ void RenderPassManager::CreateBloomRenderPass()
 			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT)
 		.AddSubpass()
 		.AddSubpassColorAttachmentRef(0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
-		.DebugName("BloomRenderPassCombine")
+		.DebugName("PPRenderPassCombine")
 		.Create(renderer->Device.get());
 }
 
@@ -416,7 +433,7 @@ void RenderPassManager::CreateBloomPipeline()
 		.AddDynamicState(VK_DYNAMIC_STATE_VIEWPORT)
 		.AddDynamicState(VK_DYNAMIC_STATE_SCISSOR)
 		.Layout(Bloom.PipelineLayout.get())
-		.RenderPass(Bloom.RenderPass.get())
+		.RenderPass(Postprocess.RenderPass.get())
 		.DebugName("Bloom.Extract")
 		.Create(renderer->Device.get());
 
@@ -427,7 +444,7 @@ void RenderPassManager::CreateBloomPipeline()
 		.AddDynamicState(VK_DYNAMIC_STATE_SCISSOR)
 		.AddColorBlendAttachment(ColorBlendAttachmentBuilder().BlendMode(VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE).Create())
 		.Layout(Bloom.PipelineLayout.get())
-		.RenderPass(Bloom.RenderPass.get())
+		.RenderPass(Postprocess.RenderPass.get())
 		.DebugName("Bloom.Combine")
 		.Create(renderer->Device.get());
 
@@ -437,7 +454,7 @@ void RenderPassManager::CreateBloomPipeline()
 		.AddDynamicState(VK_DYNAMIC_STATE_VIEWPORT)
 		.AddDynamicState(VK_DYNAMIC_STATE_SCISSOR)
 		.Layout(Bloom.PipelineLayout.get())
-		.RenderPass(Bloom.RenderPass.get())
+		.RenderPass(Postprocess.RenderPass.get())
 		.DebugName("Bloom.Copy")
 		.Create(renderer->Device.get());
 
@@ -447,7 +464,7 @@ void RenderPassManager::CreateBloomPipeline()
 		.AddDynamicState(VK_DYNAMIC_STATE_VIEWPORT)
 		.AddDynamicState(VK_DYNAMIC_STATE_SCISSOR)
 		.Layout(Bloom.PipelineLayout.get())
-		.RenderPass(Bloom.RenderPass.get())
+		.RenderPass(Postprocess.RenderPass.get())
 		.DebugName("Bloom.BlurVertical")
 		.Create(renderer->Device.get());
 
@@ -457,7 +474,7 @@ void RenderPassManager::CreateBloomPipeline()
 		.AddDynamicState(VK_DYNAMIC_STATE_VIEWPORT)
 		.AddDynamicState(VK_DYNAMIC_STATE_SCISSOR)
 		.Layout(Bloom.PipelineLayout.get())
-		.RenderPass(Bloom.RenderPass.get())
+		.RenderPass(Postprocess.RenderPass.get())
 		.DebugName("Bloom.BlurHorizontal")
 		.Create(renderer->Device.get());
 }

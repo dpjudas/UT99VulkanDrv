@@ -102,6 +102,7 @@ public:
 	BYTE AntialiasMode;
 	BYTE GammaMode;
 	BYTE LightMode;
+	BITFIELD GammaCorrectScreenshots;
 
 	INT VkDeviceIndex;
 	BITFIELD VkDebug;
@@ -113,6 +114,7 @@ public:
 	static void ComputeBlurSamples(int sampleCount, float blurAmount, float* sampleWeights);
 
 	void DrawPresentTexture(int x, int y, int width, int height);
+	PresentPushConstants GetPresentPushConstants();
 
 	struct
 	{

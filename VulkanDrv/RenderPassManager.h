@@ -13,8 +13,9 @@ public:
 
 	void CreatePresentRenderPass();
 	void CreatePresentPipeline();
+	void CreateScreenshotPipeline();
 
-	void CreateBloomRenderPass();
+	void CreatePostprocessRenderPass();
 	void CreateBloomPipeline();
 
 	void BeginScene(VulkanCommandBuffer* cmdbuffer, float r, float g, float b, float a);
@@ -43,19 +44,24 @@ public:
 		std::unique_ptr<VulkanPipelineLayout> PipelineLayout;
 		std::unique_ptr<VulkanRenderPass> RenderPass;
 		std::unique_ptr<VulkanPipeline> Pipeline[16];
+		std::unique_ptr<VulkanPipeline> ScreenshotPipeline[16];
 	} Present;
 
 	struct
 	{
 		std::unique_ptr<VulkanPipelineLayout> PipelineLayout;
-		std::unique_ptr<VulkanRenderPass> RenderPass;
-		std::unique_ptr<VulkanRenderPass> RenderPassCombine;
 		std::unique_ptr<VulkanPipeline> Extract;
 		std::unique_ptr<VulkanPipeline> Combine;
 		std::unique_ptr<VulkanPipeline> Scale;
 		std::unique_ptr<VulkanPipeline> BlurVertical;
 		std::unique_ptr<VulkanPipeline> BlurHorizontal;
 	} Bloom;
+
+	struct
+	{
+		std::unique_ptr<VulkanRenderPass> RenderPass;
+		std::unique_ptr<VulkanRenderPass> RenderPassCombine;
+	} Postprocess;
 
 private:
 	void CreateScenePipelineLayout();

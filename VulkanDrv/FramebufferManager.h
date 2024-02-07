@@ -18,7 +18,7 @@ public:
 	VulkanFramebuffer* GetSwapChainFramebuffer();
 
 	std::unique_ptr<VulkanFramebuffer> SceneFramebuffer;
-	std::unique_ptr<VulkanFramebuffer> BloomPPImageFB;
+	std::unique_ptr<VulkanFramebuffer> PPImageFB[2];
 
 	struct
 	{
