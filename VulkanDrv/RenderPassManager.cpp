@@ -79,7 +79,7 @@ void RenderPassManager::BeginPresent(VulkanCommandBuffer* cmdbuffer)
 	RenderPassBegin()
 		.RenderPass(Present.RenderPass.get())
 		.Framebuffer(renderer->Framebuffers->GetSwapChainFramebuffer())
-		.RenderArea(0, 0, renderer->Textures->Scene->Width, renderer->Textures->Scene->Height)
+		.RenderArea(0, 0, renderer->Commands->SwapChain->Width(), renderer->Commands->SwapChain->Height())
 		.AddClearColor(0.0f, 0.0f, 0.0f, 1.0f)
 		.Execute(cmdbuffer);
 }

@@ -113,7 +113,7 @@ public:
 	static float ComputeBlurGaussian(float n, float theta);
 	static void ComputeBlurSamples(int sampleCount, float blurAmount, float* sampleWeights);
 
-	void DrawPresentTexture(int x, int y, int width, int height);
+	void DrawPresentTexture(int width, int height);
 	PresentPushConstants GetPresentPushConstants();
 
 	struct
@@ -188,6 +188,14 @@ private:
 
 	int ForceHitIndex = -1;
 	HitQuery ForceHit;
+
+	struct
+	{
+		RECT WindowPos = {};
+		LONG Style = 0;
+		LONG ExStyle = 0;
+		bool Enabled = false;
+	} FullscreenState;
 };
 
 inline void UVulkanRenderDevice::SetPipeline(VulkanPipeline* pipeline)

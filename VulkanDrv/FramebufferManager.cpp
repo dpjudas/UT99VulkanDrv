@@ -70,7 +70,7 @@ void FramebufferManager::CreateSwapChainFramebuffers()
 		SwapChainFramebuffers.push_back(
 			FramebufferBuilder()
 				.RenderPass(renderer->RenderPasses->Present.RenderPass.get())
-				.Size(renderer->Textures->Scene->Width, renderer->Textures->Scene->Height)
+				.Size(renderer->Commands->SwapChain->Width(), renderer->Commands->SwapChain->Height())
 				.AddAttachment(swapchain->GetImageView(i))
 				.DebugName("SwapChainFramebuffer")
 				.Create(renderer->Device.get()));

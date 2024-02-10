@@ -72,7 +72,7 @@ void CommandBufferManager::SubmitCommands(bool present, int presentWidth, int pr
 		PresentImageIndex = SwapChain->AcquireImage(ImageAvailableSemaphore.get());
 		if (PresentImageIndex != -1)
 		{
-			renderer->DrawPresentTexture(0, 0, presentWidth, presentHeight);
+			renderer->DrawPresentTexture(presentWidth, presentHeight);
 		}
 	}
 

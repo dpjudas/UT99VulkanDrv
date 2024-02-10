@@ -229,21 +229,46 @@ UBOOL UVulkanRenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL F
 	if (NewX == 0 || NewY == 0)
 		return 1;
 
-	if (!Viewport->ResizeViewport(Fullscreen ? (BLIT_Fullscreen | BLIT_OpenGL) : (BLIT_HardwarePaint | BLIT_OpenGL), NewX, NewY, NewColorBytes))
+	if (!Fullscreen && FullscreenState.Enabled) // Leaving fullscreen
+	{
+		// Restore old state
+		SetWindowLong((HWND)Viewport->GetWindow(), GWL_STYLE, FullscreenState.Style);
+		SetWindowLong((HWND)Viewport->GetWindow(), GWL_EXSTYLE, FullscreenState.ExStyle);
+		SetWindowPos(
+			(HWND)Viewport->GetWindow(),
+			HWND_TOP,
+			FullscreenState.WindowPos.left,
+			FullscreenState.WindowPos.top,
+			FullscreenState.WindowPos.right - FullscreenState.WindowPos.left,
+			FullscreenState.WindowPos.bottom - FullscreenState.WindowPos.top,
+			SWP_FRAMECHANGED | SWP_NOSENDCHANGING | SWP_NOACTIVATE | SWP_NOZORDER);
+
+		FullscreenState.Enabled = false;
+	}
+
+	if (!Viewport->ResizeViewport(Fullscreen ? (BLIT_Fullscreen | BLIT_Direct3D) : (BLIT_HardwarePaint | BLIT_Direct3D), NewX, NewY, NewColorBytes))
 		return 0;
 
-#ifdef USE_HORRIBLE_WIN32_MODE_SWITCHES
-	if (Fullscreen)
+	if (Fullscreen && !FullscreenState.Enabled) // Entering fullscreen
 	{
-		DEVMODE devmode = {};
-		devmode.dmSize = sizeof(DEVMODE);
-		devmode.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT; // | DM_DISPLAYFREQUENCY
-		devmode.dmPelsWidth = NewX;
-		devmode.dmPelsHeight = NewY;
-		// devmode.dmDisplayFrequency = 360;
-		ChangeDisplaySettingsEx(nullptr, &devmode, 0, CDS_FULLSCREEN, 0);
+		// Save old state
+		GetWindowRect((HWND)Viewport->GetWindow(), &FullscreenState.WindowPos);
+		FullscreenState.Style = GetWindowLong((HWND)Viewport->GetWindow(), GWL_STYLE);
+		FullscreenState.ExStyle = GetWindowLong((HWND)Viewport->GetWindow(), GWL_EXSTYLE);
+
+		// Find primary monitor resolution
+		HDC screenDC = GetDC(0);
+		int screenWidth = GetDeviceCaps(screenDC, HORZRES);
+		int screenHeight = GetDeviceCaps(screenDC, VERTRES);
+		ReleaseDC(0, screenDC);
+
+		// Create borderless full screen window (our present shader will letterbox any resolution to fit)
+		SetWindowLong((HWND)Viewport->GetWindow(), GWL_STYLE, WS_OVERLAPPED | WS_VISIBLE);
+		SetWindowLong((HWND)Viewport->GetWindow(), GWL_EXSTYLE, WS_EX_APPWINDOW);
+		SetWindowPos((HWND)Viewport->GetWindow(), HWND_TOP, 0, 0, screenWidth, screenHeight, SWP_FRAMECHANGED | SWP_NOSENDCHANGING | SWP_NOACTIVATE | SWP_NOZORDER);
+
+		FullscreenState.Enabled = true;
 	}
-#endif
 
 	SaveConfig();
 
@@ -262,10 +287,6 @@ void UVulkanRenderDevice::Exit()
 	guard(UVulkanRenderDevice::Exit);
 
 	if (Device) vkDeviceWaitIdle(Device->device);
-
-#ifdef USE_HORRIBLE_WIN32_MODE_SWITCHES
-	ChangeDisplaySettingsEx(nullptr, nullptr, 0, 0, 0);
-#endif
 
 	Framebuffers.reset();
 	RenderPasses.reset();
@@ -405,7 +426,6 @@ UBOOL UVulkanRenderDevice::Exec(const TCHAR* Cmd, FOutputDevice& Ar)
 		resolutions.insert({ screenWidth, screenHeight });
 		ReleaseDC(0, screenDC);
 
-#ifdef USE_HORRIBLE_WIN32_MODE_SWITCHES
 		// Get what else is available according to Windows
 		DEVMODE devmode = {};
 		devmode.dmSize = sizeof(DEVMODE);
@@ -424,11 +444,14 @@ UBOOL UVulkanRenderDevice::Exec(const TCHAR* Cmd, FOutputDevice& Ar)
 		// Add a letterboxed 4:3 mode for widescreen monitors
 		resolutions.insert({ (screenHeight * 4 + 2) / 3, screenHeight });
 
+		// Add a letterboxed 16:9 mode for ultra widescreen monitors
+		resolutions.insert({ (screenHeight * 16 + 8) / 9, screenHeight });
+
 		// Include a few classics from the era
 		resolutions.insert({ 800, 600 });
 		resolutions.insert({ 1024, 768 });
+		resolutions.insert({ 1280, 1024 });
 		resolutions.insert({ 1600, 1200 });
-#endif
 #else
 		resolutions.insert({ 800, 600 });
 		resolutions.insert({ 1280, 720 });
@@ -571,7 +594,10 @@ void UVulkanRenderDevice::Unlock(UBOOL Blit)
 		{
 			RunBloomPass();
 		}
-		SubmitAndWait(Blit ? true : false, Viewport->SizeX, Viewport->SizeY, Viewport->IsFullscreen());
+
+		RECT box = {};
+		GetClientRect((HWND)Viewport->GetWindow(), &box);
+		SubmitAndWait(Blit ? true : false, box.right, box.bottom, Viewport->IsFullscreen());
 
 		if (Samplers->LODBias != LODBias)
 		{
@@ -777,6 +803,9 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 		vpos += vcount;
 		icount += (vcount - 2) * 3;
 	}
+
+	SceneVertexPos = vpos;
+	SceneIndexPos = ipos + icount;
 
 	Stats.ComplexSurfaces++;
 
@@ -1893,7 +1922,7 @@ PresentPushConstants UVulkanRenderDevice::GetPresentPushConstants()
 	return pushconstants;
 }
 
-void UVulkanRenderDevice::DrawPresentTexture(int x, int y, int width, int height)
+void UVulkanRenderDevice::DrawPresentTexture(int width, int height)
 {
 	PresentPushConstants pushconstants = GetPresentPushConstants();
 
@@ -1905,17 +1934,25 @@ void UVulkanRenderDevice::DrawPresentTexture(int x, int y, int width, int height
 	if (GammaMode == 1) presentShader |= 2;
 	if (pushconstants.Brightness != 0.0f || pushconstants.Contrast != 1.0f || pushconstants.Saturation != 1.0f) presentShader |= (Clamp(GrayFormula, 0, 2) + 1) << 2;
 
+	float scale = std::min(width / (float)Viewport->SizeX, height / (float)Viewport->SizeY);
+	int letterboxWidth = (int)std::round(Viewport->SizeX * scale);
+	int letterboxHeight = (int)std::round(Viewport->SizeY * scale);
+	int letterboxX = (width - letterboxWidth) / 2;
+	int letterboxY = (height - letterboxHeight) / 2;
+
 	VkViewport viewport = {};
-	viewport.x = x;
-	viewport.y = y;
-	viewport.width = width;
-	viewport.height = height;
+	viewport.x = letterboxX;
+	viewport.y = letterboxY;
+	viewport.width = letterboxWidth;
+	viewport.height = letterboxHeight;
 	viewport.minDepth = 0.0f;
 	viewport.maxDepth = 1.0f;
 
 	VkRect2D scissor = {};
-	scissor.extent.width = width;
-	scissor.extent.height = height;
+	scissor.offset.x = letterboxX;
+	scissor.offset.y = letterboxY;
+	scissor.extent.width = letterboxWidth;
+	scissor.extent.height = letterboxHeight;
 
 	auto cmdbuffer = Commands->GetDrawCommands();
 
