@@ -828,6 +828,8 @@ void UD3D11RenderDevice::ReleaseBloomPass()
 	ReleaseObject(BloomPass.Combine);
 	ReleaseObject(BloomPass.BlurVertical);
 	ReleaseObject(BloomPass.BlurHorizontal);
+	ReleaseObject(BloomPass.ConstantBuffer);
+	ReleaseObject(BloomPass.AdditiveBlendState);
 }
 
 void UD3D11RenderDevice::ReleasePresentPass()
@@ -2656,7 +2658,7 @@ std::vector<uint8_t> UD3D11RenderDevice::CompileHlsl(const std::string& filename
 
 	ID3DBlob* blob = nullptr;
 	ID3DBlob* errors = nullptr;
-	HRESULT result = D3DCompile(code.data(), code.size(), filename.c_str(), macros.data(), nullptr, "main", target.c_str(), D3D10_SHADER_ENABLE_STRICTNESS | D3D10_SHADER_OPTIMIZATION_LEVEL3, 0, &blob, &errors);
+	HRESULT result = D3DCompile(code.data(), code.size(), filename.c_str(), macros.data(), nullptr, "main", target.c_str(), D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, &blob, &errors);
 	if (FAILED(result))
 	{
 		std::string msg((const char*)errors->GetBufferPointer(), errors->GetBufferSize());
