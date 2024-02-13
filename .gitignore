@@ -6,3 +6,4 @@
 /ShaderCompiler/*.user
 /Thirdparty/UnrealTournamentSDK
 /D3D11Drv/*.user
+/D3D12Drv/*.user

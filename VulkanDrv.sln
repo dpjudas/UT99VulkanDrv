@@ -11,6 +11,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "HRTFAudio", "HRTFAudio\HRTF
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "D3D11Drv", "D3D11Drv\D3D11Drv.vcxproj", "{61D829FF-33FA-4585-AC7D-DE5D143F6DF7}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "D3D12Drv", "D3D12Drv\D3D12Drv.vcxproj", "{A2A54772-B1F0-4BEF-936D-80DA823013FE}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x86 = Debug|x86
@@ -66,6 +68,18 @@ Global
 		{61D829FF-33FA-4585-AC7D-DE5D143F6DF7}.UnrealGoldDebug|x86.Build.0 = UnrealGoldDebug|Win32
 		{61D829FF-33FA-4585-AC7D-DE5D143F6DF7}.UnrealGoldRelease|x86.ActiveCfg = UnrealGoldRelease|Win32
 		{61D829FF-33FA-4585-AC7D-DE5D143F6DF7}.UnrealGoldRelease|x86.Build.0 = UnrealGoldRelease|Win32
+		{A2A54772-B1F0-4BEF-936D-80DA823013FE}.Debug|x86.ActiveCfg = Debug|Win32
+		{A2A54772-B1F0-4BEF-936D-80DA823013FE}.Debug|x86.Build.0 = Debug|Win32
+		{A2A54772-B1F0-4BEF-936D-80DA823013FE}.DeusExDebug|x86.ActiveCfg = DeusExDebug|Win32
+		{A2A54772-B1F0-4BEF-936D-80DA823013FE}.DeusExDebug|x86.Build.0 = DeusExDebug|Win32
+		{A2A54772-B1F0-4BEF-936D-80DA823013FE}.DeusExRelease|x86.ActiveCfg = DeusExRelease|Win32
+		{A2A54772-B1F0-4BEF-936D-80DA823013FE}.DeusExRelease|x86.Build.0 = DeusExRelease|Win32
+		{A2A54772-B1F0-4BEF-936D-80DA823013FE}.Release|x86.ActiveCfg = Release|Win32
+		{A2A54772-B1F0-4BEF-936D-80DA823013FE}.Release|x86.Build.0 = Release|Win32
+		{A2A54772-B1F0-4BEF-936D-80DA823013FE}.UnrealGoldDebug|x86.ActiveCfg = UnrealGoldDebug|Win32
+		{A2A54772-B1F0-4BEF-936D-80DA823013FE}.UnrealGoldDebug|x86.Build.0 = UnrealGoldDebug|Win32
+		{A2A54772-B1F0-4BEF-936D-80DA823013FE}.UnrealGoldRelease|x86.ActiveCfg = UnrealGoldRelease|Win32
+		{A2A54772-B1F0-4BEF-936D-80DA823013FE}.UnrealGoldRelease|x86.Build.0 = UnrealGoldRelease|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
