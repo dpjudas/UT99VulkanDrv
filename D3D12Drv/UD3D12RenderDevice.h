@@ -102,30 +102,29 @@ public:
 	ComPtr<ID3D12DescriptorHeap> FrameBufferHeap;
 	std::vector<ComPtr<ID3D12Resource>> FrameBuffers;
 	UINT RtvHandleSize = 0;
+	UINT SamplerHandleSize = 0;
 
 	struct PPBlurLevel
 	{
-		/*
-		ID3D12Texture2D* VTexture = nullptr;
-		ID3D12RenderTargetView* VTextureRTV = nullptr;
-		ID3D12ShaderResourceView* VTextureSRV = nullptr;
-		ID3D12Texture2D* HTexture = nullptr;
-		ID3D12RenderTargetView* HTextureRTV = nullptr;
-		ID3D12ShaderResourceView* HTextureSRV = nullptr;
-		*/
+		ComPtr<ID3D12Resource> VTexture;
+		// ID3D12RenderTargetView* VTextureRTV = nullptr;
+		// ID3D12ShaderResourceView* VTextureSRV = nullptr;
+		ComPtr<ID3D12Resource> HTexture;
+		// ID3D12RenderTargetView* HTextureRTV = nullptr;
+		// ID3D12ShaderResourceView* HTextureSRV = nullptr;
 		int Width = 0;
 		int Height = 0;
 	};
 
 	struct
 	{
+		ComPtr<ID3D12Resource> ColorBuffer;
+		ComPtr<ID3D12Resource> HitBuffer;
+		ComPtr<ID3D12Resource> DepthBuffer;
+		ComPtr<ID3D12Resource> PPImage[2];
+		ComPtr<ID3D12Resource> PPHitBuffer;
+		ComPtr<ID3D12Resource> StagingHitBuffer;
 		/*
-		ID3D12Texture2D* ColorBuffer = nullptr;
-		ID3D12Texture2D* HitBuffer = nullptr;
-		ID3D12Texture2D* DepthBuffer = nullptr;
-		ID3D12Texture2D* PPImage[2] = {};
-		ID3D12Texture2D* PPHitBuffer = nullptr;
-		ID3D12Texture2D* StagingHitBuffer = nullptr;
 		ID3D12RenderTargetView* ColorBufferView = nullptr;
 		ID3D12RenderTargetView* HitBufferView = nullptr;
 		ID3D12DepthStencilView* DepthBufferView = nullptr;
@@ -143,12 +142,10 @@ public:
 
 	struct
 	{
-		/*
-		ID3D12Buffer* VertexBuffer = nullptr;
-		ID3D12Buffer* IndexBuffer = nullptr;
-		ID3D12Buffer* ConstantBuffer = nullptr;
-		ID3D12SamplerState* Samplers[16] = {};
-		*/
+		ComPtr<ID3D12Resource> VertexBuffer;
+		ComPtr<ID3D12Resource> IndexBuffer;
+		ComPtr<ID3D12Resource> ConstantBuffer;
+		ComPtr<ID3D12DescriptorHeap> SamplersHeap;
 		ComPtr<ID3D12PipelineState> Pipelines[32];
 		ComPtr<ID3D12PipelineState> LinePipeline[2];
 		ComPtr<ID3D12PipelineState> PointPipeline;
@@ -183,12 +180,10 @@ public:
 	{
 		ComPtr<ID3D12PipelineState> HitResolve;
 		ComPtr<ID3D12PipelineState> Present[16];
-		/*
-		ID3D12Buffer* PPStepVertexBuffer = nullptr;
-		ID3D12Buffer* PresentConstantBuffer = nullptr;
-		ID3D12Texture2D* DitherTexture = nullptr;
-		ID3D12ShaderResourceView* DitherTextureView = nullptr;
-		*/
+		ComPtr<ID3D12Resource> PPStepVertexBuffer;
+		ComPtr<ID3D12Resource> PresentConstantBuffer;
+		ComPtr<ID3D12Resource> DitherTexture;
+		// ID3D12ShaderResourceView* DitherTextureView = nullptr;
 	} PresentPass;
 
 	struct
@@ -198,9 +193,7 @@ public:
 		ComPtr<ID3D12PipelineState> CombineAdditive;
 		ComPtr<ID3D12PipelineState> BlurVertical;
 		ComPtr<ID3D12PipelineState> BlurHorizontal;
-		/*
-		ID3D12Buffer* ConstantBuffer = nullptr;
-		*/
+		ComPtr<ID3D12Resource> ConstantBuffer;
 	} BloomPass;
 
 	//std::unique_ptr<TextureManager> Textures;

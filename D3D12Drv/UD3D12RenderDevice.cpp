@@ -188,6 +188,7 @@ UBOOL UD3D12RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 		}
 
 		RtvHandleSize = Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+		SamplerHandleSize = Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
 
 		D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc = {};
 		rootSignatureDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
@@ -377,123 +378,137 @@ void UD3D12RenderDevice::ResizeSceneBuffers(int width, int height, int multisamp
 {
 	multisample = std::max(multisample, 1);
 
-	/*
 	if (SceneBuffers.Width == width && SceneBuffers.Height == height && multisample == SceneBuffers.Multisample && SceneBuffers.ColorBuffer && SceneBuffers.HitBuffer && SceneBuffers.PPHitBuffer && SceneBuffers.StagingHitBuffer && SceneBuffers.DepthBuffer && SceneBuffers.PPImage[0] && SceneBuffers.PPImage[1])
 		return;
 
+	/*
 	ReleaseObject(SceneBuffers.ColorBufferView);
 	ReleaseObject(SceneBuffers.HitBufferView);
 	ReleaseObject(SceneBuffers.HitBufferShaderView);
 	ReleaseObject(SceneBuffers.PPHitBufferView);
 	ReleaseObject(SceneBuffers.DepthBufferView);
+	*/
 	for (int i = 0; i < 2; i++)
 	{
-		ReleaseObject(SceneBuffers.PPImageShaderView[i]);
-		ReleaseObject(SceneBuffers.PPImageView[i]);
-		ReleaseObject(SceneBuffers.PPImage[i]);
+		//ReleaseObject(SceneBuffers.PPImageShaderView[i]);
+		//ReleaseObject(SceneBuffers.PPImageView[i]);
+		SceneBuffers.PPImage[i].reset();
 	}
-	ReleaseObject(SceneBuffers.ColorBuffer);
-	ReleaseObject(SceneBuffers.StagingHitBuffer);
-	ReleaseObject(SceneBuffers.PPHitBuffer);
-	ReleaseObject(SceneBuffers.HitBuffer);
-	ReleaseObject(SceneBuffers.DepthBuffer);
+	SceneBuffers.ColorBuffer.reset();
+	SceneBuffers.StagingHitBuffer.reset();
+	SceneBuffers.PPHitBuffer.reset();
+	SceneBuffers.HitBuffer.reset();
+	SceneBuffers.DepthBuffer.reset();
 
 	for (PPBlurLevel& level : SceneBuffers.BlurLevels)
 	{
-		ReleaseObject(level.VTexture);
-		ReleaseObject(level.VTextureRTV);
-		ReleaseObject(level.VTextureSRV);
-		ReleaseObject(level.HTexture);
-		ReleaseObject(level.HTextureRTV);
-		ReleaseObject(level.HTextureSRV);
+		level.VTexture.reset();
+		//ReleaseObject(level.VTextureRTV);
+		//ReleaseObject(level.VTextureSRV);
+		level.HTexture.reset();
+		//ReleaseObject(level.HTextureRTV);
+		//ReleaseObject(level.HTextureSRV);
 	}
 
 	SceneBuffers.Width = width;
 	SceneBuffers.Height = height;
 	SceneBuffers.Multisample = multisample;
 
-	D3D12_TEXTURE2D_DESC texDesc = {};
-	texDesc.Usage = D3D12_USAGE_DEFAULT;
-	texDesc.BindFlags = D3D12_BIND_RENDER_TARGET;
+	D3D12_HEAP_PROPERTIES readbackHeapProps = {};
+	readbackHeapProps.Type = D3D12_HEAP_TYPE_READBACK;
+	readbackHeapProps.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+
+	D3D12_HEAP_PROPERTIES defaultHeapProps = {};
+	defaultHeapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+	defaultHeapProps.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_NOT_AVAILABLE;
+
+	D3D12_RESOURCE_DESC texDesc = {};
+	texDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+	texDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+	texDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
 	texDesc.Width = SceneBuffers.Width;
 	texDesc.Height = SceneBuffers.Height;
+	texDesc.DepthOrArraySize = 1;
 	texDesc.MipLevels = 1;
-	texDesc.ArraySize = 1;
+	texDesc.SampleDesc.Count = SceneBuffers.Multisample;
+	texDesc.SampleDesc.Quality = 0; // SceneBuffers.Multisample > 1 ? D3D12_STANDARD_MULTISAMPLE_PATTERN : 0;
+
 	texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
-	texDesc.SampleDesc.Count = SceneBuffers.Multisample;
-	texDesc.SampleDesc.Quality = SceneBuffers.Multisample > 1 ? D3D12_STANDARD_MULTISAMPLE_PATTERN : 0;
-	HRESULT result = Device->CreateTexture2D(&texDesc, nullptr, &SceneBuffers.ColorBuffer);
-	ThrowIfFailed(result, "CreateTexture2D(ColorBuffer) failed");
+	HRESULT result = Device->CreateCommittedResource(
+		&defaultHeapProps,
+		D3D12_HEAP_FLAG_NONE,
+		&texDesc,
+		D3D12_RESOURCE_STATE_RENDER_TARGET,
+		nullptr,
+		SceneBuffers.ColorBuffer.GetIID(),
+		SceneBuffers.ColorBuffer.InitPtr());
+	ThrowIfFailed(result, "CreateCommittedResource(SceneBuffers.ColorBuffer) failed");
 
-	texDesc = {};
-	texDesc.Usage = D3D12_USAGE_DEFAULT;
-	texDesc.BindFlags = D3D12_BIND_RENDER_TARGET | D3D12_BIND_SHADER_RESOURCE;
-	texDesc.Width = SceneBuffers.Width;
-	texDesc.Height = SceneBuffers.Height;
-	texDesc.MipLevels = 1;
-	texDesc.ArraySize = 1;
 	texDesc.Format = DXGI_FORMAT_R32_UINT;
-	texDesc.SampleDesc.Count = SceneBuffers.Multisample;
-	texDesc.SampleDesc.Quality = SceneBuffers.Multisample > 1 ? D3D12_STANDARD_MULTISAMPLE_PATTERN : 0;
-	result = Device->CreateTexture2D(&texDesc, nullptr, &SceneBuffers.HitBuffer);
-	ThrowIfFailed(result, "CreateTexture2D(HitBuffer) failed");
+	result = Device->CreateCommittedResource(
+		&defaultHeapProps,
+		D3D12_HEAP_FLAG_NONE,
+		&texDesc,
+		D3D12_RESOURCE_STATE_RENDER_TARGET,
+		nullptr,
+		SceneBuffers.HitBuffer.GetIID(),
+		SceneBuffers.HitBuffer.InitPtr());
+	ThrowIfFailed(result, "CreateCommittedResource(SceneBuffers.HitBuffer) failed");
 
-	texDesc = {};
-	texDesc.Usage = D3D12_USAGE_DEFAULT;
-	texDesc.BindFlags = D3D12_BIND_RENDER_TARGET;
-	texDesc.Width = SceneBuffers.Width;
-	texDesc.Height = SceneBuffers.Height;
-	texDesc.MipLevels = 1;
-	texDesc.ArraySize = 1;
-	texDesc.Format = DXGI_FORMAT_R32_UINT;
-	texDesc.SampleDesc.Count = 1;
-	texDesc.SampleDesc.Quality = 0;
-	result = Device->CreateTexture2D(&texDesc, nullptr, &SceneBuffers.PPHitBuffer);
-	ThrowIfFailed(result, "CreateTexture2D(PPHitBuffer) failed");
-
-	texDesc = {};
-	texDesc.Usage = D3D12_USAGE_STAGING;
-	texDesc.BindFlags = 0;
-	texDesc.Width = SceneBuffers.Width;
-	texDesc.Height = SceneBuffers.Height;
-	texDesc.MipLevels = 1;
-	texDesc.ArraySize = 1;
-	texDesc.Format = DXGI_FORMAT_R32_UINT;
-	texDesc.CPUAccessFlags = D3D12_CPU_ACCESS_READ;
-	texDesc.SampleDesc.Count = 1;
-	texDesc.SampleDesc.Quality = 0;
-	result = Device->CreateTexture2D(&texDesc, nullptr, &SceneBuffers.StagingHitBuffer);
-	ThrowIfFailed(result, "CreateTexture2D(StagingHitBuffer) failed");
-
-	texDesc = {};
-	texDesc.Usage = D3D12_USAGE_DEFAULT;
-	texDesc.BindFlags = D3D12_BIND_DEPTH_STENCIL;
-	texDesc.Width = SceneBuffers.Width;
-	texDesc.Height = SceneBuffers.Height;
-	texDesc.MipLevels = 1;
-	texDesc.ArraySize = 1;
+	texDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
 	texDesc.Format = DXGI_FORMAT_D32_FLOAT;
-	texDesc.SampleDesc.Count = SceneBuffers.Multisample;
-	texDesc.SampleDesc.Quality = SceneBuffers.Multisample > 1 ? D3D12_STANDARD_MULTISAMPLE_PATTERN : 0;
-	result = Device->CreateTexture2D(&texDesc, nullptr, &SceneBuffers.DepthBuffer);
-	ThrowIfFailed(result, "CreateTexture2D(DepthBuffer) failed");
+	result = Device->CreateCommittedResource(
+		&defaultHeapProps,
+		D3D12_HEAP_FLAG_NONE,
+		&texDesc,
+		D3D12_RESOURCE_STATE_DEPTH_WRITE,
+		nullptr,
+		SceneBuffers.DepthBuffer.GetIID(),
+		SceneBuffers.DepthBuffer.InitPtr());
+	ThrowIfFailed(result, "CreateCommittedResource(SceneBuffers.DepthBuffer) failed");
+
+	texDesc.SampleDesc.Count = 1;
+	texDesc.SampleDesc.Quality = 0;
+
+	texDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+	texDesc.Format = DXGI_FORMAT_R32_UINT;
+	result = Device->CreateCommittedResource(
+		&defaultHeapProps,
+		D3D12_HEAP_FLAG_NONE,
+		&texDesc,
+		D3D12_RESOURCE_STATE_RENDER_TARGET,
+		nullptr,
+		SceneBuffers.PPHitBuffer.GetIID(),
+		SceneBuffers.PPHitBuffer.InitPtr());
+	ThrowIfFailed(result, "CreateCommittedResource(SceneBuffers.PPHitBuffer) failed");
 
 	for (int i = 0; i < 2; i++)
 	{
-		texDesc = {};
-		texDesc.Usage = D3D12_USAGE_DEFAULT;
-		texDesc.BindFlags = D3D12_BIND_RENDER_TARGET | D3D12_BIND_SHADER_RESOURCE;
-		texDesc.Width = SceneBuffers.Width;
-		texDesc.Height = SceneBuffers.Height;
-		texDesc.MipLevels = 1;
-		texDesc.ArraySize = 1;
 		texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
-		texDesc.SampleDesc.Count = 1;
-		texDesc.SampleDesc.Quality = 0;
-		result = Device->CreateTexture2D(&texDesc, nullptr, &SceneBuffers.PPImage[i]);
-		ThrowIfFailed(result, "CreateTexture2D(PPImage) failed");
+		result = Device->CreateCommittedResource(
+			&defaultHeapProps,
+			D3D12_HEAP_FLAG_NONE,
+			&texDesc,
+			D3D12_RESOURCE_STATE_RENDER_TARGET,
+			nullptr,
+			SceneBuffers.PPImage[i].GetIID(),
+			SceneBuffers.PPImage[i].InitPtr());
+		ThrowIfFailed(result, "CreateCommittedResource(SceneBuffers.PPImage) failed");
 	}
 
+	texDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+	texDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+	result = Device->CreateCommittedResource(
+		&readbackHeapProps,
+		D3D12_HEAP_FLAG_NONE,
+		&texDesc,
+		D3D12_RESOURCE_STATE_COPY_DEST,
+		nullptr,
+		SceneBuffers.StagingHitBuffer.GetIID(),
+		SceneBuffers.StagingHitBuffer.InitPtr());
+	ThrowIfFailed(result, "CreateCommittedResource(SceneBuffers.StagingHitBuffer) failed");
+
+	/*
 	result = Device->CreateRenderTargetView(SceneBuffers.ColorBuffer, nullptr, &SceneBuffers.ColorBufferView);
 	ThrowIfFailed(result, "CreateRenderTargetView(ColorBuffer) failed");
 
@@ -517,6 +532,11 @@ void UD3D12RenderDevice::ResizeSceneBuffers(int width, int height, int multisamp
 		result = Device->CreateShaderResourceView(SceneBuffers.PPImage[i], nullptr, &SceneBuffers.PPImageShaderView[i]);
 		ThrowIfFailed(result, "CreateShaderResourceView(PPImage) failed");
 	}
+	*/
+
+	texDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+	texDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+	texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
 
 	int bloomWidth = width;
 	int bloomHeight = height;
@@ -525,23 +545,30 @@ void UD3D12RenderDevice::ResizeSceneBuffers(int width, int height, int multisamp
 		bloomWidth = (bloomWidth + 1) / 2;
 		bloomHeight = (bloomHeight + 1) / 2;
 
-		texDesc = {};
-		texDesc.Usage = D3D12_USAGE_DEFAULT;
-		texDesc.BindFlags = D3D12_BIND_RENDER_TARGET | D3D12_BIND_SHADER_RESOURCE;
 		texDesc.Width = bloomWidth;
 		texDesc.Height = bloomHeight;
-		texDesc.MipLevels = 1;
-		texDesc.ArraySize = 1;
-		texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
-		texDesc.SampleDesc.Count = 1;
-		texDesc.SampleDesc.Quality = 0;
 
-		result = Device->CreateTexture2D(&texDesc, nullptr, &level.VTexture);
-		ThrowIfFailed(result, "CreateTexture2D(SceneBuffers.BlurLevels.VTexture) failed");
+		result = Device->CreateCommittedResource(
+			&defaultHeapProps,
+			D3D12_HEAP_FLAG_NONE,
+			&texDesc,
+			D3D12_RESOURCE_STATE_RENDER_TARGET,
+			nullptr,
+			level.VTexture.GetIID(),
+			level.VTexture.InitPtr());
+		ThrowIfFailed(result, "CreateCommittedResource(SceneBuffers.BlurLevels.VTexture) failed");
 
-		result = Device->CreateTexture2D(&texDesc, nullptr, &level.HTexture);
-		ThrowIfFailed(result, "CreateTexture2D(SceneBuffers.BlurLevels.HTexture) failed");
+		result = Device->CreateCommittedResource(
+			&defaultHeapProps,
+			D3D12_HEAP_FLAG_NONE,
+			&texDesc,
+			D3D12_RESOURCE_STATE_RENDER_TARGET,
+			nullptr,
+			level.HTexture.GetIID(),
+			level.HTexture.InitPtr());
+		ThrowIfFailed(result, "CreateCommittedResource(SceneBuffers.BlurLevels.HTexture) failed");
 
+		/*
 		result = Device->CreateRenderTargetView(level.VTexture, nullptr, &level.VTextureRTV);
 		ThrowIfFailed(result, "CreateRenderTargetView(SceneBuffers.BlurLevels.VTextureRTV) failed");
 
@@ -553,11 +580,11 @@ void UD3D12RenderDevice::ResizeSceneBuffers(int width, int height, int multisamp
 
 		result = Device->CreateShaderResourceView(level.HTexture, nullptr, &level.HTextureSRV);
 		ThrowIfFailed(result, "CreateRenderTargetView(SceneBuffers.BlurLevels.HTextureSRV) failed");
+		*/
 
 		level.Width = bloomWidth;
 		level.Height = bloomHeight;
 	}
-	*/
 }
 
 void UD3D12RenderDevice::CreateScenePass()
@@ -734,44 +761,75 @@ void UD3D12RenderDevice::CreateScenePass()
 		ThrowIfFailed(result, "CreateGraphicsPipelineState failed");
 	}
 
-	/*
-	D3D12_BUFFER_DESC bufDesc = {};
-	bufDesc.Usage = D3D12_USAGE_DYNAMIC;
-	bufDesc.ByteWidth = SceneVertexBufferSize * sizeof(SceneVertex);
-	bufDesc.BindFlags = D3D12_BIND_VERTEX_BUFFER;
-	bufDesc.CPUAccessFlags = D3D12_CPU_ACCESS_WRITE;
-	HRESULT result = Device->CreateBuffer(&bufDesc, nullptr, &ScenePass.VertexBuffer);
-	ThrowIfFailed(result, "CreateBuffer(ScenePass.VertexBuffer) failed");
+	D3D12_HEAP_PROPERTIES uploadHeapProps = {};
+	uploadHeapProps.Type = D3D12_HEAP_TYPE_UPLOAD;
+	uploadHeapProps.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_WRITE_BACK;
 
-	bufDesc = {};
-	bufDesc.Usage = D3D12_USAGE_DYNAMIC;
-	bufDesc.ByteWidth = SceneIndexBufferSize * sizeof(uint32_t);
-	bufDesc.BindFlags = D3D12_BIND_INDEX_BUFFER;
-	bufDesc.CPUAccessFlags = D3D12_CPU_ACCESS_WRITE;
-	result = Device->CreateBuffer(&bufDesc, nullptr, &ScenePass.IndexBuffer);
-	ThrowIfFailed(result, "CreateBuffer(ScenePass.IndexBuffer) failed");
+	D3D12_HEAP_PROPERTIES defaultHeapProps = {};
+	defaultHeapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+	defaultHeapProps.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_NOT_AVAILABLE;
 
-	bufDesc = {};
-	bufDesc.Usage = D3D12_USAGE_DEFAULT;
-	bufDesc.ByteWidth = sizeof(ScenePushConstants);
-	bufDesc.BindFlags = D3D12_BIND_CONSTANT_BUFFER;
-	result = Device->CreateBuffer(&bufDesc, nullptr, &ScenePass.ConstantBuffer);
-	ThrowIfFailed(result, "CreateBuffer(ScenePass.ConstantBuffer) failed");
-	*/
+	D3D12_RESOURCE_DESC bufDesc = {};
+	bufDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+	bufDesc.Width = SceneVertexBufferSize * sizeof(SceneVertex);
+	bufDesc.Height = 1;
+	bufDesc.DepthOrArraySize = 1;
+	bufDesc.SampleDesc.Count = 1;
+	bufDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+	bufDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+
+	HRESULT result = Device->CreateCommittedResource(
+		&uploadHeapProps,
+		D3D12_HEAP_FLAG_NONE,
+		&bufDesc,
+		D3D12_RESOURCE_STATE_GENERIC_READ,
+		nullptr,
+		ScenePass.VertexBuffer.GetIID(),
+		ScenePass.VertexBuffer.InitPtr());
+	ThrowIfFailed(result, "CreateCommittedResource(ScenePass.VertexBuffer) failed");
+
+	bufDesc.Width = SceneIndexBufferSize * sizeof(uint32_t);
+	result = Device->CreateCommittedResource(
+		&uploadHeapProps,
+		D3D12_HEAP_FLAG_NONE,
+		&bufDesc,
+		D3D12_RESOURCE_STATE_GENERIC_READ,
+		nullptr,
+		ScenePass.IndexBuffer.GetIID(),
+		ScenePass.IndexBuffer.InitPtr());
+	ThrowIfFailed(result, "CreateCommittedResource(ScenePass.IndexBuffer) failed");
+
+	bufDesc.Width = sizeof(ScenePushConstants);
+	result = Device->CreateCommittedResource(
+		&defaultHeapProps,
+		D3D12_HEAP_FLAG_NONE,
+		&bufDesc,
+		D3D12_RESOURCE_STATE_GENERIC_READ,
+		nullptr,
+		ScenePass.ConstantBuffer.GetIID(),
+		ScenePass.ConstantBuffer.InitPtr());
+	ThrowIfFailed(result, "CreateCommittedResource(ScenePass.ConstantBuffer) failed");
 }
 
 void UD3D12RenderDevice::CreateSceneSamplers()
 {
-	/*
+	D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
+	heapDesc.NumDescriptors = 16;
+	heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER;
+	heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+	HRESULT result = Device->CreateDescriptorHeap(&heapDesc, ScenePass.SamplersHeap.GetIID(), ScenePass.SamplersHeap.InitPtr());
+	ThrowIfFailed(result, "CreateDescriptorHeap(ScenePass.SamplersHeap) failed");
+
+	D3D12_CPU_DESCRIPTOR_HANDLE samplerHandle = ScenePass.SamplersHeap->GetCPUDescriptorHandleForHeapStart();
 	for (int i = 0; i < 16; i++)
 	{
 		int dummyMipmapCount = (i >> 2) & 3;
 		D3D12_FILTER filter = (i & 1) ? D3D12_FILTER_MIN_MAG_MIP_POINT : D3D12_FILTER_ANISOTROPIC;
-		D3D12_TEXTURE_ADDRESS_MODE addressmode = (i & 2) ? D3D12_TEXTURE_ADDRESS_MIRROR_ONCE : D3D12_TEXTURE_ADDRESS_WRAP;
+		D3D12_TEXTURE_ADDRESS_MODE addressmode = (i & 2) ? D3D12_TEXTURE_ADDRESS_MODE_MIRROR_ONCE : D3D12_TEXTURE_ADDRESS_MODE_WRAP;
 		D3D12_SAMPLER_DESC samplerDesc = {};
 		samplerDesc.MinLOD = dummyMipmapCount;
 		samplerDesc.MaxLOD = D3D12_FLOAT32_MAX;
-		samplerDesc.ComparisonFunc = D3D12_COMPARISON_NEVER;
+		samplerDesc.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
 		samplerDesc.BorderColor[0] = 1.0f;
 		samplerDesc.BorderColor[1] = 1.0f;
 		samplerDesc.BorderColor[2] = 1.0f;
@@ -782,22 +840,17 @@ void UD3D12RenderDevice::CreateSceneSamplers()
 		samplerDesc.AddressU = addressmode;
 		samplerDesc.AddressV = addressmode;
 		samplerDesc.AddressW = addressmode;
-		HRESULT result = Device->CreateSamplerState(&samplerDesc, &ScenePass.Samplers[i]);
-		ThrowIfFailed(result, "CreateSamplerState(ScenePass.Samplers) failed");
+
+		Device->CreateSampler(&samplerDesc, samplerHandle);
+		samplerHandle.ptr += SamplerHandleSize;
 	}
-	*/
 
 	ScenePass.LODBias = LODBias;
 }
 
 void UD3D12RenderDevice::ReleaseSceneSamplers()
 {
-	/*
-	for (auto& sampler : ScenePass.Samplers)
-	{
-		ReleaseObject(sampler);
-	}
-	*/
+	ScenePass.SamplersHeap.reset();
 	ScenePass.LODBias = 0.0f;
 }
 
@@ -812,11 +865,9 @@ void UD3D12RenderDevice::UpdateLODBias()
 
 void UD3D12RenderDevice::ReleaseScenePass()
 {
-	/*
-	ReleaseObject(ScenePass.VertexBuffer);
-	ReleaseObject(ScenePass.IndexBuffer);
-	ReleaseObject(ScenePass.ConstantBuffer);
-	*/
+	ScenePass.VertexBuffer.reset();
+	ScenePass.IndexBuffer.reset();
+	ScenePass.ConstantBuffer.reset();
 	ReleaseSceneSamplers();
 	for (auto& pipeline : ScenePass.Pipelines)
 	{
@@ -836,21 +887,17 @@ void UD3D12RenderDevice::ReleaseBloomPass()
 	BloomPass.CombineAdditive.reset();
 	BloomPass.BlurVertical.reset();
 	BloomPass.BlurHorizontal.reset();
-	/*
-	ReleaseObject(BloomPass.ConstantBuffer);
-	*/
+	BloomPass.ConstantBuffer.reset();
 }
 
 void UD3D12RenderDevice::ReleasePresentPass()
 {
 	PresentPass.HitResolve.reset();
 	for (auto& shader : PresentPass.Present) shader.reset();
-	/*
-	ReleaseObject(PresentPass.PPStepVertexBuffer);
-	ReleaseObject(PresentPass.PresentConstantBuffer);
-	ReleaseObject(PresentPass.DitherTextureView);
-	ReleaseObject(PresentPass.DitherTexture);
-	*/
+	PresentPass.PPStepVertexBuffer.reset();
+	PresentPass.PresentConstantBuffer.reset();
+	// ReleaseObject(PresentPass.DitherTextureView);
+	PresentPass.DitherTexture.reset();
 }
 
 void UD3D12RenderDevice::ReleaseSceneBuffers()
@@ -861,27 +908,27 @@ void UD3D12RenderDevice::ReleaseSceneBuffers()
 	ReleaseObject(SceneBuffers.HitBufferShaderView);
 	ReleaseObject(SceneBuffers.PPHitBufferView);
 	ReleaseObject(SceneBuffers.DepthBufferView);
+	*/
 	for (int i = 0; i < 2; i++)
 	{
-		ReleaseObject(SceneBuffers.PPImageShaderView[i]);
-		ReleaseObject(SceneBuffers.PPImageView[i]);
-		ReleaseObject(SceneBuffers.PPImage[i]);
+		// ReleaseObject(SceneBuffers.PPImageShaderView[i]);
+		// ReleaseObject(SceneBuffers.PPImageView[i]);
+		SceneBuffers.PPImage[i].reset();
 	}
-	ReleaseObject(SceneBuffers.ColorBuffer);
-	ReleaseObject(SceneBuffers.StagingHitBuffer);
-	ReleaseObject(SceneBuffers.PPHitBuffer);
-	ReleaseObject(SceneBuffers.HitBuffer);
-	ReleaseObject(SceneBuffers.DepthBuffer);
+	SceneBuffers.ColorBuffer.reset();
+	SceneBuffers.StagingHitBuffer.reset();
+	SceneBuffers.PPHitBuffer.reset();
+	SceneBuffers.HitBuffer.reset();
+	SceneBuffers.DepthBuffer.reset();
 	for (PPBlurLevel& level : SceneBuffers.BlurLevels)
 	{
-		ReleaseObject(level.VTexture);
-		ReleaseObject(level.VTextureRTV);
-		ReleaseObject(level.VTextureSRV);
-		ReleaseObject(level.HTexture);
-		ReleaseObject(level.HTextureRTV);
-		ReleaseObject(level.HTextureSRV);
+		level.VTexture.reset();
+		// ReleaseObject(level.VTextureRTV);
+		// ReleaseObject(level.VTextureSRV);
+		level.HTexture.reset();
+		// ReleaseObject(level.HTextureRTV);
+		// ReleaseObject(level.HTextureSRV);
 	}
-	*/
 }
 
 ID3D12PipelineState* UD3D12RenderDevice::GetPipeline(DWORD PolyFlags)
@@ -2736,7 +2783,7 @@ std::vector<uint8_t> UD3D12RenderDevice::CompileHlsl(const std::string& filename
 	switch (FeatureLevel)
 	{
 	default:
-	case D3D_FEATURE_LEVEL_12_2: target = shadertype + "_6_5"; break;
+	// case D3D_FEATURE_LEVEL_12_2: target = shadertype + "_6_5"; break;
 	case D3D_FEATURE_LEVEL_12_1: target = shadertype + "_5_0"; break;
 	case D3D_FEATURE_LEVEL_12_0: target = shadertype + "_5_0"; break;
 	case D3D_FEATURE_LEVEL_11_1: target = shadertype + "_5_0"; break;
