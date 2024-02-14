@@ -185,6 +185,12 @@ UBOOL UD3D12RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 		RtvHandleSize = Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 		SamplerHandleSize = Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
 
+		result = Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, CommandAllocator.GetIID(), CommandAllocator.InitPtr());
+		ThrowIfFailed(result, "CreateCommandAllocator failed");
+
+		result = Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, CommandAllocator, nullptr, CommandList.GetIID(), CommandList.InitPtr());
+		ThrowIfFailed(result, "CreateCommandList failed");
+
 		CreateScenePass();
 		CreatePresentPass();
 		CreateBloomPass();
@@ -215,6 +221,7 @@ UBOOL UD3D12RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 
 	FrameBufferHeap.reset();
 	FrameBuffers.clear();
+	FrameBufferRTVs.clear();
 
 	if (!Viewport->ResizeViewport(Fullscreen ? (BLIT_Fullscreen | BLIT_Direct3D) : (BLIT_HardwarePaint | BLIT_Direct3D), NewX, NewY, NewColorBytes))
 	{
@@ -310,6 +317,7 @@ UBOOL UD3D12RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 	for (int i = 0; i < BufferCount; i++)
 	{
 		Device->CreateRenderTargetView(FrameBuffers[i], nullptr, rtvHandle);
+		FrameBufferRTVs.push_back(rtvHandle);
 		rtvHandle.ptr += RtvHandleSize;
 	}
 
@@ -332,20 +340,6 @@ void UD3D12RenderDevice::Exit()
 	if (SwapChain1)
 		SwapChain1->SetFullscreenState(FALSE, nullptr);
 
-	/*
-	if (SceneVertices)
-	{
-		Context->Unmap(ScenePass.VertexBuffer, 0);
-		SceneVertices = nullptr;
-	}
-
-	if (SceneIndexes)
-	{
-		Context->Unmap(ScenePass.IndexBuffer, 0);
-		SceneIndexes = nullptr;
-	}
-	*/
-
 	//Uploads.reset();
 	//Textures.reset();
 	ReleasePresentPass();
@@ -355,6 +349,8 @@ void UD3D12RenderDevice::Exit()
 	FrameBufferHeap.reset();
 	FrameBuffers.clear();
 	SwapChain1.reset();
+	CommandList.reset();
+	CommandAllocator.reset();
 	GraphicsQueue.reset();
 	Device.reset();
 	DebugController.reset();
@@ -369,34 +365,7 @@ void UD3D12RenderDevice::ResizeSceneBuffers(int width, int height, int multisamp
 	if (SceneBuffers.Width == width && SceneBuffers.Height == height && multisample == SceneBuffers.Multisample && SceneBuffers.ColorBuffer && SceneBuffers.HitBuffer && SceneBuffers.PPHitBuffer && SceneBuffers.StagingHitBuffer && SceneBuffers.DepthBuffer && SceneBuffers.PPImage[0] && SceneBuffers.PPImage[1])
 		return;
 
-	/*
-	ReleaseObject(SceneBuffers.ColorBufferView);
-	ReleaseObject(SceneBuffers.HitBufferView);
-	ReleaseObject(SceneBuffers.HitBufferShaderView);
-	ReleaseObject(SceneBuffers.PPHitBufferView);
-	ReleaseObject(SceneBuffers.DepthBufferView);
-	*/
-	for (int i = 0; i < 2; i++)
-	{
-		//ReleaseObject(SceneBuffers.PPImageShaderView[i]);
-		//ReleaseObject(SceneBuffers.PPImageView[i]);
-		SceneBuffers.PPImage[i].reset();
-	}
-	SceneBuffers.ColorBuffer.reset();
-	SceneBuffers.StagingHitBuffer.reset();
-	SceneBuffers.PPHitBuffer.reset();
-	SceneBuffers.HitBuffer.reset();
-	SceneBuffers.DepthBuffer.reset();
-
-	for (PPBlurLevel& level : SceneBuffers.BlurLevels)
-	{
-		level.VTexture.reset();
-		//ReleaseObject(level.VTextureRTV);
-		//ReleaseObject(level.VTextureSRV);
-		level.HTexture.reset();
-		//ReleaseObject(level.HTextureRTV);
-		//ReleaseObject(level.HTextureSRV);
-	}
+	ReleaseSceneBuffers();
 
 	SceneBuffers.Width = width;
 	SceneBuffers.Height = height;
@@ -818,6 +787,21 @@ void UD3D12RenderDevice::CreateScenePass()
 		ScenePass.IndexBuffer.GetIID(),
 		ScenePass.IndexBuffer.InitPtr());
 	ThrowIfFailed(result, "CreateCommittedResource(ScenePass.IndexBuffer) failed");
+
+	ScenePass.VertexBufferView.StrideInBytes = sizeof(SceneVertex);
+	ScenePass.VertexBufferView.BufferLocation = ScenePass.VertexBuffer->GetGPUVirtualAddress();
+	ScenePass.VertexBufferView.SizeInBytes = SceneVertexBufferSize * sizeof(SceneVertex);
+
+	ScenePass.IndexBufferView.Format = DXGI_FORMAT_R32_UINT;
+	ScenePass.IndexBufferView.BufferLocation = ScenePass.IndexBuffer->GetGPUVirtualAddress();
+	ScenePass.IndexBufferView.SizeInBytes = SceneIndexBufferSize * sizeof(uint32_t);
+
+	D3D12_RANGE readRange = {};
+	result = ScenePass.VertexBuffer->Map(0, &readRange, (void**)&SceneVertices);
+	ThrowIfFailed(result, "Map(ScenePass.VertexBuffer) failed");
+
+	result = ScenePass.IndexBuffer->Map(0, &readRange, (void**)&SceneIndexes);
+	ThrowIfFailed(result, "Map(ScenePass.IndexBuffer) failed");
 }
 
 void UD3D12RenderDevice::CreateSceneSamplers()
@@ -874,6 +858,18 @@ void UD3D12RenderDevice::UpdateLODBias()
 
 void UD3D12RenderDevice::ReleaseScenePass()
 {
+	if (SceneVertices)
+	{
+		ScenePass.VertexBuffer->Unmap(0, nullptr);
+		SceneVertices = nullptr;
+	}
+
+	if (SceneIndexes)
+	{
+		ScenePass.IndexBuffer->Unmap(0, nullptr);
+		SceneIndexes = nullptr;
+	}
+
 	ScenePass.VertexBuffer.reset();
 	ScenePass.IndexBuffer.reset();
 	ReleaseSceneSamplers();
@@ -904,24 +900,14 @@ void UD3D12RenderDevice::ReleasePresentPass()
 	PresentPass.HitResolve.reset();
 	for (auto& shader : PresentPass.Present) shader.reset();
 	PresentPass.PPStepVertexBuffer.reset();
-	// ReleaseObject(PresentPass.DitherTextureView);
 	PresentPass.DitherTexture.reset();
 	PresentPass.RootSignature.reset();
 }
 
 void UD3D12RenderDevice::ReleaseSceneBuffers()
 {
-	/*
-	ReleaseObject(SceneBuffers.ColorBufferView);
-	ReleaseObject(SceneBuffers.HitBufferView);
-	ReleaseObject(SceneBuffers.HitBufferShaderView);
-	ReleaseObject(SceneBuffers.PPHitBufferView);
-	ReleaseObject(SceneBuffers.DepthBufferView);
-	*/
 	for (int i = 0; i < 2; i++)
 	{
-		// ReleaseObject(SceneBuffers.PPImageShaderView[i]);
-		// ReleaseObject(SceneBuffers.PPImageView[i]);
 		SceneBuffers.PPImage[i].reset();
 	}
 	SceneBuffers.ColorBuffer.reset();
@@ -932,11 +918,7 @@ void UD3D12RenderDevice::ReleaseSceneBuffers()
 	for (PPBlurLevel& level : SceneBuffers.BlurLevels)
 	{
 		level.VTexture.reset();
-		// ReleaseObject(level.VTextureRTV);
-		// ReleaseObject(level.VTextureSRV);
 		level.HTexture.reset();
-		// ReleaseObject(level.HTextureRTV);
-		// ReleaseObject(level.HTextureSRV);
 	}
 }
 
@@ -989,17 +971,15 @@ void UD3D12RenderDevice::RunBloomPass()
 	BloomPushConstants pushconstants;
 	ComputeBlurSamples(7, blurAmount, pushconstants.SampleWeights);
 
-	UINT stride = sizeof(vec2);
-	UINT offset = 0;
-	Context->IASetVertexBuffers(0, 1, &PresentPass.PPStepVertexBuffer, &stride, &offset);
-	Context->IASetInputLayout(PresentPass.PPStepLayout);
-	Context->IASetPrimitiveTopology(D3D12_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-	Context->VSSetShader(PresentPass.PPStep, nullptr, 0);
-	Context->RSSetState(PresentPass.RasterizerState);
-	Context->PSSetConstantBuffers(0, 1, &BloomPass.ConstantBuffer);
-	Context->OMSetDepthStencilState(PresentPass.DepthStencilState, 0);
-	Context->OMSetBlendState(PresentPass.BlendState, nullptr, 0xffffffff);
-	Context->UpdateSubresource(BloomPass.ConstantBuffer, 0, nullptr, &pushconstants, 0, 0);
+	CommandList->IASetVertexBuffers(0, 1, &PresentPass.PPStepVertexBufferView);
+	CommandList->IASetInputLayout(PresentPass.PPStepLayout);
+	CommandList->IASetPrimitiveTopology(D3D12_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	CommandList->VSSetShader(PresentPass.PPStep, nullptr, 0);
+	CommandList->RSSetState(PresentPass.RasterizerState);
+	CommandList->PSSetConstantBuffers(0, 1, &BloomPass.ConstantBuffer);
+	CommandList->OMSetDepthStencilState(PresentPass.DepthStencilState, 0);
+	CommandList->OMSetBlendState(PresentPass.BlendState, nullptr, 0xffffffff);
+	CommandList->SetGraphicsRoot32BitConstants(2, sizeof(BloomPushConstants) / sizeof(uint32_t), &pushconstants, 0);
 
 	D3D12_VIEWPORT viewport = {};
 	viewport.MaxDepth = 1.0f;
@@ -1007,11 +987,11 @@ void UD3D12RenderDevice::RunBloomPass()
 	// Extract overbright pixels that we want to bloom:
 	viewport.Width = SceneBuffers.BlurLevels[0].Width;
 	viewport.Height = SceneBuffers.BlurLevels[0].Height;
-	Context->OMSetRenderTargets(1, &SceneBuffers.BlurLevels[0].VTextureRTV, nullptr);
-	Context->RSSetViewports(1, &viewport);
-	Context->PSSetShader(BloomPass.Extract, nullptr, 0);
-	Context->PSSetShaderResources(0, 1, &SceneBuffers.PPImageShaderView[0]);
-	Context->Draw(6, 0);
+	CommandList->OMSetRenderTargets(1, &SceneBuffers.BlurLevels[0].VTextureRTV, FALSE, nullptr);
+	CommandList->RSSetViewports(1, &viewport);
+	CommandList->PSSetShader(BloomPass.Extract, nullptr, 0);
+	CommandList->PSSetShaderResources(0, 1, &SceneBuffers.PPImageShaderView[0]);
+	CommandList->Draw(6, 0);
 
 	// Blur and downscale:
 	for (int i = 0; i < SceneBuffers.NumBloomLevels - 1; i++)
@@ -1021,18 +1001,18 @@ void UD3D12RenderDevice::RunBloomPass()
 
 		viewport.Width = blevel.Width;
 		viewport.Height = blevel.Height;
-		Context->RSSetViewports(1, &viewport);
+		CommandList->RSSetViewports(1, &viewport);
 		BlurStep(blevel.VTextureSRV, blevel.HTextureRTV, false);
 		BlurStep(blevel.HTextureSRV, blevel.VTextureRTV, true);
 
 		// Linear downscale:
 		viewport.Width = next.Width;
 		viewport.Height = next.Height;
-		Context->OMSetRenderTargets(1, &next.VTextureRTV, nullptr);
-		Context->RSSetViewports(1, &viewport);
-		Context->PSSetShader(BloomPass.Combine, nullptr, 0);
-		Context->PSSetShaderResources(0, 1, &blevel.VTextureSRV);
-		Context->Draw(6, 0);
+		CommandList->OMSetRenderTargets(1, &next.VTextureRTV, FALSE, nullptr);
+		CommandList->RSSetViewports(1, &viewport);
+		CommandList->PSSetShader(BloomPass.Combine, nullptr, 0);
+		CommandList->PSSetShaderResources(0, 1, &blevel.VTextureSRV);
+		CommandList->Draw(6, 0);
 	}
 
 	// Blur and upscale:
@@ -1043,45 +1023,45 @@ void UD3D12RenderDevice::RunBloomPass()
 
 		viewport.Width = blevel.Width;
 		viewport.Height = blevel.Height;
-		Context->RSSetViewports(1, &viewport);
+		CommandList->RSSetViewports(1, &viewport);
 		BlurStep(blevel.VTextureSRV, blevel.HTextureRTV, false);
 		BlurStep(blevel.HTextureSRV, blevel.VTextureRTV, true);
 
 		// Linear upscale:
 		viewport.Width = next.Width;
 		viewport.Height = next.Height;
-		Context->OMSetRenderTargets(1, &next.VTextureRTV, nullptr);
-		Context->RSSetViewports(1, &viewport);
-		Context->PSSetShader(BloomPass.Combine, nullptr, 0);
-		Context->PSSetShaderResources(0, 1, &blevel.VTextureSRV);
-		Context->Draw(6, 0);
+		CommandList->OMSetRenderTargets(1, &next.VTextureRTV, FALSE, nullptr);
+		CommandList->RSSetViewports(1, &viewport);
+		CommandList->PSSetShader(BloomPass.Combine, nullptr, 0);
+		CommandList->PSSetShaderResources(0, 1, &blevel.VTextureSRV);
+		CommandList->Draw(6, 0);
 	}
 
 	viewport.Width = SceneBuffers.BlurLevels[0].Width;
 	viewport.Height = SceneBuffers.BlurLevels[0].Height;
-	Context->RSSetViewports(1, &viewport);
+	CommandList->RSSetViewports(1, &viewport);
 	BlurStep(SceneBuffers.BlurLevels[0].VTextureSRV, SceneBuffers.BlurLevels[0].HTextureRTV, false);
 	BlurStep(SceneBuffers.BlurLevels[0].HTextureSRV, SceneBuffers.BlurLevels[0].VTextureRTV, true);
 
 	// Add bloom back to scene post process texture:
 	viewport.Width = SceneBuffers.Width;
 	viewport.Height = SceneBuffers.Height;
-	Context->OMSetRenderTargets(1, &SceneBuffers.PPImageView[0], nullptr);
-	Context->OMSetBlendState(BloomPass.AdditiveBlendState, nullptr, 0xffffffff);
-	Context->RSSetViewports(1, &viewport);
-	Context->PSSetShader(BloomPass.Combine, nullptr, 0);
-	Context->PSSetShaderResources(0, 1, &SceneBuffers.BlurLevels[0].VTextureSRV);
-	Context->Draw(6, 0);
+	CommandList->OMSetRenderTargets(1, &SceneBuffers.PPImageView[0], FALSE, nullptr);
+	CommandList->OMSetBlendState(BloomPass.AdditiveBlendState, nullptr, 0xffffffff);
+	CommandList->RSSetViewports(1, &viewport);
+	CommandList->PSSetShader(BloomPass.Combine, nullptr, 0);
+	CommandList->PSSetShaderResources(0, 1, &SceneBuffers.BlurLevels[0].VTextureSRV);
+	CommandList->Draw(6, 0);
 	*/
 }
 
 /*
 void UD3D12RenderDevice::BlurStep(ID3D12ShaderResourceView* input, ID3D12RenderTargetView* output, bool vertical)
 {
-	Context->OMSetRenderTargets(1, &output, nullptr);
-	Context->PSSetShader(vertical ? BloomPass.BlurVertical : BloomPass.BlurHorizontal, nullptr, 0);
-	Context->PSSetShaderResources(0, 1, &input);
-	Context->Draw(6, 0);
+	CommandList->OMSetRenderTargets(1, &output, FALSE, nullptr);
+	CommandList->PSSetShader(vertical ? BloomPass.BlurVertical : BloomPass.BlurHorizontal, nullptr, 0);
+	CommandList->PSSetShaderResources(0, 1, &input);
+	CommandList->Draw(6, 0);
 }
 */
 
@@ -1201,7 +1181,6 @@ void UD3D12RenderDevice::CreateBloomPass()
 
 void UD3D12RenderDevice::CreatePresentPass()
 {
-	/*
 	std::vector<vec2> positions =
 	{
 		vec2(-1.0, -1.0),
@@ -1212,17 +1191,38 @@ void UD3D12RenderDevice::CreatePresentPass()
 		vec2( 1.0,  1.0)
 	};
 
-	D3D12_BUFFER_DESC bufDesc = {};
-	bufDesc.Usage = D3D12_USAGE_IMMUTABLE;
-	bufDesc.ByteWidth = positions.size() * sizeof(vec2);
-	bufDesc.BindFlags = D3D12_BIND_VERTEX_BUFFER;
+	D3D12_HEAP_PROPERTIES uploadHeapProps = { D3D12_HEAP_TYPE_UPLOAD };
 
-	D3D12_SUBRESOURCE_DATA initData = {};
-	initData.pSysMem = positions.data();
+	D3D12_RESOURCE_DESC bufDesc = {};
+	bufDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+	bufDesc.Width = positions.size() * sizeof(vec2);
+	bufDesc.Height = 1;
+	bufDesc.DepthOrArraySize = 1;
+	bufDesc.MipLevels = 1;
+	bufDesc.SampleDesc.Count = 1;
+	bufDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+	bufDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
 
-	HRESULT result = Device->CreateBuffer(&bufDesc, &initData, &PresentPass.PPStepVertexBuffer);
-	ThrowIfFailed(result, "CreateBuffer(PresentPass.PPStepVertexBuffer) failed");
-	*/
+	HRESULT result = Device->CreateCommittedResource(
+		&uploadHeapProps,
+		D3D12_HEAP_FLAG_NONE,
+		&bufDesc,
+		D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER,
+		nullptr,
+		PresentPass.PPStepVertexBuffer.GetIID(),
+		PresentPass.PPStepVertexBuffer.InitPtr());
+	ThrowIfFailed(result, "CreateCommittedResource(PresentPass.PPStepVertexBuffer) failed");
+
+	D3D12_RANGE readRange = {};
+	void* dest = nullptr;
+	result = PresentPass.PPStepVertexBuffer->Map(0, &readRange, &dest);
+	ThrowIfFailed(result, "Map(PresentPass.PPStepVertexBuffer) failed");
+	memcpy(dest, positions.data(), positions.size() * sizeof(vec2));
+	PresentPass.PPStepVertexBuffer->Unmap(0, nullptr);
+
+	PresentPass.PPStepVertexBufferView.BufferLocation = PresentPass.PPStepVertexBuffer->GetGPUVirtualAddress();
+	PresentPass.PPStepVertexBufferView.SizeInBytes = positions.size() * sizeof(vec2);
+	PresentPass.PPStepVertexBufferView.StrideInBytes = sizeof(vec2);
 
 	std::vector<D3D12_INPUT_ELEMENT_DESC> elements =
 	{
@@ -1303,7 +1303,7 @@ void UD3D12RenderDevice::CreatePresentPass()
 	psoDesc.SampleMask = UINT_MAX;
 	psoDesc.NumRenderTargets = 1;
 	psoDesc.RTVFormats[0] = DXGI_FORMAT_R8_UINT;
-	HRESULT result = Device->CreateGraphicsPipelineState(&psoDesc, PresentPass.HitResolve.GetIID(), PresentPass.HitResolve.InitPtr());
+	result = Device->CreateGraphicsPipelineState(&psoDesc, PresentPass.HitResolve.GetIID(), PresentPass.HitResolve.InitPtr());
 	ThrowIfFailed(result, "CreateGraphicsPipelineState(HitResolve) failed");
 
 	/*
@@ -1455,49 +1455,21 @@ void UD3D12RenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane Scr
 	FlashScale = InFlashScale;
 	FlashFog = InFlashFog;
 
-	/*
 	FLOAT color[4] = { ScreenClear.X, ScreenClear.Y, ScreenClear.Z, ScreenClear.W };
 	FLOAT zero[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-	ID3D12RenderTargetView* views[2] = { SceneBuffers.ColorBufferView, SceneBuffers.HitBufferView };
-	Context->ClearRenderTargetView(SceneBuffers.ColorBufferView, color);
-	Context->ClearRenderTargetView(SceneBuffers.HitBufferView, zero);
-	Context->ClearDepthStencilView(SceneBuffers.DepthBufferView, D3D12_CLEAR_DEPTH, 1.0f, 0);
-	Context->OMSetRenderTargets(2, views, SceneBuffers.DepthBufferView);
-
-	UINT stride = sizeof(SceneVertex);
-	UINT offset = 0;
-	Context->IASetVertexBuffers(0, 1, &ScenePass.VertexBuffer, &stride, &offset);
-	Context->IASetIndexBuffer(ScenePass.IndexBuffer, DXGI_FORMAT_R32_UINT, 0);
-	Context->IASetInputLayout(ScenePass.InputLayout);
-	Context->VSSetShader(ScenePass.VertexShader, nullptr, 0);
-	Context->VSSetConstantBuffers(0, 1, &ScenePass.ConstantBuffer);
-	Context->RSSetState(ScenePass.RasterizerState[SceneBuffers.Multisample > 1]);
+	D3D12_CPU_DESCRIPTOR_HANDLE views[2] = { SceneBuffers.ColorBufferView, SceneBuffers.HitBufferView };
+	CommandList->ClearRenderTargetView(SceneBuffers.ColorBufferView, color, 0, nullptr);
+	CommandList->ClearRenderTargetView(SceneBuffers.HitBufferView, zero, 0, nullptr);
+	CommandList->ClearDepthStencilView(SceneBuffers.DepthBufferView, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+	CommandList->OMSetRenderTargets(2, views, FALSE, &SceneBuffers.DepthBufferView);
+	CommandList->IASetVertexBuffers(0, 1, &ScenePass.VertexBufferView);
+	CommandList->IASetIndexBuffer(&ScenePass.IndexBufferView);
+	CommandList->SetGraphicsRootSignature(ScenePass.RootSignature);
 
 	D3D12_RECT box = {};
 	box.right = Viewport->SizeX;
 	box.bottom = Viewport->SizeY;
-	Context->RSSetScissorRects(1, &box);
-
-	if (!SceneVertices)
-	{
-		D3D12_MAPPED_SUBRESOURCE mappedVertexBuffer = {};
-		HRESULT result = Context->Map(ScenePass.VertexBuffer, 0, D3D12_MAP_WRITE_DISCARD, 0, &mappedVertexBuffer);
-		if (SUCCEEDED(result))
-		{
-			SceneVertices = (SceneVertex*)mappedVertexBuffer.pData;
-		}
-	}
-
-	if (!SceneIndexes)
-	{
-		D3D12_MAPPED_SUBRESOURCE mappedIndexBuffer = {};
-		HRESULT result = Context->Map(ScenePass.IndexBuffer, 0, D3D12_MAP_WRITE_DISCARD, 0, &mappedIndexBuffer);
-		if (SUCCEEDED(result))
-		{
-			SceneIndexes = (uint32_t*)mappedIndexBuffer.pData;
-		}
-	}
-	*/
+	CommandList->RSSetScissorRects(1, &box);
 
 	SceneConstants.HitIndex = 0;
 	ForceHitIndex = -1;
@@ -1586,16 +1558,15 @@ void UD3D12RenderDevice::Unlock(UBOOL Blit)
 	if (Blit || HitData)
 		DrawBatches();
 
-	/*
 	if (Blit)
 	{
 		if (SceneBuffers.Multisample > 1)
 		{
-			Context->ResolveSubresource(SceneBuffers.PPImage[0], 0, SceneBuffers.ColorBuffer, 0, DXGI_FORMAT_R16G16B16A16_FLOAT);
+			CommandList->ResolveSubresource(SceneBuffers.PPImage[0], 0, SceneBuffers.ColorBuffer, 0, DXGI_FORMAT_R16G16B16A16_FLOAT);
 		}
 		else
 		{
-			Context->CopyResource(SceneBuffers.PPImage[0], SceneBuffers.ColorBuffer);
+			CommandList->CopyResource(SceneBuffers.PPImage[0], SceneBuffers.ColorBuffer);
 		}
 
 		if (Bloom)
@@ -1603,13 +1574,13 @@ void UD3D12RenderDevice::Unlock(UBOOL Blit)
 			RunBloomPass();
 		}
 
-		Context->OMSetRenderTargets(1, &BackBufferView, nullptr);
+		CommandList->OMSetRenderTargets(1, &FrameBufferRTVs[BackBufferIndex], FALSE, nullptr);
 
 		D3D12_VIEWPORT viewport = {};
 		viewport.Width = Viewport->SizeX;
 		viewport.Height = Viewport->SizeY;
 		viewport.MaxDepth = 1.0f;
-		Context->RSSetViewports(1, &viewport);
+		CommandList->RSSetViewports(1, &viewport);
 
 		PresentPushConstants pushconstants = GetPresentPushConstants();
 
@@ -1619,31 +1590,18 @@ void UD3D12RenderDevice::Unlock(UBOOL Blit)
 		if (GammaMode == 1) presentShader |= 2;
 		if (pushconstants.Brightness != 0.0f || pushconstants.Contrast != 1.0f || pushconstants.Saturation != 1.0f) presentShader |= (Clamp(GrayFormula, 0, 2) + 1) << 2;
 
-		UINT stride = sizeof(vec2);
-		UINT offset = 0;
-		ID3D12ShaderResourceView* psResources[] = { SceneBuffers.PPImageShaderView[0], PresentPass.DitherTextureView};
-		Context->IASetVertexBuffers(0, 1, &PresentPass.PPStepVertexBuffer, &stride, &offset);
-		Context->IASetInputLayout(PresentPass.PPStepLayout);
-		Context->IASetPrimitiveTopology(D3D12_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-		Context->VSSetShader(PresentPass.PPStep, nullptr, 0);
-		Context->RSSetState(PresentPass.RasterizerState);
-		Context->PSSetShader(PresentPass.Present[presentShader], nullptr, 0);
-		Context->PSSetConstantBuffers(0, 1, &PresentPass.PresentConstantBuffer);
-		Context->PSSetShaderResources(0, 2, psResources);
-		Context->OMSetDepthStencilState(PresentPass.DepthStencilState, 0);
-		Context->OMSetBlendState(PresentPass.BlendState, nullptr, 0xffffffff);
-		Context->UpdateSubresource(PresentPass.PresentConstantBuffer, 0, nullptr, &pushconstants, 0, 0);
-		Context->Draw(6, 0);
+		//ID3D12ShaderResourceView* psResources[] = { SceneBuffers.PPImageShaderView[0], PresentPass.DitherTextureView};
+		CommandList->SetGraphicsRootSignature(PresentPass.RootSignature);
+		CommandList->SetPipelineState(PresentPass.Present[presentShader]);
+		CommandList->IASetVertexBuffers(0, 1, &PresentPass.PPStepVertexBufferView);
+		//CommandList->SetGraphicsRootDescriptorTable(0, psResources);
+		CommandList->SetGraphicsRoot32BitConstants(2, sizeof(PresentPushConstants) / sizeof(uint32_t), &pushconstants, 0);
+		CommandList->DrawInstanced(6, 1, 0, 0);
 
-		if (SwapChain1)
-		{
-			DXGI_PRESENT_PARAMETERS presentParams = {};
-			SwapChain1->Present1(UseVSync ? 1 : 0, 0, &presentParams);
-		}
-		else
-		{
-			SwapChain->Present(UseVSync ? 1 : 0, 0);
-		}
+		DXGI_PRESENT_PARAMETERS presentParams = {};
+		SwapChain1->Present1(UseVSync ? 1 : 0, 0, &presentParams);
+
+		BackBufferIndex = (BackBufferIndex + 1) % (int)FrameBuffers.size();
 
 		Batch.Pipeline = nullptr;
 		Batch.Tex = nullptr;
@@ -1651,18 +1609,6 @@ void UD3D12RenderDevice::Unlock(UBOOL Blit)
 		Batch.Detailtex = nullptr;
 		Batch.Macrotex = nullptr;
 		Batch.SceneIndexStart = 0;
-
-		if (SceneVertices)
-		{
-			Context->Unmap(ScenePass.VertexBuffer, 0);
-			SceneVertices = nullptr;
-		}
-
-		if (SceneIndexes)
-		{
-			Context->Unmap(ScenePass.IndexBuffer, 0);
-			SceneIndexes = nullptr;
-		}
 
 		SceneVertexPos = 0;
 		SceneIndexPos = 0;
@@ -1672,6 +1618,7 @@ void UD3D12RenderDevice::Unlock(UBOOL Blit)
 
 	if (HitData)
 	{
+		/*
 		D3D12_BOX box = {};
 		box.left = Viewport->HitX;
 		box.right = Viewport->HitX + Viewport->HitXL;
@@ -1683,7 +1630,7 @@ void UD3D12RenderDevice::Unlock(UBOOL Blit)
 		// Resolve multisampling
 		if (SceneBuffers.Multisample > 1)
 		{
-			Context->OMSetRenderTargets(1, &SceneBuffers.PPHitBufferView, nullptr);
+			CommandList->OMSetRenderTargets(1, &SceneBuffers.PPHitBufferView, FALSE, nullptr);
 
 			D3D12_VIEWPORT viewport = {};
 			viewport.TopLeftX = box.left;
@@ -1691,34 +1638,31 @@ void UD3D12RenderDevice::Unlock(UBOOL Blit)
 			viewport.Width = box.right - box.left;
 			viewport.Height = box.bottom - box.top;
 			viewport.MaxDepth = 1.0f;
-			Context->RSSetViewports(1, &viewport);
+			CommandList->RSSetViewports(1, &viewport);
 
-			UINT stride = sizeof(vec2);
-			UINT offset = 0;
-			Context->IASetVertexBuffers(0, 1, &PresentPass.PPStepVertexBuffer, &stride, &offset);
-			Context->IASetInputLayout(PresentPass.PPStepLayout);
-			Context->IASetPrimitiveTopology(D3D12_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-			Context->VSSetShader(PresentPass.PPStep, nullptr, 0);
-			Context->RSSetState(PresentPass.RasterizerState);
-			Context->PSSetShader(PresentPass.HitResolve, nullptr, 0);
-			Context->PSSetShaderResources(0, 1, &SceneBuffers.HitBufferShaderView);
-			Context->OMSetDepthStencilState(PresentPass.DepthStencilState, 0);
-			Context->OMSetBlendState(PresentPass.BlendState, nullptr, 0xffffffff);
+			CommandList->IASetVertexBuffers(0, 1, &PresentPass.PPStepVertexBufferView);
+			CommandList->IASetInputLayout(PresentPass.PPStepLayout);
+			CommandList->IASetPrimitiveTopology(D3D12_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+			CommandList->VSSetShader(PresentPass.PPStep, nullptr, 0);
+			CommandList->RSSetState(PresentPass.RasterizerState);
+			CommandList->PSSetShader(PresentPass.HitResolve, nullptr, 0);
+			CommandList->PSSetShaderResources(0, 1, &SceneBuffers.HitBufferShaderView);
+			CommandList->OMSetDepthStencilState(PresentPass.DepthStencilState, 0);
+			CommandList->OMSetBlendState(PresentPass.BlendState, nullptr, 0xffffffff);
 
-			Context->Draw(6, 0);
+			CommandList->DrawInstanced(6, 1, 0, 0);
 		}
 		else
 		{
-			Context->CopySubresourceRegion(SceneBuffers.PPHitBuffer, 0, box.left, box.top, 0, SceneBuffers.HitBuffer, 0, &box);
+			CommandList->CopySubresourceRegion(SceneBuffers.PPHitBuffer, 0, box.left, box.top, 0, SceneBuffers.HitBuffer, 0, &box);
 		}
 
 		// Copy the hit buffer to a mappable texture, but only the part we want to examine
-		Context->CopySubresourceRegion(SceneBuffers.StagingHitBuffer, 0, 0, 0, 0, SceneBuffers.PPHitBuffer, 0, &box);
+		CommandList->CopySubresourceRegion(SceneBuffers.StagingHitBuffer, 0, 0, 0, 0, SceneBuffers.PPHitBuffer, 0, &box);
 
 		// Lock the buffer and look for the last hit
 		int hit = 0;
-		D3D12_MAPPED_SUBRESOURCE mapping = {};
-		HRESULT result = Context->Map(SceneBuffers.StagingHitBuffer, 0, D3D12_MAP_READ, 0, &mapping);
+		HRESULT result = SceneBuffers.StagingHitBuffer->Map(0, &readRange, &pData);
 		if (SUCCEEDED(result))
 		{
 			int width = Viewport->HitXL;
@@ -1731,7 +1675,7 @@ void UD3D12RenderDevice::Unlock(UBOOL Blit)
 					hit = std::max(hit, line[x]);
 				}
 			}
-			Context->Unmap(SceneBuffers.StagingHitBuffer, 0);
+			SceneBuffers.StagingHitBuffer->Unmap(0, &writtenRange);
 		}
 		hit--;
 
@@ -1744,14 +1688,14 @@ void UD3D12RenderDevice::Unlock(UBOOL Blit)
 			memcpy(HitData, HitBuffer.data() + query.Start, query.Count);
 			*HitSize = query.Count;
 		}
-		else
+		else*/
 		{
 			*HitSize = 0;
 		}
 	}
 
-	Context->OMSetRenderTargets(0, nullptr, nullptr);
-	*/
+	CommandAllocator->Reset();
+	CommandList->Reset(CommandAllocator, nullptr);
 
 	HitQueryStack.clear();
 	HitQueries.clear();
@@ -1783,7 +1727,7 @@ void UD3D12RenderDevice::PushHit(const BYTE* Data, INT Count)
 	HitBuffer.insert(HitBuffer.end(), HitQueryStack.begin(), HitQueryStack.end());
 
 	SceneConstants.HitIndex = index + 1;
-	//Context->UpdateSubresource(ScenePass.ConstantBuffer, 0, nullptr, &SceneConstants, 0, 0);
+	CommandList->SetGraphicsRoot32BitConstants(2, sizeof(ScenePushConstants) / sizeof(uint32_t), &SceneConstants, 0);
 
 	unguard;
 }
@@ -2523,7 +2467,7 @@ void UD3D12RenderDevice::ClearZ(FSceneNode* Frame)
 
 	DrawBatches();
 
-	//Context->ClearDepthStencilView(SceneBuffers.DepthBufferView, D3D12_CLEAR_DEPTH, 1.0f, 0);
+	CommandList->ClearDepthStencilView(SceneBuffers.DepthBufferView, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
 	unguard;
 }
@@ -2559,13 +2503,13 @@ void UD3D12RenderDevice::ReadPixels(FColor* Pixels)
 
 	if (GammaCorrectScreenshots)
 	{
-		Context->OMSetRenderTargets(1, &SceneBuffers.PPImageView[1], nullptr);
+		CommandList->OMSetRenderTargets(1, &SceneBuffers.PPImageView[1], FALSE, nullptr);
 
 		D3D12_VIEWPORT viewport = {};
 		viewport.Width = Viewport->SizeX;
 		viewport.Height = Viewport->SizeY;
 		viewport.MaxDepth = 1.0f;
-		Context->RSSetViewports(1, &viewport);
+		CommandList->RSSetViewports(1, &viewport);
 
 		PresentPushConstants pushconstants = GetPresentPushConstants();
 
@@ -2575,31 +2519,29 @@ void UD3D12RenderDevice::ReadPixels(FColor* Pixels)
 		if (GammaMode == 1) presentShader |= 2;
 		if (pushconstants.Brightness != 0.0f || pushconstants.Contrast != 1.0f || pushconstants.Saturation != 1.0f) presentShader |= (Clamp(GrayFormula, 0, 2) + 1) << 2;
 
-		UINT stride = sizeof(vec2);
-		UINT offset = 0;
 		ID3D12ShaderResourceView* psResources[] = { SceneBuffers.PPImageShaderView[0], PresentPass.DitherTextureView };
-		Context->IASetVertexBuffers(0, 1, &PresentPass.PPStepVertexBuffer, &stride, &offset);
-		Context->IASetInputLayout(PresentPass.PPStepLayout);
-		Context->IASetPrimitiveTopology(D3D12_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-		Context->VSSetShader(PresentPass.PPStep, nullptr, 0);
-		Context->RSSetState(PresentPass.RasterizerState);
-		Context->PSSetShader(PresentPass.Present[presentShader], nullptr, 0);
-		Context->PSSetConstantBuffers(0, 1, &PresentPass.PresentConstantBuffer);
-		Context->PSSetShaderResources(0, 2, psResources);
-		Context->OMSetDepthStencilState(PresentPass.DepthStencilState, 0);
-		Context->OMSetBlendState(PresentPass.BlendState, nullptr, 0xffffffff);
-		Context->UpdateSubresource(PresentPass.PresentConstantBuffer, 0, nullptr, &pushconstants, 0, 0);
-		Context->Draw(6, 0);
+		CommandList->IASetVertexBuffers(0, 1, &PresentPass.PPStepVertexBufferView);
+		CommandList->IASetInputLayout(PresentPass.PPStepLayout);
+		CommandList->IASetPrimitiveTopology(D3D12_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+		CommandList->VSSetShader(PresentPass.PPStep, nullptr, 0);
+		CommandList->RSSetState(PresentPass.RasterizerState);
+		CommandList->PSSetShader(PresentPass.Present[presentShader], nullptr, 0);
+		CommandList->PSSetConstantBuffers(0, 1, &PresentPass.PresentConstantBuffer);
+		CommandList->PSSetShaderResources(0, 2, psResources);
+		CommandList->OMSetDepthStencilState(PresentPass.DepthStencilState, 0);
+		CommandList->OMSetBlendState(PresentPass.BlendState, nullptr, 0xffffffff);
+		CommandList->SetGraphicsRoot32BitConstants(2, sizeof(PresentPushConstants) / sizeof(uint32_t), &pushconstants, 0);
+		CommandList->Draw(6, 0);
 
-		Context->CopyResource(stagingTexture, SceneBuffers.PPImage[1]);
+		CommandList->CopyResource(stagingTexture, SceneBuffers.PPImage[1]);
 	}
 	else
 	{
-		Context->CopyResource(stagingTexture, SceneBuffers.PPImage[0]);
+		CommandList->CopyResource(stagingTexture, SceneBuffers.PPImage[0]);
 	}
 
 	D3D12_MAPPED_SUBRESOURCE mapped = {};
-	result = Context->Map(stagingTexture, 0, D3D12_MAP_READ, 0, &mapped);
+	result = CommandList->Map(stagingTexture, 0, D3D12_MAP_READ, 0, &mapped);
 	if (SUCCEEDED(result))
 	{
 		uint8_t* srcpixels = (uint8_t*)mapped.pData;
@@ -2627,7 +2569,7 @@ void UD3D12RenderDevice::ReadPixels(FColor* Pixels)
 			}
 		}
 
-		Context->Unmap(stagingTexture, 0);
+		CommandList->Unmap(stagingTexture, 0);
 	}
 
 	stagingTexture->Release();
@@ -2646,7 +2588,7 @@ void UD3D12RenderDevice::EndFlash()
 		/*
 		SceneConstants.ObjectToProjection = mat4::identity();
 		SceneConstants.NearClip = vec4(0.0f, 0.0f, 0.0f, 1.0f);
-		Context->UpdateSubresource(ScenePass.ConstantBuffer, 0, nullptr, &SceneConstants, 0, 0);
+		CommandList->SetGraphicsRoot32BitConstants(2, sizeof(ScenePushConstants) / sizeof(uint32_t), &SceneConstants, 0);
 
 		Batch.Pipeline = &ScenePass.Pipelines[2];
 		SetDescriptorSet(0);
@@ -2697,7 +2639,6 @@ void UD3D12RenderDevice::SetSceneNode(FSceneNode* Frame)
 
 	DrawBatches();
 
-	/*
 	CurrentFrame = Frame;
 	Aspect = Frame->FY / Frame->FX;
 	RProjZ = (float)appTan(radians(Viewport->Actor->FovAngle) * 0.5);
@@ -2711,13 +2652,12 @@ void UD3D12RenderDevice::SetSceneNode(FSceneNode* Frame)
 	viewport.Height = Frame->Y;
 	viewport.MinDepth = 0.0f;
 	viewport.MaxDepth = 1.0f;
-	Context->RSSetViewports(1, &viewport);
+	CommandList->RSSetViewports(1, &viewport);
 
 	SceneConstants.ObjectToProjection = mat4::frustum(-RProjZ, RProjZ, -Aspect * RProjZ, Aspect * RProjZ, 1.0f, 32768.0f, handedness::left, clipzrange::zero_positive_w);
 	SceneConstants.NearClip = vec4(Frame->NearClip.X, Frame->NearClip.Y, Frame->NearClip.Z, Frame->NearClip.W);
 
-	Context->UpdateSubresource(ScenePass.ConstantBuffer, 0, nullptr, &SceneConstants, 0, 0);
-	*/
+	CommandList->SetGraphicsRoot32BitConstants(2, sizeof(ScenePushConstants) / sizeof(uint32_t), &SceneConstants, 0);
 
 	unguardSlow;
 }
@@ -2748,28 +2688,9 @@ void UD3D12RenderDevice::DrawBatches(bool nextBuffer)
 {
 	AddDrawBatch();
 
-	//Context->Unmap(ScenePass.VertexBuffer, 0); SceneVertices = nullptr;
-	//Context->Unmap(ScenePass.IndexBuffer, 0); SceneIndexes = nullptr;
-
 	for (const DrawBatchEntry& entry : QueuedBatches)
 		DrawEntry(entry);
 	QueuedBatches.clear();
-
-	/*
-	D3D12_MAPPED_SUBRESOURCE mappedVertexBuffer = {};
-	HRESULT result = Context->Map(ScenePass.VertexBuffer, 0, nextBuffer ? D3D12_MAP_WRITE_DISCARD : D3D12_MAP_WRITE_NO_OVERWRITE, 0, &mappedVertexBuffer);
-	if (SUCCEEDED(result))
-	{
-		SceneVertices = (SceneVertex*)mappedVertexBuffer.pData;
-	}
-
-	D3D12_MAPPED_SUBRESOURCE mappedIndexBuffer = {};
-	result = Context->Map(ScenePass.IndexBuffer, 0, nextBuffer ? D3D12_MAP_WRITE_DISCARD : D3D12_MAP_WRITE_NO_OVERWRITE, 0, &mappedIndexBuffer);
-	if (SUCCEEDED(result))
-	{
-		SceneIndexes = (uint32_t*)mappedIndexBuffer.pData;
-	}
-	*/
 
 	if (nextBuffer)
 	{
@@ -2802,16 +2723,16 @@ void UD3D12RenderDevice::DrawEntry(const DrawBatchEntry& entry)
 		ScenePass.Samplers[entry.DetailtexSamplerMode]
 	};
 
-	Context->PSSetSamplers(0, 4, samplers);
-	Context->PSSetShaderResources(0, 4, views);
-	Context->PSSetShader(entry.Pipeline->PixelShader, nullptr, 0);
+	CommandList->PSSetSamplers(0, 4, samplers);
+	CommandList->PSSetShaderResources(0, 4, views);
+	CommandList->PSSetShader(entry.Pipeline->PixelShader, nullptr, 0);
 
-	Context->OMSetBlendState(entry.Pipeline->BlendState, nullptr, 0xffffffff);
-	Context->OMSetDepthStencilState(entry.Pipeline->DepthStencilState, 0);
+	CommandList->OMSetBlendState(entry.Pipeline->BlendState, nullptr, 0xffffffff);
+	CommandList->OMSetDepthStencilState(entry.Pipeline->DepthStencilState, 0);
 
-	Context->IASetPrimitiveTopology(entry.Pipeline->PrimitiveTopology);
+	CommandList->IASetPrimitiveTopology(entry.Pipeline->PrimitiveTopology);
 
-	Context->DrawIndexed(icount, entry.SceneIndexStart, 0);
+	CommandList->DrawIndexed(icount, entry.SceneIndexStart, 0);
 	*/
 
 	Stats.DrawCalls++;

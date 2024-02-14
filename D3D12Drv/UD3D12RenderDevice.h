@@ -100,16 +100,20 @@ public:
 	int BackBufferIndex = 0;
 	ComPtr<ID3D12DescriptorHeap> FrameBufferHeap;
 	std::vector<ComPtr<ID3D12Resource>> FrameBuffers;
+	std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> FrameBufferRTVs;
 	UINT RtvHandleSize = 0;
 	UINT SamplerHandleSize = 0;
+
+	ComPtr<ID3D12CommandAllocator> CommandAllocator;
+	ComPtr<ID3D12GraphicsCommandList> CommandList;
 
 	struct PPBlurLevel
 	{
 		ComPtr<ID3D12Resource> VTexture;
-		// ID3D12RenderTargetView* VTextureRTV = nullptr;
+		D3D12_CPU_DESCRIPTOR_HANDLE VTextureRTV = {};
 		// ID3D12ShaderResourceView* VTextureSRV = nullptr;
 		ComPtr<ID3D12Resource> HTexture;
-		// ID3D12RenderTargetView* HTextureRTV = nullptr;
+		D3D12_CPU_DESCRIPTOR_HANDLE HTextureRTV = {};
 		// ID3D12ShaderResourceView* HTextureSRV = nullptr;
 		int Width = 0;
 		int Height = 0;
@@ -123,12 +127,12 @@ public:
 		ComPtr<ID3D12Resource> PPImage[2];
 		ComPtr<ID3D12Resource> PPHitBuffer;
 		ComPtr<ID3D12Resource> StagingHitBuffer; // Note: was a texture in d3d11, now a buffer where we need to use CopyTextureRegion
+		D3D12_CPU_DESCRIPTOR_HANDLE ColorBufferView = {};
+		D3D12_CPU_DESCRIPTOR_HANDLE HitBufferView = {};
+		D3D12_CPU_DESCRIPTOR_HANDLE DepthBufferView = {};
+		D3D12_CPU_DESCRIPTOR_HANDLE PPHitBufferView = {};
+		D3D12_CPU_DESCRIPTOR_HANDLE PPImageView[2] = {};
 		/*
-		ID3D12RenderTargetView* ColorBufferView = nullptr;
-		ID3D12RenderTargetView* HitBufferView = nullptr;
-		ID3D12DepthStencilView* DepthBufferView = nullptr;
-		ID3D12RenderTargetView* PPHitBufferView = nullptr;
-		ID3D12RenderTargetView* PPImageView[2] = {};
 		ID3D12ShaderResourceView* HitBufferShaderView = nullptr;
 		ID3D12ShaderResourceView* PPImageShaderView[2] = {};
 		*/
@@ -143,6 +147,8 @@ public:
 	{
 		ComPtr<ID3D12Resource> VertexBuffer;
 		ComPtr<ID3D12Resource> IndexBuffer;
+		D3D12_VERTEX_BUFFER_VIEW VertexBufferView = {};
+		D3D12_INDEX_BUFFER_VIEW IndexBufferView = {};
 		ComPtr<ID3D12DescriptorHeap> SamplersHeap;
 		ComPtr<ID3D12RootSignature> RootSignature;
 		ComPtr<ID3D12PipelineState> Pipelines[32];
@@ -182,6 +188,7 @@ public:
 		ComPtr<ID3D12PipelineState> Present[16];
 		ComPtr<ID3D12Resource> PPStepVertexBuffer;
 		ComPtr<ID3D12Resource> DitherTexture;
+		D3D12_VERTEX_BUFFER_VIEW PPStepVertexBufferView = {};
 		// ID3D12ShaderResourceView* DitherTextureView = nullptr;
 	} PresentPass;
 
