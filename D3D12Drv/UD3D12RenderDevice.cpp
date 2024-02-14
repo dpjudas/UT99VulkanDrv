@@ -141,7 +141,15 @@ UBOOL UD3D12RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 			}
 		}
 
-		HRESULT result = D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0, Device.GetIID(), Device.InitPtr());
+		ComPtr<IDXGIFactory4> factory;
+		HRESULT result = CreateDXGIFactory1(factory.GetIID(), factory.InitPtr());
+		ThrowIfFailed(result, "CreateDXGIFactory1 failed");
+
+		ComPtr<IDXGIAdapter1> hardwareAdapter;
+		result = factory->EnumAdapters1(0, hardwareAdapter.TypedInitPtr());
+		ThrowIfFailed(result, "EnumAdapters1 failed");
+
+		result = D3D12CreateDevice(hardwareAdapter, D3D_FEATURE_LEVEL_11_0, Device.GetIID(), Device.InitPtr());
 		ThrowIfFailed(result, "D3D12CreateDevice failed");
 
 		D3D12_COMMAND_QUEUE_DESC queueDesc = {};
@@ -150,32 +158,19 @@ UBOOL UD3D12RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 		result = Device->CreateCommandQueue(&queueDesc, GraphicsQueue.GetIID(), GraphicsQueue.InitPtr());
 		ThrowIfFailed(result, "CreateCommandQueue failed");
 
-		// Wonderful API you got here, Microsoft. Good job.
-		ComPtr<IDXGIDevice2> dxgiDevice;
-		ComPtr<IDXGIAdapter> dxgiAdapter;
-		ComPtr<IDXGIFactory2> dxgiFactory;
-		result = Device->QueryInterface(dxgiDevice.GetIID(), dxgiDevice.InitPtr());
-		if (SUCCEEDED(result))
-			result = dxgiDevice->GetParent(dxgiAdapter.GetIID(), dxgiAdapter.InitPtr());
-		if (SUCCEEDED(result))
-			result = dxgiAdapter->GetParent(dxgiFactory.GetIID(), dxgiFactory.InitPtr());
-		if (SUCCEEDED(result))
-		{
-			DXGI_SWAP_CHAIN_DESC1 swapDesc = {};
-			swapDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-			swapDesc.Width = NewX;
-			swapDesc.Height = NewY;
-			swapDesc.Format = ActiveHdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM;
-			swapDesc.BufferCount = BufferCount;
-			swapDesc.SampleDesc.Count = 1;
-			swapDesc.Scaling = DXGI_SCALING_STRETCH;
-			swapDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-			swapDesc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
-			swapDesc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
-			result = dxgiFactory->CreateSwapChainForHwnd(GraphicsQueue, (HWND)Viewport->GetWindow(), &swapDesc, nullptr, nullptr, SwapChain1.TypedInitPtr());
-		}
-
-		ThrowIfFailed(result, "Failed to create Direct3D 12 device");
+		DXGI_SWAP_CHAIN_DESC1 swapDesc = {};
+		swapDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+		swapDesc.Width = NewX;
+		swapDesc.Height = NewY;
+		swapDesc.Format = ActiveHdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM;
+		swapDesc.BufferCount = BufferCount;
+		swapDesc.SampleDesc.Count = 1;
+		swapDesc.Scaling = DXGI_SCALING_STRETCH;
+		swapDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+		swapDesc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
+		swapDesc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
+		result = factory->CreateSwapChainForHwnd(GraphicsQueue, (HWND)Viewport->GetWindow(), &swapDesc, nullptr, nullptr, SwapChain1.TypedInitPtr());
+		ThrowIfFailed(result, "CreateSwapChainForHwnd failed");
 
 		if (ActiveHdr)
 		{
@@ -189,15 +184,6 @@ UBOOL UD3D12RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 
 		RtvHandleSize = Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 		SamplerHandleSize = Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
-
-		D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc = {};
-		rootSignatureDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
-		ComPtr<ID3DBlob> signature, error;
-		result = D3D12SerializeRootSignature(&rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1, signature.TypedInitPtr(), error.TypedInitPtr());
-		ThrowIfFailed(result, "D3D12SerializeRootSignature failed");
-
-		result = Device->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), RootSignature.GetIID(), RootSignature.InitPtr());
-		ThrowIfFailed(result, "CreateRootSignature failed");
 
 		CreateScenePass();
 		CreatePresentPass();
@@ -343,6 +329,9 @@ void UD3D12RenderDevice::Exit()
 {
 	guard(UD3D12RenderDevice::Exit);
 
+	if (SwapChain1)
+		SwapChain1->SetFullscreenState(FALSE, nullptr);
+
 	/*
 	if (SceneVertices)
 	{
@@ -366,7 +355,6 @@ void UD3D12RenderDevice::Exit()
 	FrameBufferHeap.reset();
 	FrameBuffers.clear();
 	SwapChain1.reset();
-	RootSignature.reset();
 	GraphicsQueue.reset();
 	Device.reset();
 	DebugController.reset();
@@ -414,13 +402,8 @@ void UD3D12RenderDevice::ResizeSceneBuffers(int width, int height, int multisamp
 	SceneBuffers.Height = height;
 	SceneBuffers.Multisample = multisample;
 
-	D3D12_HEAP_PROPERTIES readbackHeapProps = {};
-	readbackHeapProps.Type = D3D12_HEAP_TYPE_READBACK;
-	readbackHeapProps.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
-
 	D3D12_HEAP_PROPERTIES defaultHeapProps = {};
 	defaultHeapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
-	defaultHeapProps.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_NOT_AVAILABLE;
 
 	D3D12_RESOURCE_DESC texDesc = {};
 	texDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
@@ -482,9 +465,9 @@ void UD3D12RenderDevice::ResizeSceneBuffers(int width, int height, int multisamp
 		SceneBuffers.PPHitBuffer.InitPtr());
 	ThrowIfFailed(result, "CreateCommittedResource(SceneBuffers.PPHitBuffer) failed");
 
+	texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
 	for (int i = 0; i < 2; i++)
 	{
-		texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
 		result = Device->CreateCommittedResource(
 			&defaultHeapProps,
 			D3D12_HEAP_FLAG_NONE,
@@ -495,18 +478,6 @@ void UD3D12RenderDevice::ResizeSceneBuffers(int width, int height, int multisamp
 			SceneBuffers.PPImage[i].InitPtr());
 		ThrowIfFailed(result, "CreateCommittedResource(SceneBuffers.PPImage) failed");
 	}
-
-	texDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-	texDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
-	result = Device->CreateCommittedResource(
-		&readbackHeapProps,
-		D3D12_HEAP_FLAG_NONE,
-		&texDesc,
-		D3D12_RESOURCE_STATE_COPY_DEST,
-		nullptr,
-		SceneBuffers.StagingHitBuffer.GetIID(),
-		SceneBuffers.StagingHitBuffer.InitPtr());
-	ThrowIfFailed(result, "CreateCommittedResource(SceneBuffers.StagingHitBuffer) failed");
 
 	/*
 	result = Device->CreateRenderTargetView(SceneBuffers.ColorBuffer, nullptr, &SceneBuffers.ColorBufferView);
@@ -533,10 +504,6 @@ void UD3D12RenderDevice::ResizeSceneBuffers(int width, int height, int multisamp
 		ThrowIfFailed(result, "CreateShaderResourceView(PPImage) failed");
 	}
 	*/
-
-	texDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-	texDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
-	texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
 
 	int bloomWidth = width;
 	int bloomHeight = height;
@@ -585,6 +552,28 @@ void UD3D12RenderDevice::ResizeSceneBuffers(int width, int height, int multisamp
 		level.Width = bloomWidth;
 		level.Height = bloomHeight;
 	}
+
+	D3D12_HEAP_PROPERTIES readbackHeapProps = {};
+	readbackHeapProps.Type = D3D12_HEAP_TYPE_READBACK;
+
+	D3D12_RESOURCE_DESC bufDesc = {};
+	bufDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+	bufDesc.Width = SceneBuffers.Width * SceneBuffers.Height * sizeof(uint32_t);
+	bufDesc.Height = 1;
+	bufDesc.DepthOrArraySize = 1;
+	bufDesc.MipLevels = 1;
+	bufDesc.SampleDesc.Count = 1;
+	bufDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+	bufDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+	result = Device->CreateCommittedResource(
+		&readbackHeapProps,
+		D3D12_HEAP_FLAG_NONE,
+		&bufDesc,
+		D3D12_RESOURCE_STATE_COPY_DEST,
+		nullptr,
+		SceneBuffers.StagingHitBuffer.GetIID(),
+		SceneBuffers.StagingHitBuffer.InitPtr());
+	ThrowIfFailed(result, "CreateCommittedResource(SceneBuffers.StagingHitBuffer) failed");
 }
 
 void UD3D12RenderDevice::CreateScenePass()
@@ -606,6 +595,26 @@ void UD3D12RenderDevice::CreateScenePass()
 
 	CreateSceneSamplers();
 
+	std::vector<std::vector<D3D12_DESCRIPTOR_RANGE>> descriptorTables(2);
+
+	D3D12_DESCRIPTOR_RANGE samplerRange = {};
+	samplerRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
+	samplerRange.BaseShaderRegister = 0;
+	samplerRange.NumDescriptors = 4;
+	descriptorTables[0].push_back(samplerRange);
+
+	D3D12_DESCRIPTOR_RANGE texRange = {};
+	texRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+	texRange.BaseShaderRegister = 0;
+	texRange.NumDescriptors = 4;
+	descriptorTables[1].push_back(texRange);
+
+	D3D12_ROOT_CONSTANTS pushConstants = {};
+	pushConstants.ShaderRegister = 0;
+	pushConstants.Num32BitValues = sizeof(ScenePushConstants) / sizeof(int32_t);
+
+	ScenePass.RootSignature = CreateRootSignature("ScenePass.RootSignature", descriptorTables, pushConstants);
+
 	D3D12_RASTERIZER_DESC rasterizerState = {};
 	rasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
 	rasterizerState.CullMode = D3D12_CULL_MODE_NONE;
@@ -616,7 +625,7 @@ void UD3D12RenderDevice::CreateScenePass()
 	for (int i = 0; i < 32; i++)
 	{
 		D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
-		psoDesc.pRootSignature = RootSignature;
+		psoDesc.pRootSignature = ScenePass.RootSignature;
 		psoDesc.InputLayout.NumElements = elements.size();
 		psoDesc.InputLayout.pInputElementDescs = elements.data();
 		psoDesc.VS.pShaderBytecode = vertexShader.data();
@@ -636,6 +645,11 @@ void UD3D12RenderDevice::CreateScenePass()
 		psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
 		psoDesc.RasterizerState = rasterizerState;
 		psoDesc.SampleDesc.Count = SceneBuffers.Multisample;
+		psoDesc.SampleMask = UINT_MAX;
+		psoDesc.NumRenderTargets = 2;
+		psoDesc.RTVFormats[0] = DXGI_FORMAT_R16G16B16A16_FLOAT;
+		psoDesc.RTVFormats[1] = DXGI_FORMAT_R32_UINT;
+		psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
 
 		psoDesc.BlendState.IndependentBlendEnable = TRUE;
 		psoDesc.BlendState.RenderTarget[0].BlendEnable = TRUE;
@@ -696,7 +710,7 @@ void UD3D12RenderDevice::CreateScenePass()
 	for (int i = 0; i < 2; i++)
 	{
 		D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
-		psoDesc.pRootSignature = RootSignature;
+		psoDesc.pRootSignature = ScenePass.RootSignature;
 		psoDesc.InputLayout.NumElements = elements.size();
 		psoDesc.InputLayout.pInputElementDescs = elements.data();
 		psoDesc.VS.pShaderBytecode = vertexShader.data();
@@ -706,6 +720,11 @@ void UD3D12RenderDevice::CreateScenePass()
 		psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE;
 		psoDesc.RasterizerState = rasterizerState;
 		psoDesc.SampleDesc.Count = SceneBuffers.Multisample;
+		psoDesc.SampleMask = UINT_MAX;
+		psoDesc.NumRenderTargets = 2;
+		psoDesc.RTVFormats[0] = DXGI_FORMAT_R16G16B16A16_FLOAT;
+		psoDesc.RTVFormats[1] = DXGI_FORMAT_R32_UINT;
+		psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
 
 		psoDesc.BlendState.IndependentBlendEnable = TRUE;
 		psoDesc.BlendState.RenderTarget[0].BlendEnable = TRUE;
@@ -730,7 +749,7 @@ void UD3D12RenderDevice::CreateScenePass()
 	// Point pipeline
 	{
 		D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
-		psoDesc.pRootSignature = RootSignature;
+		psoDesc.pRootSignature = ScenePass.RootSignature;
 		psoDesc.InputLayout.NumElements = elements.size();
 		psoDesc.InputLayout.pInputElementDescs = elements.data();
 		psoDesc.VS.pShaderBytecode = vertexShader.data();
@@ -740,6 +759,11 @@ void UD3D12RenderDevice::CreateScenePass()
 		psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
 		psoDesc.RasterizerState = rasterizerState;
 		psoDesc.SampleDesc.Count = SceneBuffers.Multisample;
+		psoDesc.SampleMask = UINT_MAX;
+		psoDesc.NumRenderTargets = 2;
+		psoDesc.RTVFormats[0] = DXGI_FORMAT_R16G16B16A16_FLOAT;
+		psoDesc.RTVFormats[1] = DXGI_FORMAT_R32_UINT;
+		psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
 
 		psoDesc.BlendState.IndependentBlendEnable = TRUE;
 		psoDesc.BlendState.RenderTarget[0].BlendEnable = TRUE;
@@ -761,19 +785,15 @@ void UD3D12RenderDevice::CreateScenePass()
 		ThrowIfFailed(result, "CreateGraphicsPipelineState failed");
 	}
 
-	D3D12_HEAP_PROPERTIES uploadHeapProps = {};
-	uploadHeapProps.Type = D3D12_HEAP_TYPE_UPLOAD;
-	uploadHeapProps.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_WRITE_BACK;
-
-	D3D12_HEAP_PROPERTIES defaultHeapProps = {};
-	defaultHeapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
-	defaultHeapProps.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_NOT_AVAILABLE;
+	D3D12_HEAP_PROPERTIES uploadHeapProps = { D3D12_HEAP_TYPE_UPLOAD };
+	D3D12_HEAP_PROPERTIES defaultHeapProps = { D3D12_HEAP_TYPE_DEFAULT };
 
 	D3D12_RESOURCE_DESC bufDesc = {};
 	bufDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
 	bufDesc.Width = SceneVertexBufferSize * sizeof(SceneVertex);
 	bufDesc.Height = 1;
 	bufDesc.DepthOrArraySize = 1;
+	bufDesc.MipLevels = 1;
 	bufDesc.SampleDesc.Count = 1;
 	bufDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
 	bufDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
@@ -782,7 +802,7 @@ void UD3D12RenderDevice::CreateScenePass()
 		&uploadHeapProps,
 		D3D12_HEAP_FLAG_NONE,
 		&bufDesc,
-		D3D12_RESOURCE_STATE_GENERIC_READ,
+		D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER,
 		nullptr,
 		ScenePass.VertexBuffer.GetIID(),
 		ScenePass.VertexBuffer.InitPtr());
@@ -793,22 +813,11 @@ void UD3D12RenderDevice::CreateScenePass()
 		&uploadHeapProps,
 		D3D12_HEAP_FLAG_NONE,
 		&bufDesc,
-		D3D12_RESOURCE_STATE_GENERIC_READ,
+		D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER,
 		nullptr,
 		ScenePass.IndexBuffer.GetIID(),
 		ScenePass.IndexBuffer.InitPtr());
 	ThrowIfFailed(result, "CreateCommittedResource(ScenePass.IndexBuffer) failed");
-
-	bufDesc.Width = sizeof(ScenePushConstants);
-	result = Device->CreateCommittedResource(
-		&defaultHeapProps,
-		D3D12_HEAP_FLAG_NONE,
-		&bufDesc,
-		D3D12_RESOURCE_STATE_GENERIC_READ,
-		nullptr,
-		ScenePass.ConstantBuffer.GetIID(),
-		ScenePass.ConstantBuffer.InitPtr());
-	ThrowIfFailed(result, "CreateCommittedResource(ScenePass.ConstantBuffer) failed");
 }
 
 void UD3D12RenderDevice::CreateSceneSamplers()
@@ -867,7 +876,6 @@ void UD3D12RenderDevice::ReleaseScenePass()
 {
 	ScenePass.VertexBuffer.reset();
 	ScenePass.IndexBuffer.reset();
-	ScenePass.ConstantBuffer.reset();
 	ReleaseSceneSamplers();
 	for (auto& pipeline : ScenePass.Pipelines)
 	{
@@ -878,6 +886,7 @@ void UD3D12RenderDevice::ReleaseScenePass()
 		ScenePass.LinePipeline[i].reset();
 	}
 	ScenePass.PointPipeline.reset();
+	ScenePass.RootSignature.reset();
 }
 
 void UD3D12RenderDevice::ReleaseBloomPass()
@@ -887,7 +896,7 @@ void UD3D12RenderDevice::ReleaseBloomPass()
 	BloomPass.CombineAdditive.reset();
 	BloomPass.BlurVertical.reset();
 	BloomPass.BlurHorizontal.reset();
-	BloomPass.ConstantBuffer.reset();
+	BloomPass.RootSignature.reset();
 }
 
 void UD3D12RenderDevice::ReleasePresentPass()
@@ -895,9 +904,9 @@ void UD3D12RenderDevice::ReleasePresentPass()
 	PresentPass.HitResolve.reset();
 	for (auto& shader : PresentPass.Present) shader.reset();
 	PresentPass.PPStepVertexBuffer.reset();
-	PresentPass.PresentConstantBuffer.reset();
 	// ReleaseObject(PresentPass.DitherTextureView);
 	PresentPass.DitherTexture.reset();
+	PresentPass.RootSignature.reset();
 }
 
 void UD3D12RenderDevice::ReleaseSceneBuffers()
@@ -1116,8 +1125,28 @@ void UD3D12RenderDevice::CreateBloomPass()
 		{ "AttrPos", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
 	};
 
+	std::vector<std::vector<D3D12_DESCRIPTOR_RANGE>> descriptorTables(2);
+
+	D3D12_DESCRIPTOR_RANGE samplerRange = {};
+	samplerRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
+	samplerRange.BaseShaderRegister = 0;
+	samplerRange.NumDescriptors = 1;
+	descriptorTables[0].push_back(samplerRange);
+
+	D3D12_DESCRIPTOR_RANGE texRange = {};
+	texRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+	texRange.BaseShaderRegister = 0;
+	texRange.NumDescriptors = 1;
+	descriptorTables[1].push_back(texRange);
+
+	D3D12_ROOT_CONSTANTS pushConstants = {};
+	pushConstants.ShaderRegister = 0;
+	pushConstants.Num32BitValues = sizeof(BloomPushConstants) / sizeof(int32_t);
+
+	BloomPass.RootSignature = CreateRootSignature("BloomPass.RootSignature", descriptorTables, pushConstants);
+
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
-	psoDesc.pRootSignature = RootSignature;
+	psoDesc.pRootSignature = BloomPass.RootSignature;
 	psoDesc.InputLayout.NumElements = elements.size();
 	psoDesc.InputLayout.pInputElementDescs = elements.data();
 	psoDesc.VS.pShaderBytecode = vertexShader.data();
@@ -1127,6 +1156,9 @@ void UD3D12RenderDevice::CreateBloomPass()
 	psoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
 	psoDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_ALWAYS;
 	psoDesc.SampleDesc.Count = 1;
+	psoDesc.SampleMask = UINT_MAX;
+	psoDesc.NumRenderTargets = 1;
+	psoDesc.RTVFormats[0] = DXGI_FORMAT_R16G16B16A16_FLOAT;
 	psoDesc.BlendState.RenderTarget[0].BlendEnable = FALSE;
 	psoDesc.BlendState.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
 
@@ -1165,15 +1197,6 @@ void UD3D12RenderDevice::CreateBloomPass()
 	psoDesc.PS.BytecodeLength = combinePixelShader.size();
 	result = Device->CreateGraphicsPipelineState(&psoDesc, BloomPass.CombineAdditive.GetIID(), BloomPass.CombineAdditive.InitPtr());
 	ThrowIfFailed(result, "CreateGraphicsPipelineState(BloomPass.Combine) failed");
-
-	/*
-	D3D12_BUFFER_DESC bufDesc = {};
-	bufDesc.Usage = D3D12_USAGE_DEFAULT;
-	bufDesc.ByteWidth = sizeof(BloomPushConstants);
-	bufDesc.BindFlags = D3D12_BIND_CONSTANT_BUFFER;
-	HRESULT result = Device->CreateBuffer(&bufDesc, nullptr, &BloomPass.ConstantBuffer);
-	ThrowIfFailed(result, "CreateBuffer(BloomPass.ConstantBuffer) failed");
-	*/
 }
 
 void UD3D12RenderDevice::CreatePresentPass()
@@ -1199,19 +1222,32 @@ void UD3D12RenderDevice::CreatePresentPass()
 
 	HRESULT result = Device->CreateBuffer(&bufDesc, &initData, &PresentPass.PPStepVertexBuffer);
 	ThrowIfFailed(result, "CreateBuffer(PresentPass.PPStepVertexBuffer) failed");
-
-	bufDesc = {};
-	bufDesc.Usage = D3D12_USAGE_DEFAULT;
-	bufDesc.ByteWidth = sizeof(PresentPushConstants);
-	bufDesc.BindFlags = D3D12_BIND_CONSTANT_BUFFER;
-	result = Device->CreateBuffer(&bufDesc, nullptr, &PresentPass.PresentConstantBuffer);
-	ThrowIfFailed(result, "CreateBuffer(PresentPass.PresentConstantBuffer) failed");
 	*/
 
 	std::vector<D3D12_INPUT_ELEMENT_DESC> elements =
 	{
 		{ "AttrPos", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
 	};
+
+	std::vector<std::vector<D3D12_DESCRIPTOR_RANGE>> descriptorTables(2);
+
+	D3D12_DESCRIPTOR_RANGE samplerRange = {};
+	samplerRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
+	samplerRange.BaseShaderRegister = 0;
+	samplerRange.NumDescriptors = 2;
+	descriptorTables[0].push_back(samplerRange);
+
+	D3D12_DESCRIPTOR_RANGE texRange = {};
+	texRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+	texRange.BaseShaderRegister = 0;
+	texRange.NumDescriptors = 2;
+	descriptorTables[1].push_back(texRange);
+
+	D3D12_ROOT_CONSTANTS pushConstants = {};
+	pushConstants.ShaderRegister = 0;
+	pushConstants.Num32BitValues = sizeof(PresentPushConstants) / sizeof(int32_t);
+
+	PresentPass.RootSignature = CreateRootSignature("PresentPass.RootSignature", descriptorTables, pushConstants);
 
 	auto vertexShader = CompileHlsl("shaders/PPStep.vert", "vs");
 
@@ -1227,7 +1263,7 @@ void UD3D12RenderDevice::CreatePresentPass()
 		auto pixelShader = CompileHlsl("shaders/Present.frag", "ps", defines);
 
 		D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
-		psoDesc.pRootSignature = RootSignature;
+		psoDesc.pRootSignature = PresentPass.RootSignature;
 		psoDesc.InputLayout.NumElements = elements.size();
 		psoDesc.InputLayout.pInputElementDescs = elements.data();
 		psoDesc.VS.pShaderBytecode = vertexShader.data();
@@ -1240,6 +1276,9 @@ void UD3D12RenderDevice::CreatePresentPass()
 		psoDesc.BlendState.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
 		psoDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_ALWAYS;
 		psoDesc.SampleDesc.Count = 1;
+		psoDesc.SampleMask = UINT_MAX;
+		psoDesc.NumRenderTargets = 1;
+		psoDesc.RTVFormats[0] = ActiveHdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM;
 
 		HRESULT result = Device->CreateGraphicsPipelineState(&psoDesc, PresentPass.Present[i].GetIID(), PresentPass.Present[i].InitPtr());
 		ThrowIfFailed(result, "CreateGraphicsPipelineState(Present) failed");
@@ -1248,7 +1287,7 @@ void UD3D12RenderDevice::CreatePresentPass()
 	auto pixelShader = CompileHlsl("shaders/HitResolve.frag", "ps");
 
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
-	psoDesc.pRootSignature = RootSignature;
+	psoDesc.pRootSignature = PresentPass.RootSignature;
 	psoDesc.InputLayout.NumElements = elements.size();
 	psoDesc.InputLayout.pInputElementDescs = elements.data();
 	psoDesc.VS.pShaderBytecode = vertexShader.data();
@@ -1261,6 +1300,9 @@ void UD3D12RenderDevice::CreatePresentPass()
 	psoDesc.BlendState.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
 	psoDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_ALWAYS;
 	psoDesc.SampleDesc.Count = 1;
+	psoDesc.SampleMask = UINT_MAX;
+	psoDesc.NumRenderTargets = 1;
+	psoDesc.RTVFormats[0] = DXGI_FORMAT_R8_UINT;
 	HRESULT result = Device->CreateGraphicsPipelineState(&psoDesc, PresentPass.HitResolve.GetIID(), PresentPass.HitResolve.InitPtr());
 	ThrowIfFailed(result, "CreateGraphicsPipelineState(HitResolve) failed");
 
@@ -2773,6 +2815,62 @@ void UD3D12RenderDevice::DrawEntry(const DrawBatchEntry& entry)
 	*/
 
 	Stats.DrawCalls++;
+}
+
+ComPtr<ID3D12RootSignature> UD3D12RenderDevice::CreateRootSignature(const char* name, const std::vector<std::vector<D3D12_DESCRIPTOR_RANGE>>& descriptorTables, const D3D12_ROOT_CONSTANTS& pushConstants, const std::vector<D3D12_STATIC_SAMPLER_DESC>& staticSamplers)
+{
+	std::vector<D3D12_ROOT_PARAMETER> parameters;
+
+	for (const std::vector<D3D12_DESCRIPTOR_RANGE>& table : descriptorTables)
+	{
+		D3D12_ROOT_PARAMETER param = {};
+		param.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+		param.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+		param.DescriptorTable.NumDescriptorRanges = table.size();
+		param.DescriptorTable.pDescriptorRanges = table.data();
+		parameters.push_back(param);
+	}
+
+	if (pushConstants.Num32BitValues > 0)
+	{
+		D3D12_ROOT_PARAMETER param = {};
+		param.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+		param.ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
+		param.Constants = pushConstants;
+		parameters.push_back(param);
+	}
+
+	D3D12_ROOT_SIGNATURE_DESC desc = {};
+	desc.NumParameters = parameters.size();
+	desc.pParameters = parameters.data();
+	desc.NumStaticSamplers = staticSamplers.size();
+	desc.pStaticSamplers = staticSamplers.data();
+	desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+
+	ComPtr<ID3DBlob> signatureblob, error;
+	HRESULT result = D3D12SerializeRootSignature(&desc, D3D_ROOT_SIGNATURE_VERSION_1, signatureblob.TypedInitPtr(), error.TypedInitPtr());
+	if (FAILED(result))
+	{
+		std::string text = "Could not serialize ";
+		text += name;
+		if (error)
+		{
+			text += ": ";
+			text.append((const char*)error->GetBufferPointer(), error->GetBufferSize());
+		}
+		throw std::runtime_error(text);
+	}
+
+	ComPtr<ID3D12RootSignature> signature;
+	result = Device->CreateRootSignature(0, signatureblob->GetBufferPointer(), signatureblob->GetBufferSize(), signature.GetIID(), signature.InitPtr());
+	if (FAILED(result))
+	{
+		std::string text = "Could not create ";
+		text += name;
+		throw std::runtime_error(text);
+	}
+
+	return signature;
 }
 
 std::vector<uint8_t> UD3D12RenderDevice::CompileHlsl(const std::string& filename, const std::string& shadertype, const std::vector<std::string> defines)

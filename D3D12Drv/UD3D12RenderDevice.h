@@ -94,7 +94,6 @@ public:
 	ComPtr<ID3D12Debug> DebugController;
 	ComPtr<ID3D12Device> Device;
 	ComPtr<ID3D12CommandQueue> GraphicsQueue;
-	ComPtr<ID3D12RootSignature> RootSignature;
 	D3D_FEATURE_LEVEL FeatureLevel = D3D_FEATURE_LEVEL_11_0; // To do: find out how to discover this
 	ComPtr<IDXGISwapChain1> SwapChain1;
 	int BufferCount = 2;
@@ -123,7 +122,7 @@ public:
 		ComPtr<ID3D12Resource> DepthBuffer;
 		ComPtr<ID3D12Resource> PPImage[2];
 		ComPtr<ID3D12Resource> PPHitBuffer;
-		ComPtr<ID3D12Resource> StagingHitBuffer;
+		ComPtr<ID3D12Resource> StagingHitBuffer; // Note: was a texture in d3d11, now a buffer where we need to use CopyTextureRegion
 		/*
 		ID3D12RenderTargetView* ColorBufferView = nullptr;
 		ID3D12RenderTargetView* HitBufferView = nullptr;
@@ -144,8 +143,8 @@ public:
 	{
 		ComPtr<ID3D12Resource> VertexBuffer;
 		ComPtr<ID3D12Resource> IndexBuffer;
-		ComPtr<ID3D12Resource> ConstantBuffer;
 		ComPtr<ID3D12DescriptorHeap> SamplersHeap;
+		ComPtr<ID3D12RootSignature> RootSignature;
 		ComPtr<ID3D12PipelineState> Pipelines[32];
 		ComPtr<ID3D12PipelineState> LinePipeline[2];
 		ComPtr<ID3D12PipelineState> PointPipeline;
@@ -178,22 +177,22 @@ public:
 
 	struct
 	{
+		ComPtr<ID3D12RootSignature> RootSignature;
 		ComPtr<ID3D12PipelineState> HitResolve;
 		ComPtr<ID3D12PipelineState> Present[16];
 		ComPtr<ID3D12Resource> PPStepVertexBuffer;
-		ComPtr<ID3D12Resource> PresentConstantBuffer;
 		ComPtr<ID3D12Resource> DitherTexture;
 		// ID3D12ShaderResourceView* DitherTextureView = nullptr;
 	} PresentPass;
 
 	struct
 	{
+		ComPtr<ID3D12RootSignature> RootSignature;
 		ComPtr<ID3D12PipelineState> Extract;
 		ComPtr<ID3D12PipelineState> Combine;
 		ComPtr<ID3D12PipelineState> CombineAdditive;
 		ComPtr<ID3D12PipelineState> BlurVertical;
 		ComPtr<ID3D12PipelineState> BlurHorizontal;
-		ComPtr<ID3D12Resource> ConstantBuffer;
 	} BloomPass;
 
 	//std::unique_ptr<TextureManager> Textures;
@@ -266,6 +265,7 @@ private:
 
 	ID3D12PipelineState* GetPipeline(DWORD PolyFlags);
 
+	ComPtr<ID3D12RootSignature> CreateRootSignature(const char* name, const std::vector<std::vector<D3D12_DESCRIPTOR_RANGE>>& descriptorTables = {}, const D3D12_ROOT_CONSTANTS& pushConstants = {}, const std::vector<D3D12_STATIC_SAMPLER_DESC>& staticSamplers = {});
 	std::vector<uint8_t> CompileHlsl(const std::string& filename, const std::string& shadertype, const std::vector<std::string> defines = {});
 
 	vec4 ApplyInverseGamma(vec4 color);
