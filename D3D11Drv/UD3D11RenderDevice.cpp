@@ -2111,8 +2111,10 @@ void UD3D11RenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT X
 
 	CachedTexture* tex = Textures->GetTexture(&Info, !!(PolyFlags & PF_Masked));
 
+	bool clamp = (U >= 0.0f && (U + UL) <= 1.0f && V >= 0.0f && (V + VL) <= 1.0f);
+
 	SetPipeline(PolyFlags);
-	SetDescriptorSet(PolyFlags, tex, nullptr, nullptr, nullptr, true);
+	SetDescriptorSet(PolyFlags, tex, nullptr, nullptr, nullptr, clamp);
 
 	if (!SceneVertices || !SceneIndexes) return;
 
