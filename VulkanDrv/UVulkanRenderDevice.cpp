@@ -1140,9 +1140,11 @@ void UVulkanRenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT 
 
 	CachedTexture* tex = Textures->GetTexture(&Info, !!(PolyFlags & PF_Masked));
 
+	bool clamp = (U >= 0.0f && (U + UL) <= 1.0f && V >= 0.0f && (V + VL) <= 1.0f);
+
 	SetPipeline(RenderPasses->GetPipeline(PolyFlags, UsesBindless));
 
-	ivec4 textureBinds = SetDescriptorSet(PolyFlags, tex, true);
+	ivec4 textureBinds = SetDescriptorSet(PolyFlags, tex, clamp);
 
 	float UMult = tex ? GetUMult(Info) : 0.0f;
 	float VMult = tex ? GetVMult(Info) : 0.0f;
