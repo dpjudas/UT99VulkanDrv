@@ -47,6 +47,8 @@ public:
 		Ptr = nullptr;
 	}
 
+	T* get() { return Ptr; }
+
 	static IID GetIID() { return __uuidof(T); }
 
 	void** InitPtr()

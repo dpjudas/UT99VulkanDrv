@@ -182,14 +182,19 @@ UBOOL UD3D12RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 			}
 		}
 
-		RtvHandleSize = Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-		SamplerHandleSize = Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
+		Heaps.Common = std::make_unique<DescriptorHeap>(Device.get(), 16 * 1024, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
+		Heaps.Sampler = std::make_unique<DescriptorHeap>(Device.get(), 64, D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
+		Heaps.RTV = std::make_unique<DescriptorHeap>(Device.get(), 64, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, D3D12_DESCRIPTOR_HEAP_FLAG_NONE);
+		Heaps.DSV = std::make_unique<DescriptorHeap>(Device.get(), 64, D3D12_DESCRIPTOR_HEAP_TYPE_DSV, D3D12_DESCRIPTOR_HEAP_FLAG_NONE);
 
 		result = Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, CommandAllocator.GetIID(), CommandAllocator.InitPtr());
 		ThrowIfFailed(result, "CreateCommandAllocator failed");
 
 		result = Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, CommandAllocator, nullptr, CommandList.GetIID(), CommandList.InitPtr());
 		ThrowIfFailed(result, "CreateCommandList failed");
+
+		ID3D12DescriptorHeap* heaps[] = { Heaps.Common->GetHeap(), Heaps.Sampler->GetHeap() };
+		CommandList->SetDescriptorHeaps(2, heaps);
 
 		CreateScenePass();
 		CreatePresentPass();
@@ -219,9 +224,8 @@ UBOOL UD3D12RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 {
 	guard(UD3D12RenderDevice::SetRes);
 
-	FrameBufferHeap.reset();
 	FrameBuffers.clear();
-	FrameBufferRTVs.clear();
+	FrameBufferRTVs.reset();
 
 	if (!Viewport->ResizeViewport(Fullscreen ? (BLIT_Fullscreen | BLIT_Direct3D) : (BLIT_HardwarePaint | BLIT_Direct3D), NewX, NewY, NewColorBytes))
 	{
@@ -302,23 +306,10 @@ UBOOL UD3D12RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 		FrameBuffers.push_back(std::move(buffer));
 	}
 
-	D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
-	heapDesc.NumDescriptors = BufferCount;
-	heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-	heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-	result = Device->CreateDescriptorHeap(&heapDesc, FrameBufferHeap.GetIID(), FrameBufferHeap.InitPtr());
-	if (FAILED(result))
-	{
-		debugf(TEXT("CreateDescriptorHeap failed during swap chain setup"));
-		return FALSE;
-	}
-
-	D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = FrameBufferHeap->GetCPUDescriptorHandleForHeapStart();
+	FrameBufferRTVs = Heaps.RTV->Alloc(BufferCount);
 	for (int i = 0; i < BufferCount; i++)
 	{
-		Device->CreateRenderTargetView(FrameBuffers[i], nullptr, rtvHandle);
-		FrameBufferRTVs.push_back(rtvHandle);
-		rtvHandle.ptr += RtvHandleSize;
+		Device->CreateRenderTargetView(FrameBuffers[i], nullptr, FrameBufferRTVs.CPUHandle(i));
 	}
 
 	SaveConfig();
@@ -346,7 +337,10 @@ void UD3D12RenderDevice::Exit()
 	ReleaseBloomPass();
 	ReleaseScenePass();
 	ReleaseSceneBuffers();
-	FrameBufferHeap.reset();
+	Heaps.DSV.reset();
+	Heaps.RTV.reset();
+	Heaps.Sampler.reset();
+	Heaps.Common.reset();
 	FrameBuffers.clear();
 	SwapChain1.reset();
 	CommandList.reset();
@@ -448,31 +442,30 @@ void UD3D12RenderDevice::ResizeSceneBuffers(int width, int height, int multisamp
 		ThrowIfFailed(result, "CreateCommittedResource(SceneBuffers.PPImage) failed");
 	}
 
-	/*
-	result = Device->CreateRenderTargetView(SceneBuffers.ColorBuffer, nullptr, &SceneBuffers.ColorBufferView);
-	ThrowIfFailed(result, "CreateRenderTargetView(ColorBuffer) failed");
+	SceneBuffers.SceneRTVs = Heaps.RTV->Alloc(2);
+	Device->CreateRenderTargetView(SceneBuffers.ColorBuffer, nullptr, SceneBuffers.SceneRTVs.CPUHandle(0));
+	Device->CreateRenderTargetView(SceneBuffers.HitBuffer, nullptr, SceneBuffers.SceneRTVs.CPUHandle(1));
 
-	result = Device->CreateRenderTargetView(SceneBuffers.HitBuffer, nullptr, &SceneBuffers.HitBufferView);
-	ThrowIfFailed(result, "CreateRenderTargetView(HitBuffer) failed");
+	SceneBuffers.SceneDSV = Heaps.DSV->Alloc(1);
+	Device->CreateDepthStencilView(SceneBuffers.DepthBuffer, nullptr, SceneBuffers.SceneDSV.CPUHandle());
 
-	result = Device->CreateShaderResourceView(SceneBuffers.HitBuffer, nullptr, &SceneBuffers.HitBufferShaderView);
-	ThrowIfFailed(result, "CreateShaderResourceView(HitBuffer) failed");
+	SceneBuffers.HitBufferSRV = Heaps.Common->Alloc(1);
+	Device->CreateShaderResourceView(SceneBuffers.HitBuffer, nullptr, SceneBuffers.HitBufferSRV.CPUHandle());
 
-	result = Device->CreateRenderTargetView(SceneBuffers.PPHitBuffer, nullptr, &SceneBuffers.PPHitBufferView);
-	ThrowIfFailed(result, "CreateRenderTargetView(PPHitBuffer) failed");
-
-	result = Device->CreateDepthStencilView(SceneBuffers.DepthBuffer, nullptr, &SceneBuffers.DepthBufferView);
-	ThrowIfFailed(result, "CreateDepthStencilView(DepthBuffer) failed");
+	SceneBuffers.PPHitBufferRTV = Heaps.RTV->Alloc(1);
+	Device->CreateRenderTargetView(SceneBuffers.PPHitBuffer, nullptr, SceneBuffers.PPHitBufferRTV.CPUHandle());
 
 	for (int i = 0; i < 2; i++)
 	{
-		result = Device->CreateRenderTargetView(SceneBuffers.PPImage[i], nullptr, &SceneBuffers.PPImageView[i]);
-		ThrowIfFailed(result, "CreateRenderTargetView(PPImage) failed");
-
-		result = Device->CreateShaderResourceView(SceneBuffers.PPImage[i], nullptr, &SceneBuffers.PPImageShaderView[i]);
-		ThrowIfFailed(result, "CreateShaderResourceView(PPImage) failed");
+		SceneBuffers.PPImageRTV[i] = Heaps.RTV->Alloc(1);
+		SceneBuffers.PPImageSRV[i] = Heaps.Common->Alloc(1);
+		Device->CreateRenderTargetView(SceneBuffers.PPImage[i], nullptr, SceneBuffers.PPImageRTV[i].CPUHandle());
+		Device->CreateShaderResourceView(SceneBuffers.PPImage[i], nullptr, SceneBuffers.PPImageSRV[i].CPUHandle());
 	}
-	*/
+
+	SceneBuffers.PresentSRVs = Heaps.Common->Alloc(2);
+	Device->CreateShaderResourceView(SceneBuffers.PPImage[0], nullptr, SceneBuffers.PresentSRVs.CPUHandle(0));
+	Device->CreateShaderResourceView(PresentPass.DitherTexture, nullptr, SceneBuffers.PresentSRVs.CPUHandle(1));
 
 	int bloomWidth = width;
 	int bloomHeight = height;
@@ -504,19 +497,15 @@ void UD3D12RenderDevice::ResizeSceneBuffers(int width, int height, int multisamp
 			level.HTexture.InitPtr());
 		ThrowIfFailed(result, "CreateCommittedResource(SceneBuffers.BlurLevels.HTexture) failed");
 
-		/*
-		result = Device->CreateRenderTargetView(level.VTexture, nullptr, &level.VTextureRTV);
-		ThrowIfFailed(result, "CreateRenderTargetView(SceneBuffers.BlurLevels.VTextureRTV) failed");
+		level.VTextureRTV = Heaps.RTV->Alloc(1);
+		level.HTextureRTV = Heaps.RTV->Alloc(1);
+		level.VTextureSRV = Heaps.Common->Alloc(1);
+		level.HTextureSRV = Heaps.Common->Alloc(1);
 
-		result = Device->CreateRenderTargetView(level.HTexture, nullptr, &level.HTextureRTV);
-		ThrowIfFailed(result, "CreateRenderTargetView(SceneBuffers.BlurLevels.HTextureRTV) failed");
-
-		result = Device->CreateShaderResourceView(level.VTexture, nullptr, &level.VTextureSRV);
-		ThrowIfFailed(result, "CreateRenderTargetView(SceneBuffers.BlurLevels.VTextureSRV) failed");
-
-		result = Device->CreateShaderResourceView(level.HTexture, nullptr, &level.HTextureSRV);
-		ThrowIfFailed(result, "CreateRenderTargetView(SceneBuffers.BlurLevels.HTextureSRV) failed");
-		*/
+		Device->CreateRenderTargetView(level.VTexture, nullptr, level.VTextureRTV.CPUHandle());
+		Device->CreateRenderTargetView(level.HTexture, nullptr, level.HTextureRTV.CPUHandle());
+		Device->CreateShaderResourceView(level.VTexture, nullptr, level.VTextureSRV.CPUHandle());
+		Device->CreateShaderResourceView(level.HTexture, nullptr, level.HTextureSRV.CPUHandle());
 
 		level.Width = bloomWidth;
 		level.Height = bloomHeight;
@@ -806,14 +795,7 @@ void UD3D12RenderDevice::CreateScenePass()
 
 void UD3D12RenderDevice::CreateSceneSamplers()
 {
-	D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
-	heapDesc.NumDescriptors = 16;
-	heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER;
-	heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-	HRESULT result = Device->CreateDescriptorHeap(&heapDesc, ScenePass.SamplersHeap.GetIID(), ScenePass.SamplersHeap.InitPtr());
-	ThrowIfFailed(result, "CreateDescriptorHeap(ScenePass.SamplersHeap) failed");
-
-	D3D12_CPU_DESCRIPTOR_HANDLE samplerHandle = ScenePass.SamplersHeap->GetCPUDescriptorHandleForHeapStart();
+	ScenePass.Samplers = Heaps.Sampler->Alloc(16);
 	for (int i = 0; i < 16; i++)
 	{
 		int dummyMipmapCount = (i >> 2) & 3;
@@ -834,8 +816,7 @@ void UD3D12RenderDevice::CreateSceneSamplers()
 		samplerDesc.AddressV = addressmode;
 		samplerDesc.AddressW = addressmode;
 
-		Device->CreateSampler(&samplerDesc, samplerHandle);
-		samplerHandle.ptr += SamplerHandleSize;
+		Device->CreateSampler(&samplerDesc, ScenePass.Samplers.CPUHandle(i));
 	}
 
 	ScenePass.LODBias = LODBias;
@@ -843,7 +824,7 @@ void UD3D12RenderDevice::CreateSceneSamplers()
 
 void UD3D12RenderDevice::ReleaseSceneSamplers()
 {
-	ScenePass.SamplersHeap.reset();
+	ScenePass.Samplers.reset();
 	ScenePass.LODBias = 0.0f;
 }
 
@@ -906,8 +887,15 @@ void UD3D12RenderDevice::ReleasePresentPass()
 
 void UD3D12RenderDevice::ReleaseSceneBuffers()
 {
+	SceneBuffers.PresentSRVs.reset();
+	SceneBuffers.SceneRTVs.reset();
+	SceneBuffers.SceneDSV.reset();
+	SceneBuffers.PPHitBufferRTV.reset();
+	SceneBuffers.HitBufferSRV.reset();
 	for (int i = 0; i < 2; i++)
 	{
+		SceneBuffers.PPImageRTV[i].reset();
+		SceneBuffers.PPImageSRV[i].reset();
 		SceneBuffers.PPImage[i].reset();
 	}
 	SceneBuffers.ColorBuffer.reset();
@@ -917,7 +905,11 @@ void UD3D12RenderDevice::ReleaseSceneBuffers()
 	SceneBuffers.DepthBuffer.reset();
 	for (PPBlurLevel& level : SceneBuffers.BlurLevels)
 	{
+		level.VTextureRTV.reset();
+		level.VTextureSRV.reset();
 		level.VTexture.reset();
+		level.HTextureRTV.reset();
+		level.HTextureSRV.reset();
 		level.HTexture.reset();
 	}
 }
@@ -1457,11 +1449,12 @@ void UD3D12RenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane Scr
 
 	FLOAT color[4] = { ScreenClear.X, ScreenClear.Y, ScreenClear.Z, ScreenClear.W };
 	FLOAT zero[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-	D3D12_CPU_DESCRIPTOR_HANDLE views[2] = { SceneBuffers.ColorBufferView, SceneBuffers.HitBufferView };
-	CommandList->ClearRenderTargetView(SceneBuffers.ColorBufferView, color, 0, nullptr);
-	CommandList->ClearRenderTargetView(SceneBuffers.HitBufferView, zero, 0, nullptr);
-	CommandList->ClearDepthStencilView(SceneBuffers.DepthBufferView, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
-	CommandList->OMSetRenderTargets(2, views, FALSE, &SceneBuffers.DepthBufferView);
+	D3D12_CPU_DESCRIPTOR_HANDLE views[2] = { SceneBuffers.SceneRTVs.CPUHandle(0), SceneBuffers.SceneRTVs.CPUHandle(1) };
+	D3D12_CPU_DESCRIPTOR_HANDLE depthview = SceneBuffers.SceneDSV.CPUHandle();
+	CommandList->ClearRenderTargetView(views[0], color, 0, nullptr);
+	CommandList->ClearRenderTargetView(views[1], zero, 0, nullptr);
+	CommandList->ClearDepthStencilView(depthview, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+	CommandList->OMSetRenderTargets(2, views, FALSE, &depthview);
 	CommandList->IASetVertexBuffers(0, 1, &ScenePass.VertexBufferView);
 	CommandList->IASetIndexBuffer(&ScenePass.IndexBufferView);
 	CommandList->SetGraphicsRootSignature(ScenePass.RootSignature);
@@ -1574,7 +1567,8 @@ void UD3D12RenderDevice::Unlock(UBOOL Blit)
 			RunBloomPass();
 		}
 
-		CommandList->OMSetRenderTargets(1, &FrameBufferRTVs[BackBufferIndex], FALSE, nullptr);
+		D3D12_CPU_DESCRIPTOR_HANDLE rtv = FrameBufferRTVs.CPUHandle(BackBufferIndex);
+		CommandList->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
 
 		D3D12_VIEWPORT viewport = {};
 		viewport.Width = Viewport->SizeX;
@@ -1590,11 +1584,10 @@ void UD3D12RenderDevice::Unlock(UBOOL Blit)
 		if (GammaMode == 1) presentShader |= 2;
 		if (pushconstants.Brightness != 0.0f || pushconstants.Contrast != 1.0f || pushconstants.Saturation != 1.0f) presentShader |= (Clamp(GrayFormula, 0, 2) + 1) << 2;
 
-		//ID3D12ShaderResourceView* psResources[] = { SceneBuffers.PPImageShaderView[0], PresentPass.DitherTextureView};
 		CommandList->SetGraphicsRootSignature(PresentPass.RootSignature);
 		CommandList->SetPipelineState(PresentPass.Present[presentShader]);
 		CommandList->IASetVertexBuffers(0, 1, &PresentPass.PPStepVertexBufferView);
-		//CommandList->SetGraphicsRootDescriptorTable(0, psResources);
+		CommandList->SetGraphicsRootDescriptorTable(0, SceneBuffers.PresentSRVs.GPUHandle());
 		CommandList->SetGraphicsRoot32BitConstants(2, sizeof(PresentPushConstants) / sizeof(uint32_t), &pushconstants, 0);
 		CommandList->DrawInstanced(6, 1, 0, 0);
 
@@ -1696,6 +1689,8 @@ void UD3D12RenderDevice::Unlock(UBOOL Blit)
 
 	CommandAllocator->Reset();
 	CommandList->Reset(CommandAllocator, nullptr);
+	ID3D12DescriptorHeap* heaps[] = { Heaps.Common->GetHeap(), Heaps.Sampler->GetHeap() };
+	CommandList->SetDescriptorHeaps(2, heaps);
 
 	HitQueryStack.clear();
 	HitQueries.clear();
@@ -2467,7 +2462,7 @@ void UD3D12RenderDevice::ClearZ(FSceneNode* Frame)
 
 	DrawBatches();
 
-	CommandList->ClearDepthStencilView(SceneBuffers.DepthBufferView, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+	CommandList->ClearDepthStencilView(SceneBuffers.SceneDSV.CPUHandle(), D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
 	unguard;
 }

@@ -2,7 +2,7 @@
 
 #include "vec.h"
 #include "mat.h"
-
+#include "Descriptors.h"
 #include "CachedTexture.h"
 
 struct SceneVertex
@@ -98,11 +98,16 @@ public:
 	ComPtr<IDXGISwapChain1> SwapChain1;
 	int BufferCount = 2;
 	int BackBufferIndex = 0;
-	ComPtr<ID3D12DescriptorHeap> FrameBufferHeap;
 	std::vector<ComPtr<ID3D12Resource>> FrameBuffers;
-	std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> FrameBufferRTVs;
-	UINT RtvHandleSize = 0;
-	UINT SamplerHandleSize = 0;
+	DescriptorSet FrameBufferRTVs;
+
+	struct
+	{
+		std::unique_ptr<DescriptorHeap> Common;
+		std::unique_ptr<DescriptorHeap> Sampler;
+		std::unique_ptr<DescriptorHeap> RTV;
+		std::unique_ptr<DescriptorHeap> DSV;
+	} Heaps;
 
 	ComPtr<ID3D12CommandAllocator> CommandAllocator;
 	ComPtr<ID3D12GraphicsCommandList> CommandList;
@@ -110,11 +115,11 @@ public:
 	struct PPBlurLevel
 	{
 		ComPtr<ID3D12Resource> VTexture;
-		D3D12_CPU_DESCRIPTOR_HANDLE VTextureRTV = {};
-		// ID3D12ShaderResourceView* VTextureSRV = nullptr;
+		DescriptorSet VTextureRTV;
+		DescriptorSet VTextureSRV;
 		ComPtr<ID3D12Resource> HTexture;
-		D3D12_CPU_DESCRIPTOR_HANDLE HTextureRTV = {};
-		// ID3D12ShaderResourceView* HTextureSRV = nullptr;
+		DescriptorSet HTextureRTV;
+		DescriptorSet HTextureSRV;
 		int Width = 0;
 		int Height = 0;
 	};
@@ -127,15 +132,17 @@ public:
 		ComPtr<ID3D12Resource> PPImage[2];
 		ComPtr<ID3D12Resource> PPHitBuffer;
 		ComPtr<ID3D12Resource> StagingHitBuffer; // Note: was a texture in d3d11, now a buffer where we need to use CopyTextureRegion
-		D3D12_CPU_DESCRIPTOR_HANDLE ColorBufferView = {};
-		D3D12_CPU_DESCRIPTOR_HANDLE HitBufferView = {};
-		D3D12_CPU_DESCRIPTOR_HANDLE DepthBufferView = {};
-		D3D12_CPU_DESCRIPTOR_HANDLE PPHitBufferView = {};
-		D3D12_CPU_DESCRIPTOR_HANDLE PPImageView[2] = {};
-		/*
-		ID3D12ShaderResourceView* HitBufferShaderView = nullptr;
-		ID3D12ShaderResourceView* PPImageShaderView[2] = {};
-		*/
+
+		DescriptorSet SceneRTVs; // ColorBuffer, HitBuffer
+		DescriptorSet SceneDSV;  // DepthBuffer
+		DescriptorSet PPHitBufferRTV;
+		DescriptorSet PPImageRTV[2];
+
+		DescriptorSet HitBufferSRV;
+		DescriptorSet PPImageSRV[2];
+
+		DescriptorSet PresentSRVs;
+
 		enum { NumBloomLevels = 4 };
 		PPBlurLevel BlurLevels[NumBloomLevels];
 		int Width = 0;
@@ -149,7 +156,7 @@ public:
 		ComPtr<ID3D12Resource> IndexBuffer;
 		D3D12_VERTEX_BUFFER_VIEW VertexBufferView = {};
 		D3D12_INDEX_BUFFER_VIEW IndexBufferView = {};
-		ComPtr<ID3D12DescriptorHeap> SamplersHeap;
+		DescriptorSet Samplers;
 		ComPtr<ID3D12RootSignature> RootSignature;
 		ComPtr<ID3D12PipelineState> Pipelines[32];
 		ComPtr<ID3D12PipelineState> LinePipeline[2];
@@ -189,7 +196,6 @@ public:
 		ComPtr<ID3D12Resource> PPStepVertexBuffer;
 		ComPtr<ID3D12Resource> DitherTexture;
 		D3D12_VERTEX_BUFFER_VIEW PPStepVertexBufferView = {};
-		// ID3D12ShaderResourceView* DitherTextureView = nullptr;
 	} PresentPass;
 
 	struct
