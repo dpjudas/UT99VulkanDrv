@@ -3,6 +3,8 @@
 #include "vec.h"
 #include "mat.h"
 #include "Descriptors.h"
+#include "TextureManager.h"
+#include "UploadManager.h"
 #include "CachedTexture.h"
 
 struct SceneVertex
@@ -210,8 +212,8 @@ public:
 		ComPtr<ID3D12PipelineState> BlurHorizontal;
 	} BloomPass;
 
-	//std::unique_ptr<TextureManager> Textures;
-	//std::unique_ptr<UploadManager> Uploads;
+	std::unique_ptr<TextureManager> Textures;
+	std::unique_ptr<UploadManager> Uploads;
 
 	// Configuration.
 	BITFIELD UseVSync;

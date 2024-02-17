@@ -272,6 +272,9 @@
     <ClInclude Include="halffloat.h" />
     <ClInclude Include="mat.h" />
     <ClInclude Include="Precomp.h" />
+    <ClInclude Include="TextureManager.h" />
+    <ClInclude Include="TextureUploader.h" />
+    <ClInclude Include="UploadManager.h" />
     <ClInclude Include="UTF16.h" />
     <ClInclude Include="UD3D12RenderDevice.h" />
     <ClInclude Include="vec.h" />
@@ -289,6 +292,9 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='DeusExRelease|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='UnrealGoldRelease|Win32'">Create</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="TextureManager.cpp" />
+    <ClCompile Include="TextureUploader.cpp" />
+    <ClCompile Include="UploadManager.cpp" />
     <ClCompile Include="UTF16.cpp" />
     <ClCompile Include="UD3D12RenderDevice.cpp" />
   </ItemGroup>

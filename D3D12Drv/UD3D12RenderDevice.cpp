@@ -207,8 +207,8 @@ UBOOL UD3D12RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 		CreatePresentPass();
 		CreateBloomPass();
 
-		//Textures.reset(new TextureManager(this));
-		//Uploads.reset(new UploadManager(this));
+		Textures.reset(new TextureManager(this));
+		Uploads.reset(new UploadManager(this));
 	}
 	catch (const std::exception& e)
 	{
@@ -370,8 +370,8 @@ void UD3D12RenderDevice::Exit()
 	if (SwapChain3)
 		SwapChain3->SetFullscreenState(FALSE, nullptr);
 
-	//Uploads.reset();
-	//Textures.reset();
+	Uploads.reset();
+	Textures.reset();
 	ReleasePresentPass();
 	ReleaseBloomPass();
 	ReleaseScenePass();
@@ -1382,7 +1382,7 @@ void UD3D12RenderDevice::CreatePresentPass()
 		&defaultHeapProps,
 		D3D12_HEAP_FLAG_NONE,
 		&texDesc,
-		D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE, // D3D12_RESOURCE_STATE_COPY_DEST
+		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, // D3D12_RESOURCE_STATE_COPY_DEST
 		nullptr,
 		PresentPass.DitherTexture.GetIID(),
 		PresentPass.DitherTexture.InitPtr());
@@ -1900,8 +1900,7 @@ UBOOL UD3D12RenderDevice::SupportsTextureFormat(ETextureFormat Format)
 {
 	guard(UD3D12RenderDevice::SupportsTextureFormat);
 
-	//return Uploads->SupportsTextureFormat(Format) ? TRUE : FALSE;
-	return FALSE;
+	return Uploads->SupportsTextureFormat(Format) ? TRUE : FALSE;
 
 	unguard;
 }
@@ -1910,7 +1909,7 @@ void UD3D12RenderDevice::UpdateTextureRect(FTextureInfo& Info, INT U, INT V, INT
 {
 	guardSlow(UD3D12RenderDevice::UpdateTextureRect);
 
-	//Textures->UpdateTextureRect(&Info, U, V, UL, VL);
+	Textures->UpdateTextureRect(&Info, U, V, UL, VL);
 
 	unguardSlow;
 }
@@ -2807,13 +2806,13 @@ void UD3D12RenderDevice::SetSceneNode(FSceneNode* Frame)
 void UD3D12RenderDevice::PrecacheTexture(FTextureInfo& Info, DWORD PolyFlags)
 {
 	guard(UD3D12RenderDevice::PrecacheTexture);
-	//Textures->GetTexture(&Info, !!(PolyFlags & PF_Masked));
+	Textures->GetTexture(&Info, !!(PolyFlags & PF_Masked));
 	unguard;
 }
 
 void UD3D12RenderDevice::ClearTextureCache()
 {
-	//Textures->ClearCache();
+	Textures->ClearCache();
 }
 
 void UD3D12RenderDevice::AddDrawBatch()

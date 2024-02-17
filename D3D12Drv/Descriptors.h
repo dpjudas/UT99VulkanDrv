@@ -78,7 +78,7 @@ inline DescriptorSet DescriptorHeap::Alloc(int count)
 	return set;
 }
 
-void DescriptorSet::reset()
+inline void DescriptorSet::reset()
 {
 	if (!Allocator)
 		return;
@@ -92,7 +92,7 @@ void DescriptorSet::reset()
 	Count = 0;
 }
 
-D3D12_CPU_DESCRIPTOR_HANDLE DescriptorSet::CPUHandle(int index)
+inline D3D12_CPU_DESCRIPTOR_HANDLE DescriptorSet::CPUHandle(int index)
 {
 	if (Allocator->CPUStart.ptr == 0)
 	{
@@ -104,7 +104,7 @@ D3D12_CPU_DESCRIPTOR_HANDLE DescriptorSet::CPUHandle(int index)
 	return handle;
 }
 
-D3D12_GPU_DESCRIPTOR_HANDLE DescriptorSet::GPUHandle(int index)
+inline D3D12_GPU_DESCRIPTOR_HANDLE DescriptorSet::GPUHandle(int index)
 {
 	if (Allocator->GPUStart.ptr == 0)
 	{
