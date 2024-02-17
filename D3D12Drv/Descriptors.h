@@ -33,7 +33,7 @@ public:
 
 private:
 	DescriptorHeap* Allocator = nullptr;
-	int Index = 0;
+	int BaseIndex = 0;
 	int Count = 0;
 
 	friend class DescriptorHeap;
@@ -62,7 +62,7 @@ inline DescriptorSet DescriptorHeap::Alloc(int count)
 
 		DescriptorSet set;
 		set.Allocator = this;
-		set.Index = index;
+		set.BaseIndex = index;
 		set.Count = count;
 		return set;
 	}
@@ -73,7 +73,7 @@ inline DescriptorSet DescriptorHeap::Alloc(int count)
 
 	DescriptorSet set;
 	set.Allocator = this;
-	set.Index = index;
+	set.BaseIndex = index;
 	set.Count = count;
 	return set;
 }
@@ -85,10 +85,10 @@ void DescriptorSet::reset()
 
 	if (Allocator->FreeLists.size() <= (size_t)Count)
 		Allocator->FreeLists.resize(Count + 1);
-	Allocator->FreeLists[Count].push_back(Index);
+	Allocator->FreeLists[Count].push_back(BaseIndex);
 
 	Allocator = nullptr;
-	Index = 0;
+	BaseIndex = 0;
 	Count = 0;
 }
 
@@ -100,7 +100,7 @@ D3D12_CPU_DESCRIPTOR_HANDLE DescriptorSet::CPUHandle(int index)
 	}
 
 	D3D12_CPU_DESCRIPTOR_HANDLE handle = Allocator->CPUStart;
-	handle.ptr += index * (SIZE_T)Allocator->HandleSize;
+	handle.ptr += (BaseIndex + index) * (SIZE_T)Allocator->HandleSize;
 	return handle;
 }
 
@@ -112,6 +112,6 @@ D3D12_GPU_DESCRIPTOR_HANDLE DescriptorSet::GPUHandle(int index)
 	}
 
 	D3D12_GPU_DESCRIPTOR_HANDLE handle = Allocator->GPUStart;
-	handle.ptr += index * (UINT64)Allocator->HandleSize;
+	handle.ptr += (BaseIndex + index) * (UINT64)Allocator->HandleSize;
 	return handle;
 }

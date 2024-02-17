@@ -169,17 +169,17 @@ UBOOL UD3D12RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 		swapDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
 		swapDesc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
 		swapDesc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
-		result = factory->CreateSwapChainForHwnd(GraphicsQueue, (HWND)Viewport->GetWindow(), &swapDesc, nullptr, nullptr, SwapChain1.TypedInitPtr());
+
+		ComPtr<IDXGISwapChain1> swapChain1;
+		result = factory->CreateSwapChainForHwnd(GraphicsQueue, (HWND)Viewport->GetWindow(), &swapDesc, nullptr, nullptr, swapChain1.TypedInitPtr());
 		ThrowIfFailed(result, "CreateSwapChainForHwnd failed");
+
+		result = swapChain1->QueryInterface(SwapChain3.GetIID(), SwapChain3.InitPtr());
+		ThrowIfFailed(result, "QueryInterface(IID_SwapChain3) failed");
 
 		if (ActiveHdr)
 		{
-			ComPtr<IDXGISwapChain3> swapChain3;
-			HRESULT result = SwapChain1->QueryInterface(swapChain3.GetIID(), swapChain3.InitPtr());
-			if (SUCCEEDED(result))
-			{
-				swapChain3->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709);
-			}
+			SwapChain3->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709);
 		}
 
 		Heaps.Common = std::make_unique<DescriptorHeap>(Device.get(), 16 * 1024, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
@@ -192,6 +192,13 @@ UBOOL UD3D12RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 
 		result = Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, CommandAllocator, nullptr, CommandList.GetIID(), CommandList.InitPtr());
 		ThrowIfFailed(result, "CreateCommandList failed");
+
+		result = Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, Fence.GetIID(), Fence.InitPtr());
+		ThrowIfFailed(result, "CreateFence failed");
+
+		FenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+		if (FenceEvent == INVALID_HANDLE_VALUE)
+			throw std::runtime_error("CreateEvent failed!");
 
 		ID3D12DescriptorHeap* heaps[] = { Heaps.Common->GetHeap(), Heaps.Sampler->GetHeap() };
 		CommandList->SetDescriptorHeaps(2, heaps);
@@ -246,14 +253,14 @@ UBOOL UD3D12RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 			modeDesc.RefreshRate.Numerator = RefreshRate;
 			modeDesc.RefreshRate.Denominator = 1;
 		}
-		result = SwapChain1->ResizeTarget(&modeDesc);
+		result = SwapChain3->ResizeTarget(&modeDesc);
 		if (FAILED(result))
 		{
 			debugf(TEXT("SwapChain.ResizeTarget failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
 		}
 	}
 
-	result = SwapChain1->SetFullscreenState(Fullscreen ? TRUE : FALSE, nullptr);
+	result = SwapChain3->SetFullscreenState(Fullscreen ? TRUE : FALSE, nullptr);
 	if (FAILED(result))
 	{
 		debugf(TEXT("SwapChain.SetFullscreenState failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
@@ -262,7 +269,7 @@ UBOOL UD3D12RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 
 	BufferCount = UseVSync ? 2 : 3;
 
-	result = SwapChain1->ResizeBuffers(BufferCount, NewX, NewY, ActiveHdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
+	result = SwapChain3->ResizeBuffers(BufferCount, NewX, NewY, ActiveHdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
 	if (FAILED(result))
 	{
 		debugf(TEXT("SwapChain.ResizeBuffers failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
@@ -271,12 +278,7 @@ UBOOL UD3D12RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 
 	if (ActiveHdr)
 	{
-		ComPtr<IDXGISwapChain3> swapChain3;
-		HRESULT result = SwapChain1->QueryInterface(swapChain3.GetIID(), swapChain3.InitPtr());
-		if (SUCCEEDED(result))
-		{
-			swapChain3->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709);
-		}
+		SwapChain3->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709);
 	}
 
 	if (NewX && NewY)
@@ -292,15 +294,13 @@ UBOOL UD3D12RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 		}
 	}
 
-	BackBufferIndex = 0;
-
 	for (int i = 0; i < BufferCount; i++)
 	{
 		ComPtr<ID3D12Resource> buffer;
-		HRESULT result = SwapChain1->GetBuffer(0, buffer.GetIID(), buffer.InitPtr());
+		HRESULT result = SwapChain3->GetBuffer(i, buffer.GetIID(), buffer.InitPtr());
 		if (FAILED(result))
 		{
-			debugf(TEXT("SwapChain1.GetBuffer failed"));
+			debugf(TEXT("SwapChain3.GetBuffer failed"));
 			return FALSE;
 		}
 		FrameBuffers.push_back(std::move(buffer));
@@ -324,12 +324,51 @@ UBOOL UD3D12RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 	unguard;
 }
 
+void UD3D12RenderDevice::WaitForCommands(bool present)
+{
+	HRESULT result = CommandList->Close();
+	ThrowIfFailed(result, "Could not close command list!");
+
+	ID3D12CommandList* commandLists[] = { CommandList };
+	GraphicsQueue->ExecuteCommandLists(1, commandLists);
+
+	if (present)
+	{
+		DXGI_PRESENT_PARAMETERS presentParams = {};
+		SwapChain3->Present1(UseVSync ? 1 : 0, 0, &presentParams);
+	}
+
+	WaitDeviceIdle();
+
+	CommandAllocator->Reset();
+	CommandList->Reset(CommandAllocator, nullptr);
+}
+
+void UD3D12RenderDevice::WaitDeviceIdle()
+{
+	if (!GraphicsQueue || !Fence || FenceEvent == INVALID_HANDLE_VALUE)
+		return;
+
+	UINT64 fence = FenceValue;
+	HRESULT result = GraphicsQueue->Signal(Fence, fence);
+	ThrowIfFailed(result, "GraphicsQueue.Signal failed");
+	FenceValue++;
+
+	if (Fence->GetCompletedValue() < fence)
+	{
+		result = Fence->SetEventOnCompletion(fence, FenceEvent);
+		WaitForSingleObject(FenceEvent, INFINITE);
+	}
+}
+
 void UD3D12RenderDevice::Exit()
 {
 	guard(UD3D12RenderDevice::Exit);
 
-	if (SwapChain1)
-		SwapChain1->SetFullscreenState(FALSE, nullptr);
+	WaitDeviceIdle();
+
+	if (SwapChain3)
+		SwapChain3->SetFullscreenState(FALSE, nullptr);
 
 	//Uploads.reset();
 	//Textures.reset();
@@ -342,9 +381,12 @@ void UD3D12RenderDevice::Exit()
 	Heaps.Sampler.reset();
 	Heaps.Common.reset();
 	FrameBuffers.clear();
-	SwapChain1.reset();
+	SwapChain3.reset();
 	CommandList.reset();
 	CommandAllocator.reset();
+	Fence.reset();
+	if (FenceEvent != INVALID_HANDLE_VALUE)
+		CloseHandle(FenceEvent);
 	GraphicsQueue.reset();
 	Device.reset();
 	DebugController.reset();
@@ -368,6 +410,12 @@ void UD3D12RenderDevice::ResizeSceneBuffers(int width, int height, int multisamp
 	D3D12_HEAP_PROPERTIES defaultHeapProps = {};
 	defaultHeapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
 
+	D3D12_CLEAR_VALUE clearValue = {}, clearValueInt = {}, depthValue = {};
+	clearValue.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+	clearValueInt.Format = DXGI_FORMAT_R32_UINT;
+	depthValue.Format = DXGI_FORMAT_D32_FLOAT;
+	depthValue.DepthStencil.Depth = 1.0f;
+
 	D3D12_RESOURCE_DESC texDesc = {};
 	texDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
 	texDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
@@ -385,7 +433,7 @@ void UD3D12RenderDevice::ResizeSceneBuffers(int width, int height, int multisamp
 		D3D12_HEAP_FLAG_NONE,
 		&texDesc,
 		D3D12_RESOURCE_STATE_RENDER_TARGET,
-		nullptr,
+		&clearValue,
 		SceneBuffers.ColorBuffer.GetIID(),
 		SceneBuffers.ColorBuffer.InitPtr());
 	ThrowIfFailed(result, "CreateCommittedResource(SceneBuffers.ColorBuffer) failed");
@@ -396,7 +444,7 @@ void UD3D12RenderDevice::ResizeSceneBuffers(int width, int height, int multisamp
 		D3D12_HEAP_FLAG_NONE,
 		&texDesc,
 		D3D12_RESOURCE_STATE_RENDER_TARGET,
-		nullptr,
+		&clearValueInt,
 		SceneBuffers.HitBuffer.GetIID(),
 		SceneBuffers.HitBuffer.InitPtr());
 	ThrowIfFailed(result, "CreateCommittedResource(SceneBuffers.HitBuffer) failed");
@@ -408,7 +456,7 @@ void UD3D12RenderDevice::ResizeSceneBuffers(int width, int height, int multisamp
 		D3D12_HEAP_FLAG_NONE,
 		&texDesc,
 		D3D12_RESOURCE_STATE_DEPTH_WRITE,
-		nullptr,
+		&depthValue,
 		SceneBuffers.DepthBuffer.GetIID(),
 		SceneBuffers.DepthBuffer.InitPtr());
 	ThrowIfFailed(result, "CreateCommittedResource(SceneBuffers.DepthBuffer) failed");
@@ -422,7 +470,7 @@ void UD3D12RenderDevice::ResizeSceneBuffers(int width, int height, int multisamp
 		&defaultHeapProps,
 		D3D12_HEAP_FLAG_NONE,
 		&texDesc,
-		D3D12_RESOURCE_STATE_RENDER_TARGET,
+		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
 		nullptr,
 		SceneBuffers.PPHitBuffer.GetIID(),
 		SceneBuffers.PPHitBuffer.InitPtr());
@@ -435,7 +483,7 @@ void UD3D12RenderDevice::ResizeSceneBuffers(int width, int height, int multisamp
 			&defaultHeapProps,
 			D3D12_HEAP_FLAG_NONE,
 			&texDesc,
-			D3D12_RESOURCE_STATE_RENDER_TARGET,
+			D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
 			nullptr,
 			SceneBuffers.PPImage[i].GetIID(),
 			SceneBuffers.PPImage[i].InitPtr());
@@ -555,17 +603,17 @@ void UD3D12RenderDevice::CreateScenePass()
 
 	std::vector<std::vector<D3D12_DESCRIPTOR_RANGE>> descriptorTables(2);
 
-	D3D12_DESCRIPTOR_RANGE samplerRange = {};
-	samplerRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
-	samplerRange.BaseShaderRegister = 0;
-	samplerRange.NumDescriptors = 4;
-	descriptorTables[0].push_back(samplerRange);
-
 	D3D12_DESCRIPTOR_RANGE texRange = {};
 	texRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
 	texRange.BaseShaderRegister = 0;
 	texRange.NumDescriptors = 4;
-	descriptorTables[1].push_back(texRange);
+	descriptorTables[0].push_back(texRange);
+
+	D3D12_DESCRIPTOR_RANGE samplerRange = {};
+	samplerRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
+	samplerRange.BaseShaderRegister = 0;
+	samplerRange.NumDescriptors = 4;
+	descriptorTables[1].push_back(samplerRange);
 
 	D3D12_ROOT_CONSTANTS pushConstants = {};
 	pushConstants.ShaderRegister = 0;
@@ -963,15 +1011,15 @@ void UD3D12RenderDevice::RunBloomPass()
 	BloomPushConstants pushconstants;
 	ComputeBlurSamples(7, blurAmount, pushconstants.SampleWeights);
 
+	CommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	CommandList->IASetVertexBuffers(0, 1, &PresentPass.PPStepVertexBufferView);
 	CommandList->IASetInputLayout(PresentPass.PPStepLayout);
-	CommandList->IASetPrimitiveTopology(D3D12_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	CommandList->VSSetShader(PresentPass.PPStep, nullptr, 0);
 	CommandList->RSSetState(PresentPass.RasterizerState);
 	CommandList->PSSetConstantBuffers(0, 1, &BloomPass.ConstantBuffer);
 	CommandList->OMSetDepthStencilState(PresentPass.DepthStencilState, 0);
 	CommandList->OMSetBlendState(PresentPass.BlendState, nullptr, 0xffffffff);
-	CommandList->SetGraphicsRoot32BitConstants(2, sizeof(BloomPushConstants) / sizeof(uint32_t), &pushconstants, 0);
+	CommandList->SetGraphicsRoot32BitConstants(1, sizeof(BloomPushConstants) / sizeof(uint32_t), &pushconstants, 0);
 
 	D3D12_VIEWPORT viewport = {};
 	viewport.MaxDepth = 1.0f;
@@ -1097,25 +1145,31 @@ void UD3D12RenderDevice::CreateBloomPass()
 		{ "AttrPos", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
 	};
 
-	std::vector<std::vector<D3D12_DESCRIPTOR_RANGE>> descriptorTables(2);
-
-	D3D12_DESCRIPTOR_RANGE samplerRange = {};
-	samplerRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
-	samplerRange.BaseShaderRegister = 0;
-	samplerRange.NumDescriptors = 1;
-	descriptorTables[0].push_back(samplerRange);
+	std::vector<std::vector<D3D12_DESCRIPTOR_RANGE>> descriptorTables(1);
 
 	D3D12_DESCRIPTOR_RANGE texRange = {};
 	texRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
 	texRange.BaseShaderRegister = 0;
 	texRange.NumDescriptors = 1;
-	descriptorTables[1].push_back(texRange);
+	descriptorTables[0].push_back(texRange);
 
 	D3D12_ROOT_CONSTANTS pushConstants = {};
 	pushConstants.ShaderRegister = 0;
 	pushConstants.Num32BitValues = sizeof(BloomPushConstants) / sizeof(int32_t);
 
-	BloomPass.RootSignature = CreateRootSignature("BloomPass.RootSignature", descriptorTables, pushConstants);
+	std::vector<D3D12_STATIC_SAMPLER_DESC> staticSamplers;
+	D3D12_STATIC_SAMPLER_DESC staticSampler = {};
+	staticSampler.ShaderRegister = 0;
+	staticSampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+	staticSampler.MaxLOD = D3D12_FLOAT32_MAX;
+	staticSampler.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+	staticSampler.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+	staticSampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+	staticSampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+	staticSampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+	staticSamplers.push_back(staticSampler);
+
+	BloomPass.RootSignature = CreateRootSignature("BloomPass.RootSignature", descriptorTables, pushConstants, staticSamplers);
 
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
 	psoDesc.pRootSignature = BloomPass.RootSignature;
@@ -1221,25 +1275,38 @@ void UD3D12RenderDevice::CreatePresentPass()
 		{ "AttrPos", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
 	};
 
-	std::vector<std::vector<D3D12_DESCRIPTOR_RANGE>> descriptorTables(2);
-
-	D3D12_DESCRIPTOR_RANGE samplerRange = {};
-	samplerRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
-	samplerRange.BaseShaderRegister = 0;
-	samplerRange.NumDescriptors = 2;
-	descriptorTables[0].push_back(samplerRange);
+	std::vector<std::vector<D3D12_DESCRIPTOR_RANGE>> descriptorTables(1);
 
 	D3D12_DESCRIPTOR_RANGE texRange = {};
 	texRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
 	texRange.BaseShaderRegister = 0;
 	texRange.NumDescriptors = 2;
-	descriptorTables[1].push_back(texRange);
+	descriptorTables[0].push_back(texRange);
 
 	D3D12_ROOT_CONSTANTS pushConstants = {};
 	pushConstants.ShaderRegister = 0;
 	pushConstants.Num32BitValues = sizeof(PresentPushConstants) / sizeof(int32_t);
 
-	PresentPass.RootSignature = CreateRootSignature("PresentPass.RootSignature", descriptorTables, pushConstants);
+	std::vector<D3D12_STATIC_SAMPLER_DESC> staticSamplers;
+	D3D12_STATIC_SAMPLER_DESC staticSampler = {};
+	staticSampler.ShaderRegister = 0;
+	staticSampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+	staticSampler.MaxLOD = D3D12_FLOAT32_MAX;
+	staticSampler.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+	staticSampler.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+	staticSampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+	staticSampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+	staticSampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+	staticSamplers.push_back(staticSampler);
+	staticSampler.ShaderRegister = 1;
+	staticSampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+	staticSampler.Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
+	staticSampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+	staticSampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+	staticSampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+	staticSamplers.push_back(staticSampler);
+
+	PresentPass.RootSignature = CreateRootSignature("PresentPass.RootSignature", descriptorTables, pushConstants, staticSamplers);
 
 	auto vertexShader = CompileHlsl("shaders/PPStep.vert", "vs");
 
@@ -1298,7 +1365,29 @@ void UD3D12RenderDevice::CreatePresentPass()
 	result = Device->CreateGraphicsPipelineState(&psoDesc, PresentPass.HitResolve.GetIID(), PresentPass.HitResolve.InitPtr());
 	ThrowIfFailed(result, "CreateGraphicsPipelineState(HitResolve) failed");
 
-	/*
+	D3D12_HEAP_PROPERTIES defaultHeapProps = {};
+	defaultHeapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+	D3D12_RESOURCE_DESC texDesc = {};
+	texDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+	texDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+	texDesc.Format = DXGI_FORMAT_R32_FLOAT;
+	texDesc.Width = 8;
+	texDesc.Height = 8;
+	texDesc.DepthOrArraySize = 1;
+	texDesc.MipLevels = 1;
+	texDesc.SampleDesc.Count = 1;
+
+	result = Device->CreateCommittedResource(
+		&defaultHeapProps,
+		D3D12_HEAP_FLAG_NONE,
+		&texDesc,
+		D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE, // D3D12_RESOURCE_STATE_COPY_DEST
+		nullptr,
+		PresentPass.DitherTexture.GetIID(),
+		PresentPass.DitherTexture.InitPtr());
+	ThrowIfFailed(result, "CreateCommittedResource(PresentPass.DitherTexture) failed");
+
 	static const float ditherdata[64] =
 	{
 		.0078125, .2578125, .1328125, .3828125, .0234375, .2734375, .1484375, .3984375,
@@ -1311,25 +1400,9 @@ void UD3D12RenderDevice::CreatePresentPass()
 		.8515625, .6015625, .9765625, .7265625, .8671875, .6171875, .9921875, .7421875
 	};
 
-	initData = {};
-	initData.pSysMem = ditherdata;
-	initData.SysMemPitch = sizeof(float) * 8;
-
-	D3D12_TEXTURE2D_DESC texDesc = {};
-	texDesc.Usage = D3D12_USAGE_IMMUTABLE;
-	texDesc.BindFlags = D3D12_BIND_SHADER_RESOURCE;
-	texDesc.Format = DXGI_FORMAT_R32_FLOAT;
-	texDesc.Width = 8;
-	texDesc.Height = 8;
-	texDesc.MipLevels = 1;
-	texDesc.ArraySize = 1;
-	texDesc.SampleDesc.Count = 1;
-	result = Device->CreateTexture2D(&texDesc, &initData, &PresentPass.DitherTexture);
-	ThrowIfFailed(result, "CreateTexture2D(DitherTexture) failed");
-
-	result = Device->CreateShaderResourceView(PresentPass.DitherTexture, nullptr, &PresentPass.DitherTextureView);
-	ThrowIfFailed(result, "CreateShaderResourceView(DitherTexture) failed");
-	*/
+	// To do: upload ditherdata
+	//Device->GetCopyableFootprints(...);
+	//CommandList->CopyTextureRegion(...);
 }
 
 #if defined(UNREALGOLD)
@@ -1451,13 +1524,14 @@ void UD3D12RenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane Scr
 	FLOAT zero[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	D3D12_CPU_DESCRIPTOR_HANDLE views[2] = { SceneBuffers.SceneRTVs.CPUHandle(0), SceneBuffers.SceneRTVs.CPUHandle(1) };
 	D3D12_CPU_DESCRIPTOR_HANDLE depthview = SceneBuffers.SceneDSV.CPUHandle();
+	CommandList->SetGraphicsRootSignature(ScenePass.RootSignature);
+	CommandList->OMSetRenderTargets(2, views, FALSE, &depthview);
 	CommandList->ClearRenderTargetView(views[0], color, 0, nullptr);
 	CommandList->ClearRenderTargetView(views[1], zero, 0, nullptr);
 	CommandList->ClearDepthStencilView(depthview, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
-	CommandList->OMSetRenderTargets(2, views, FALSE, &depthview);
+	CommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	CommandList->IASetVertexBuffers(0, 1, &ScenePass.VertexBufferView);
 	CommandList->IASetIndexBuffer(&ScenePass.IndexBufferView);
-	CommandList->SetGraphicsRootSignature(ScenePass.RootSignature);
 
 	D3D12_RECT box = {};
 	box.right = Viewport->SizeX;
@@ -1555,11 +1629,67 @@ void UD3D12RenderDevice::Unlock(UBOOL Blit)
 	{
 		if (SceneBuffers.Multisample > 1)
 		{
+			D3D12_RESOURCE_BARRIER barriers0[2] = {};
+			barriers0[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+			barriers0[0].Transition.pResource = SceneBuffers.PPImage[0];
+			barriers0[0].Transition.StateBefore = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+			barriers0[0].Transition.StateAfter = D3D12_RESOURCE_STATE_RESOLVE_DEST;
+			barriers0[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+
+			barriers0[1].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+			barriers0[1].Transition.pResource = SceneBuffers.ColorBuffer;
+			barriers0[1].Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
+			barriers0[1].Transition.StateAfter = D3D12_RESOURCE_STATE_RESOLVE_SOURCE;
+			barriers0[1].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+			CommandList->ResourceBarrier(2, barriers0);
+
 			CommandList->ResolveSubresource(SceneBuffers.PPImage[0], 0, SceneBuffers.ColorBuffer, 0, DXGI_FORMAT_R16G16B16A16_FLOAT);
+
+			D3D12_RESOURCE_BARRIER barriers1[2] = {};
+			barriers1[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+			barriers1[0].Transition.pResource = SceneBuffers.PPImage[0];
+			barriers1[0].Transition.StateBefore = D3D12_RESOURCE_STATE_RESOLVE_DEST;
+			barriers1[0].Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+			barriers1[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+
+			barriers1[1].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+			barriers1[1].Transition.pResource = SceneBuffers.ColorBuffer;
+			barriers1[1].Transition.StateBefore = D3D12_RESOURCE_STATE_RESOLVE_SOURCE;
+			barriers1[1].Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
+			barriers1[1].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+			CommandList->ResourceBarrier(2, barriers1);
 		}
 		else
 		{
+			D3D12_RESOURCE_BARRIER barriers0[2] = {};
+			barriers0[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+			barriers0[0].Transition.pResource = SceneBuffers.PPImage[0];
+			barriers0[0].Transition.StateBefore = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+			barriers0[0].Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_DEST;
+			barriers0[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+
+			barriers0[1].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+			barriers0[1].Transition.pResource = SceneBuffers.ColorBuffer;
+			barriers0[1].Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
+			barriers0[1].Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_SOURCE;
+			barriers0[1].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+			CommandList->ResourceBarrier(2, barriers0);
+
 			CommandList->CopyResource(SceneBuffers.PPImage[0], SceneBuffers.ColorBuffer);
+
+			D3D12_RESOURCE_BARRIER barriers1[2] = {};
+			barriers1[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+			barriers1[0].Transition.pResource = SceneBuffers.PPImage[0];
+			barriers1[0].Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+			barriers1[0].Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+			barriers1[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+
+			barriers1[1].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+			barriers1[1].Transition.pResource = SceneBuffers.ColorBuffer;
+			barriers1[1].Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_SOURCE;
+			barriers1[1].Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
+			barriers1[1].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+			CommandList->ResourceBarrier(2, barriers1);
 		}
 
 		if (Bloom)
@@ -1567,7 +1697,18 @@ void UD3D12RenderDevice::Unlock(UBOOL Blit)
 			RunBloomPass();
 		}
 
+		int BackBufferIndex = SwapChain3->GetCurrentBackBufferIndex();
+
+		D3D12_RESOURCE_BARRIER barrier0 = {};
+		barrier0.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+		barrier0.Transition.pResource = FrameBuffers[BackBufferIndex];
+		barrier0.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
+		barrier0.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
+		barrier0.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+		CommandList->ResourceBarrier(1, &barrier0);
+
 		D3D12_CPU_DESCRIPTOR_HANDLE rtv = FrameBufferRTVs.CPUHandle(BackBufferIndex);
+		CommandList->SetGraphicsRootSignature(PresentPass.RootSignature);
 		CommandList->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
 
 		D3D12_VIEWPORT viewport = {};
@@ -1584,17 +1725,20 @@ void UD3D12RenderDevice::Unlock(UBOOL Blit)
 		if (GammaMode == 1) presentShader |= 2;
 		if (pushconstants.Brightness != 0.0f || pushconstants.Contrast != 1.0f || pushconstants.Saturation != 1.0f) presentShader |= (Clamp(GrayFormula, 0, 2) + 1) << 2;
 
-		CommandList->SetGraphicsRootSignature(PresentPass.RootSignature);
 		CommandList->SetPipelineState(PresentPass.Present[presentShader]);
+		CommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 		CommandList->IASetVertexBuffers(0, 1, &PresentPass.PPStepVertexBufferView);
 		CommandList->SetGraphicsRootDescriptorTable(0, SceneBuffers.PresentSRVs.GPUHandle());
-		CommandList->SetGraphicsRoot32BitConstants(2, sizeof(PresentPushConstants) / sizeof(uint32_t), &pushconstants, 0);
+		CommandList->SetGraphicsRoot32BitConstants(1, sizeof(PresentPushConstants) / sizeof(uint32_t), &pushconstants, 0);
 		CommandList->DrawInstanced(6, 1, 0, 0);
 
-		DXGI_PRESENT_PARAMETERS presentParams = {};
-		SwapChain1->Present1(UseVSync ? 1 : 0, 0, &presentParams);
-
-		BackBufferIndex = (BackBufferIndex + 1) % (int)FrameBuffers.size();
+		D3D12_RESOURCE_BARRIER barrier1 = {};
+		barrier1.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+		barrier1.Transition.pResource = FrameBuffers[BackBufferIndex];
+		barrier1.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
+		barrier1.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
+		barrier1.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+		CommandList->ResourceBarrier(1, &barrier1);
 
 		Batch.Pipeline = nullptr;
 		Batch.Tex = nullptr;
@@ -1605,6 +1749,11 @@ void UD3D12RenderDevice::Unlock(UBOOL Blit)
 
 		SceneVertexPos = 0;
 		SceneIndexPos = 0;
+
+		WaitForCommands(true);
+
+		ID3D12DescriptorHeap* heaps[] = { Heaps.Common->GetHeap(), Heaps.Sampler->GetHeap() };
+		CommandList->SetDescriptorHeaps(2, heaps);
 
 		UpdateLODBias();
 	}
@@ -1633,6 +1782,7 @@ void UD3D12RenderDevice::Unlock(UBOOL Blit)
 			viewport.MaxDepth = 1.0f;
 			CommandList->RSSetViewports(1, &viewport);
 
+			CommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 			CommandList->IASetVertexBuffers(0, 1, &PresentPass.PPStepVertexBufferView);
 			CommandList->IASetInputLayout(PresentPass.PPStepLayout);
 			CommandList->IASetPrimitiveTopology(D3D12_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -1652,6 +1802,8 @@ void UD3D12RenderDevice::Unlock(UBOOL Blit)
 
 		// Copy the hit buffer to a mappable texture, but only the part we want to examine
 		CommandList->CopySubresourceRegion(SceneBuffers.StagingHitBuffer, 0, 0, 0, 0, SceneBuffers.PPHitBuffer, 0, &box);
+
+		WaitForCommands(false);
 
 		// Lock the buffer and look for the last hit
 		int hit = 0;
@@ -1686,11 +1838,6 @@ void UD3D12RenderDevice::Unlock(UBOOL Blit)
 			*HitSize = 0;
 		}
 	}
-
-	CommandAllocator->Reset();
-	CommandList->Reset(CommandAllocator, nullptr);
-	ID3D12DescriptorHeap* heaps[] = { Heaps.Common->GetHeap(), Heaps.Sampler->GetHeap() };
-	CommandList->SetDescriptorHeaps(2, heaps);
 
 	HitQueryStack.clear();
 	HitQueries.clear();
@@ -2515,9 +2662,9 @@ void UD3D12RenderDevice::ReadPixels(FColor* Pixels)
 		if (pushconstants.Brightness != 0.0f || pushconstants.Contrast != 1.0f || pushconstants.Saturation != 1.0f) presentShader |= (Clamp(GrayFormula, 0, 2) + 1) << 2;
 
 		ID3D12ShaderResourceView* psResources[] = { SceneBuffers.PPImageShaderView[0], PresentPass.DitherTextureView };
+		CommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 		CommandList->IASetVertexBuffers(0, 1, &PresentPass.PPStepVertexBufferView);
 		CommandList->IASetInputLayout(PresentPass.PPStepLayout);
-		CommandList->IASetPrimitiveTopology(D3D12_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 		CommandList->VSSetShader(PresentPass.PPStep, nullptr, 0);
 		CommandList->RSSetState(PresentPass.RasterizerState);
 		CommandList->PSSetShader(PresentPass.Present[presentShader], nullptr, 0);

@@ -95,9 +95,11 @@ public:
 	ComPtr<ID3D12Device> Device;
 	ComPtr<ID3D12CommandQueue> GraphicsQueue;
 	D3D_FEATURE_LEVEL FeatureLevel = D3D_FEATURE_LEVEL_11_0; // To do: find out how to discover this
-	ComPtr<IDXGISwapChain1> SwapChain1;
+	UINT64 FenceValue = 1;
+	HANDLE FenceEvent = INVALID_HANDLE_VALUE;
+	ComPtr<ID3D12Fence> Fence;
+	ComPtr<IDXGISwapChain3> SwapChain3;
 	int BufferCount = 2;
-	int BackBufferIndex = 0;
 	std::vector<ComPtr<ID3D12Resource>> FrameBuffers;
 	DescriptorSet FrameBufferRTVs;
 
@@ -284,6 +286,9 @@ private:
 	vec4 ApplyInverseGamma(vec4 color);
 
 	PresentPushConstants GetPresentPushConstants();
+
+	void WaitDeviceIdle();
+	void WaitForCommands(bool present);
 
 	UBOOL UsePrecache;
 	FPlane FlashScale;
