@@ -168,8 +168,8 @@ public:
 		FLOAT LODBias = 0.0f;
 	} ScenePass;
 
-	static const int SceneVertexBufferSize = 16 * 1024;
-	static const int SceneIndexBufferSize = 32 * 1024;
+	static const int SceneVertexBufferSize = 1024 * 1024;
+	static const int SceneIndexBufferSize = 2048 * 1024;
 
 	struct DrawBatchEntry
 	{

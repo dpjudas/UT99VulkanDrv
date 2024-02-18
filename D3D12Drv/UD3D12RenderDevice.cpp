@@ -1920,7 +1920,6 @@ void UD3D12RenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Sur
 {
 	guardSlow(UD3D12RenderDevice::DrawComplexSurface);
 
-	/*
 	CachedTexture* tex = Textures->GetTexture(Surface.Texture, !!(Surface.PolyFlags & PF_Masked));
 	CachedTexture* lightmap = Textures->GetTexture(Surface.LightMap, false);
 	CachedTexture* macrotex = Textures->GetTexture(Surface.MacroTexture, false);
@@ -2118,7 +2117,6 @@ void UD3D12RenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Sur
 		SceneVertexPos += vcount;
 		SceneIndexPos += icount;
 	}
-	*/
 
 	unguardSlow;
 }
@@ -2127,7 +2125,6 @@ void UD3D12RenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& Inf
 {
 	guardSlow(UD3D12RenderDevice::DrawGouraudPolygon);
 
-	/*
 	if (NumPts < 3) return; // This can apparently happen!!
 	if (SceneVertexPos + NumPts > SceneVertexBufferSize || SceneIndexPos + NumPts * 3 > SceneIndexBufferSize) NextSceneBuffers();
 
@@ -2212,7 +2209,6 @@ void UD3D12RenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& Inf
 	SceneIndexPos += icount;
 
 	Stats.GouraudPolygons++;
-	*/
 
 	unguardSlow;
 }
@@ -2229,8 +2225,6 @@ static void EnviroMap(const FSceneNode* Frame, FTransTexture& P, FLOAT UScale, F
 void UD3D12RenderDevice::DrawGouraudTriangles(const FSceneNode* Frame, const FTextureInfo& Info, FTransTexture* const Pts, INT NumPts, DWORD PolyFlags, DWORD DataFlags, FSpanBuffer* Span)
 {
 	guardSlow(UD3D12RenderDevice::DrawGouraudTriangles);
-
-	/*
 
 	if (NumPts < 3) return; // This can apparently happen!!
 	if (SceneVertexPos + NumPts > SceneVertexBufferSize || SceneIndexPos + NumPts * 3 > SceneIndexBufferSize) NextSceneBuffers();
@@ -2355,8 +2349,6 @@ void UD3D12RenderDevice::DrawGouraudTriangles(const FSceneNode* Frame, const FTe
 
 	Stats.GouraudPolygons++;
 
-	*/
-
 	unguardSlow;
 }
 
@@ -2366,7 +2358,6 @@ void UD3D12RenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT X
 {
 	guardSlow(UD3D12RenderDevice::DrawTile);
 
-	/*
 	if (SceneVertexPos + 4 > SceneVertexBufferSize || SceneIndexPos + 6 > SceneIndexBufferSize) NextSceneBuffers();
 
 	// stijn: fix for invisible actor icons in ortho viewports
@@ -2437,7 +2428,6 @@ void UD3D12RenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT X
 	SceneIndexPos += icount;
 
 	Stats.Tiles++;
-	*/
 
 	unguardSlow;
 }
@@ -2457,7 +2447,6 @@ void UD3D12RenderDevice::Draw3DLine(FSceneNode* Frame, FPlane Color, DWORD LineF
 {
 	guard(UD3D12RenderDevice::Draw3DLine);
 
-	/*
 	P1 = P1.TransformPointBy(Frame->Coords);
 	P2 = P2.TransformPointBy(Frame->Coords);
 	if (Frame->Viewport->IsOrtho())
@@ -2480,7 +2469,7 @@ void UD3D12RenderDevice::Draw3DLine(FSceneNode* Frame, FPlane Color, DWORD LineF
 	}
 	else
 	{
-		auto pipeline = &ScenePass.LinePipeline[OccludeLines];
+		auto pipeline = ScenePass.LinePipeline[OccludeLines].get();
 		if (pipeline != Batch.Pipeline)
 		{
 			AddDrawBatch();
@@ -2506,7 +2495,6 @@ void UD3D12RenderDevice::Draw3DLine(FSceneNode* Frame, FPlane Color, DWORD LineF
 		SceneVertexPos += 2;
 		SceneIndexPos += 2;
 	}
-	*/
 
 	unguard;
 }
@@ -2522,8 +2510,7 @@ void UD3D12RenderDevice::Draw2DLine(FSceneNode* Frame, FPlane Color, DWORD LineF
 {
 	guard(UD3D12RenderDevice::Draw2DLine);
 
-	/*
-	auto pipeline = &ScenePass.LinePipeline[OccludeLines];
+	auto pipeline = ScenePass.LinePipeline[OccludeLines].get();
 	if (pipeline != Batch.Pipeline)
 	{
 		AddDrawBatch();
@@ -2548,7 +2535,6 @@ void UD3D12RenderDevice::Draw2DLine(FSceneNode* Frame, FPlane Color, DWORD LineF
 
 	SceneVertexPos += 2;
 	SceneIndexPos += 2;
-	*/
 
 	unguard;
 }
@@ -2557,11 +2543,10 @@ void UD3D12RenderDevice::Draw2DPoint(FSceneNode* Frame, FPlane Color, DWORD Line
 {
 	guard(UD3D12RenderDevice::Draw2DPoint);
 
-	/*
 	// Hack to fix UED selection problem with selection brush
 	if (GIsEditor) Z = 1.0f;
 
-	auto pipeline = &ScenePass.PointPipeline;
+	auto pipeline = ScenePass.PointPipeline.get();
 	if (pipeline != Batch.Pipeline)
 	{
 		AddDrawBatch();
@@ -2597,7 +2582,6 @@ void UD3D12RenderDevice::Draw2DPoint(FSceneNode* Frame, FPlane Color, DWORD Line
 
 	SceneVertexPos += vcount;
 	SceneIndexPos += icount;
-	*/
 
 	unguard;
 }
