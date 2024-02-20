@@ -203,6 +203,7 @@ UBOOL UD3D12RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 		ID3D12DescriptorHeap* heaps[] = { Heaps.Common->GetHeap(), Heaps.Sampler->GetHeap() };
 		CommandList->SetDescriptorHeaps(2, heaps);
 
+		CreateUploadBuffer();
 		CreateScenePass();
 		CreatePresentPass();
 		CreateBloomPass();
@@ -342,6 +343,8 @@ void UD3D12RenderDevice::WaitForCommands(bool present)
 
 	CommandAllocator->Reset();
 	CommandList->Reset(CommandAllocator, nullptr);
+
+	Upload.Pos = 0;
 }
 
 void UD3D12RenderDevice::WaitDeviceIdle()
@@ -376,6 +379,7 @@ void UD3D12RenderDevice::Exit()
 	ReleaseBloomPass();
 	ReleaseScenePass();
 	ReleaseSceneBuffers();
+	ReleaseUploadBuffer();
 	Heaps.DSV.reset();
 	Heaps.RTV.reset();
 	Heaps.Sampler.reset();
@@ -580,6 +584,46 @@ void UD3D12RenderDevice::ResizeSceneBuffers(int width, int height, int multisamp
 		SceneBuffers.StagingHitBuffer.GetIID(),
 		SceneBuffers.StagingHitBuffer.InitPtr());
 	ThrowIfFailed(result, "CreateCommittedResource(SceneBuffers.StagingHitBuffer) failed");
+}
+
+void UD3D12RenderDevice::CreateUploadBuffer()
+{
+	D3D12_HEAP_PROPERTIES uploadHeapProps = { D3D12_HEAP_TYPE_UPLOAD };
+
+	D3D12_RESOURCE_DESC bufDesc = {};
+	bufDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+	bufDesc.Width = Upload.Size;
+	bufDesc.Height = 1;
+	bufDesc.DepthOrArraySize = 1;
+	bufDesc.MipLevels = 1;
+	bufDesc.SampleDesc.Count = 1;
+	bufDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+	bufDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+
+	HRESULT result = Device->CreateCommittedResource(
+		&uploadHeapProps,
+		D3D12_HEAP_FLAG_NONE,
+		&bufDesc,
+		D3D12_RESOURCE_STATE_COPY_SOURCE,
+		nullptr,
+		Upload.Buffer.GetIID(),
+		Upload.Buffer.InitPtr());
+	ThrowIfFailed(result, "CreateCommittedResource(Upload.Buffer) failed");
+
+	D3D12_RANGE readRange = {};
+	result = Upload.Buffer->Map(0, &readRange, (void**)&Upload.Data);
+	ThrowIfFailed(result, "Map(ScenePass.VertexBuffer) failed");
+}
+
+void UD3D12RenderDevice::ReleaseUploadBuffer()
+{
+	if (Upload.Data)
+	{
+		Upload.Buffer->Unmap(0, nullptr);
+		Upload.Data = nullptr;
+	}
+
+	Upload.Buffer.reset();
 }
 
 void UD3D12RenderDevice::CreateScenePass()
@@ -1382,7 +1426,7 @@ void UD3D12RenderDevice::CreatePresentPass()
 		&defaultHeapProps,
 		D3D12_HEAP_FLAG_NONE,
 		&texDesc,
-		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, // D3D12_RESOURCE_STATE_COPY_DEST
+		D3D12_RESOURCE_STATE_COPY_DEST,
 		nullptr,
 		PresentPass.DitherTexture.GetIID(),
 		PresentPass.DitherTexture.InitPtr());
@@ -1400,9 +1444,88 @@ void UD3D12RenderDevice::CreatePresentPass()
 		.8515625, .6015625, .9765625, .7265625, .8671875, .6171875, .9921875, .7421875
 	};
 
-	// To do: upload ditherdata
-	//Device->GetCopyableFootprints(...);
-	//CommandList->CopyTextureRegion(...);
+	auto onWriteSubresource = [](uint8_t* dest, int subresource, const D3D12_SUBRESOURCE_FOOTPRINT& footprint)
+		{
+			const float* src = ditherdata;
+			for (int y = 0; y < 8; y++)
+			{
+				memcpy(dest, src, 8 * sizeof(float));
+				src += 8;
+				dest += footprint.RowPitch;
+			}
+		};
+
+	UploadTexture(PresentPass.DitherTexture, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, 0, 0, 8, 8, 0, 1, onWriteSubresource);
+}
+
+void UD3D12RenderDevice::UploadTexture(ID3D12Resource* resource, D3D12_RESOURCE_STATES stateBefore, D3D12_RESOURCE_STATES stateAfter, int x, int y, int width, int height, int firstSubresource, int numSubresources, const std::function<void(uint8_t* dest, int subresource, const D3D12_SUBRESOURCE_FOOTPRINT& footprint)>& onWriteSubresource)
+{
+	if (stateBefore != D3D12_RESOURCE_STATE_COPY_DEST)
+	{
+		D3D12_RESOURCE_BARRIER barrier0 = {};
+		barrier0.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+		barrier0.Transition.pResource = resource;
+		barrier0.Transition.StateBefore = stateBefore;
+		barrier0.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_DEST;
+		barrier0.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+		CommandList->ResourceBarrier(1, &barrier0);
+	}
+
+	Upload.Transfer.Footprints.resize(numSubresources);
+	Upload.Transfer.NumRows.resize(numSubresources);
+	Upload.Transfer.RowSizeInBytes.resize(numSubresources);
+
+	D3D12_BOX srcBox = {};
+	srcBox.right = width;
+	srcBox.bottom = height;
+	srcBox.back = 1;
+
+	D3D12_RESOURCE_DESC desc = resource->GetDesc();
+	desc.Width = width;
+	desc.Height = height;
+
+	UINT64 totalSize = 0;
+	Device->GetCopyableFootprints(&desc, firstSubresource, numSubresources, Upload.Pos, Upload.Transfer.Footprints.data(), Upload.Transfer.NumRows.data(), Upload.Transfer.RowSizeInBytes.data(), &totalSize);
+
+	if (Upload.Pos + totalSize > Upload.Size)
+	{
+		WaitForCommands(false);
+		if (Upload.Pos + totalSize > Upload.Size)
+		{
+			debugf(TEXT("Could not upload texture. Total memory requirements are bigger than the entire upload buffer!"));
+			return;
+		}
+	}
+
+	for (int i = 0; i < numSubresources; i++)
+	{
+		onWriteSubresource(Upload.Data + Upload.Transfer.Footprints[i].Offset, i, Upload.Transfer.Footprints[i].Footprint);
+
+		D3D12_TEXTURE_COPY_LOCATION src = {};
+		src.pResource = Upload.Buffer;
+		src.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+		src.PlacedFootprint = Upload.Transfer.Footprints[i];
+
+		D3D12_TEXTURE_COPY_LOCATION dest = {};
+		dest.pResource = resource;
+		dest.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+		dest.SubresourceIndex = firstSubresource + i;
+
+		CommandList->CopyTextureRegion(&dest, x, y, 0, &src, &srcBox);
+	}
+
+	Upload.Pos += totalSize;
+
+	if (stateAfter != D3D12_RESOURCE_STATE_COPY_DEST)
+	{
+		D3D12_RESOURCE_BARRIER barrier1 = {};
+		barrier1.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+		barrier1.Transition.pResource = resource;
+		barrier1.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+		barrier1.Transition.StateAfter = stateAfter;
+		barrier1.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+		CommandList->ResourceBarrier(1, &barrier1);
+	}
 }
 
 #if defined(UNREALGOLD)
@@ -2710,12 +2833,11 @@ void UD3D12RenderDevice::EndFlash()
 	{
 		DrawBatches();
 
-		/*
 		SceneConstants.ObjectToProjection = mat4::identity();
 		SceneConstants.NearClip = vec4(0.0f, 0.0f, 0.0f, 1.0f);
 		CommandList->SetGraphicsRoot32BitConstants(2, sizeof(ScenePushConstants) / sizeof(uint32_t), &SceneConstants, 0);
 
-		Batch.Pipeline = &ScenePass.Pipelines[2];
+		Batch.Pipeline = ScenePass.Pipelines[2];
 		SetDescriptorSet(0);
 
 		if (SceneVertices && SceneIndexes)
@@ -2750,7 +2872,6 @@ void UD3D12RenderDevice::EndFlash()
 
 			AddDrawBatch();
 		}
-		*/
 
 		if (CurrentFrame)
 			SetSceneNode(CurrentFrame);

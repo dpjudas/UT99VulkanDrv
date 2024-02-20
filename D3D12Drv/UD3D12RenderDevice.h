@@ -6,6 +6,7 @@
 #include "TextureManager.h"
 #include "UploadManager.h"
 #include "CachedTexture.h"
+#include <functional>
 
 struct SceneVertex
 {
@@ -194,6 +195,20 @@ public:
 
 	struct
 	{
+		ComPtr<ID3D12Resource> Buffer;
+		uint8_t* Data = nullptr;
+		UINT64 Pos = 0;
+		const UINT64 Size = 64 * 1024 * 1024;
+		struct
+		{
+			std::vector<D3D12_PLACED_SUBRESOURCE_FOOTPRINT> Footprints;
+			std::vector<UINT> NumRows;
+			std::vector<UINT64> RowSizeInBytes;
+		} Transfer;
+	} Upload;
+
+	struct
+	{
 		ComPtr<ID3D12RootSignature> RootSignature;
 		ComPtr<ID3D12PipelineState> HitResolve;
 		ComPtr<ID3D12PipelineState> Present[16];
@@ -251,6 +266,10 @@ public:
 private:
 	void ResizeSceneBuffers(int width, int height, int multisample);
 	void ClearTextureCache();
+
+	void CreateUploadBuffer();
+	void ReleaseUploadBuffer();
+	void UploadTexture(ID3D12Resource* resource, D3D12_RESOURCE_STATES stateBefore, D3D12_RESOURCE_STATES stateAfter, int x, int y, int width, int height, int firstSubresource, int numSubresources, const std::function<void(uint8_t* dest, int subresource, const D3D12_SUBRESOURCE_FOOTPRINT& footprint)>& onWriteSubresource);
 
 	void CreatePresentPass();
 	void CreateBloomPass();

@@ -17,8 +17,6 @@ public:
 	void UploadTexture(CachedTexture* tex, const FTextureInfo& Info, bool masked);
 	void UploadTextureRect(CachedTexture* tex, const FTextureInfo& Info, int x, int y, int w, int h);
 
-	void SubmitUploads();
-
 	void UploadWhite(ID3D12Resource* image);
 
 private:
