@@ -263,13 +263,14 @@ public:
 		int BuffersUsed = 0;
 	} Stats;
 
+	void UploadTexture(ID3D12Resource* resource, D3D12_RESOURCE_STATES stateBefore, D3D12_RESOURCE_STATES stateAfter, int x, int y, int width, int height, int firstSubresource, int numSubresources, const std::function<void(uint8_t* dest, int subresource, const D3D12_SUBRESOURCE_FOOTPRINT& footprint)>& onWriteSubresource);
+
 private:
 	void ResizeSceneBuffers(int width, int height, int multisample);
 	void ClearTextureCache();
 
 	void CreateUploadBuffer();
 	void ReleaseUploadBuffer();
-	void UploadTexture(ID3D12Resource* resource, D3D12_RESOURCE_STATES stateBefore, D3D12_RESOURCE_STATES stateAfter, int x, int y, int width, int height, int firstSubresource, int numSubresources, const std::function<void(uint8_t* dest, int subresource, const D3D12_SUBRESOURCE_FOOTPRINT& footprint)>& onWriteSubresource);
 
 	void CreatePresentPass();
 	void CreateBloomPass();

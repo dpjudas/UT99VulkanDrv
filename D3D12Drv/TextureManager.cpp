@@ -84,7 +84,7 @@ CachedTexture* TextureManager::GetNullTexture()
 		&defaultHeapProps,
 		D3D12_HEAP_FLAG_NONE,
 		&texDesc,
-		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, // D3D12_RESOURCE_STATE_COPY_DEST
+		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
 		nullptr,
 		NullTexture->Texture.GetIID(),
 		NullTexture->Texture.InitPtr());

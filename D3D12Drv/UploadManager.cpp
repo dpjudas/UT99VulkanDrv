@@ -84,7 +84,7 @@ void UploadManager::UploadTexture(CachedTexture* tex, const FTextureInfo& Info, 
 			&defaultHeapProps,
 			D3D12_HEAP_FLAG_NONE,
 			&texDesc,
-			D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, // D3D12_RESOURCE_STATE_COPY_DEST
+			D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
 			nullptr,
 			tex->Texture.GetIID(),
 			tex->Texture.InitPtr());
@@ -116,60 +116,70 @@ void UploadManager::UploadTextureRect(CachedTexture* tex, const FTextureInfo& In
 
 	UINT pitch = uploader->GetUploadSize(0, 0, w, 1);
 
-	/*
-	D3D12_BOX box = {};
-	box.left = x;
-	box.top = y;
-	box.right = x + w;
-	box.bottom = y + h;
-	box.back = 1;
-	renderer->CommandList->UpdateSubresource(tex->Texture, CalcSubresource(0, 0, Info.NumMips), &box, data, pitch, 0);
-	*/
+	auto onWriteSubresource = [&](uint8_t* dest, int subresource, const D3D12_SUBRESOURCE_FOOTPRINT& footprint)
+		{
+			const uint8_t* src = data;
+			for (int y = 0; y < h; y++)
+			{
+				memcpy(dest, src, pitch);
+				src += pitch;
+				dest += footprint.RowPitch;
+			}
+		};
+
+	renderer->UploadTexture(tex->Texture, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, x, y, w, h, 0, 1, onWriteSubresource);
 
 	renderer->Stats.RectUploads++;
 }
 
 void UploadManager::UploadData(ID3D12Resource* image, const FTextureInfo& Info, bool masked, TextureUploader* uploader, int dummyMipmapCount, INT minSize)
 {
-	for (INT level = 0; level < Info.NumMips; level++)
-	{
-		FMipmapBase* Mip = Info.Mips[level];
-		if (Mip->DataPtr)
+	uint32_t width = Max(Info.USize, minSize);
+	uint32_t height = Max(Info.VSize, minSize);
+
+	auto onWriteSubresource = [&](uint8_t* dest, int subresource, const D3D12_SUBRESOURCE_FOOTPRINT& footprint)
 		{
-			uint32_t mipwidth = Max(Mip->USize, minSize);
-			uint32_t mipheight = Max(Mip->VSize, minSize);
+			int level = subresource - dummyMipmapCount;
+			if (level < 0)
+				return;
 
-			INT mipsize = uploader->GetUploadSize(0, 0, mipwidth, mipheight);
-			mipsize = (mipsize + 15) / 16 * 16; // memory alignment
+			FMipmapBase* Mip = Info.Mips[level];
+			if (Mip->DataPtr)
+			{
+				uint32_t mipwidth = Max(Mip->USize, minSize);
+				uint32_t mipheight = Max(Mip->VSize, minSize);
 
-			auto data = (uint32_t*)GetUploadBuffer(mipsize);
-			uploader->UploadRect(data, Mip, 0, 0, mipwidth, mipheight, Info.Palette, masked);
+				INT mipsize = uploader->GetUploadSize(0, 0, mipwidth, mipheight);
+				mipsize = (mipsize + 15) / 16 * 16; // memory alignment
 
-			UINT pitch = uploader->GetUploadSize(0, 0, mipwidth, 1);
+				auto data = GetUploadBuffer(mipsize);
+				uploader->UploadRect(data, Mip, 0, 0, mipwidth, mipheight, Info.Palette, masked);
 
-			D3D12_BOX box = {};
-			box.right = mipwidth;
-			box.bottom = mipheight;
-			box.back = 1;
+				UINT pitch = uploader->GetUploadSize(0, 0, mipwidth, 1);
 
-			UINT subresource = CalcSubresource(level + dummyMipmapCount, 0, Info.NumMips + dummyMipmapCount);
-			//renderer->CommandList->UpdateSubresource(image, subresource, &box, data, pitch, 0);
-		}
-	}
+				uint32_t h = uploader->GetUploadHeight(mipheight);
+				const uint8_t* src = data;
+				for (uint32_t y = 0; y < h; y++)
+				{
+					memcpy(dest, src, pitch);
+					src += pitch;
+					dest += footprint.RowPitch;
+				}
+			}
+		};
+
+	renderer->UploadTexture(image, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, 0, 0, width, height, 0, Info.NumMips + dummyMipmapCount, onWriteSubresource);
 }
 
 void UploadManager::UploadWhite(ID3D12Resource* image)
 {
-	auto data = (uint32_t*)GetUploadBuffer(sizeof(uint32_t));
-	data[0] = 0xffffffff;
+	auto onWriteSubresource = [this](uint8_t* dest, int subresource, const D3D12_SUBRESOURCE_FOOTPRINT& footprint)
+		{
+			auto data = (uint32_t*)dest;
+			data[0] = 0xffffffff;
+		};
 
-	/*
-	D3D12_BOX box = {};
-	box.right = 1;
-	box.bottom = 1;
-	box.back = 1;
-	renderer->CommandList->UpdateSubresource(image, CalcSubresource(0, 0, 1), &box, data, 4, 0);
-	*/
+	renderer->UploadTexture(image, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, 0, 0, 1, 1, 0, 1, onWriteSubresource);
 }
 
 uint8_t* UploadManager::GetUploadBuffer(size_t size)

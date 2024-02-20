@@ -1475,11 +1475,6 @@ void UD3D12RenderDevice::UploadTexture(ID3D12Resource* resource, D3D12_RESOURCE_
 	Upload.Transfer.NumRows.resize(numSubresources);
 	Upload.Transfer.RowSizeInBytes.resize(numSubresources);
 
-	D3D12_BOX srcBox = {};
-	srcBox.right = width;
-	srcBox.bottom = height;
-	srcBox.back = 1;
-
 	D3D12_RESOURCE_DESC desc = resource->GetDesc();
 	desc.Width = width;
 	desc.Height = height;
@@ -1510,6 +1505,32 @@ void UD3D12RenderDevice::UploadTexture(ID3D12Resource* resource, D3D12_RESOURCE_
 		dest.pResource = resource;
 		dest.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
 		dest.SubresourceIndex = firstSubresource + i;
+
+		D3D12_BOX srcBox = {};
+		srcBox.right = Max(width >> i, 1);
+		srcBox.bottom = Max(height >> i, 1);
+		srcBox.back = 1;
+
+		// Block compressed requires the box to be 4x4 aligned
+		switch (desc.Format)
+		{
+		case DXGI_FORMAT_BC1_TYPELESS:
+		case DXGI_FORMAT_BC1_UNORM:
+		case DXGI_FORMAT_BC1_UNORM_SRGB:
+		case DXGI_FORMAT_BC2_TYPELESS:
+		case DXGI_FORMAT_BC2_UNORM:
+		case DXGI_FORMAT_BC2_UNORM_SRGB:
+		case DXGI_FORMAT_BC3_TYPELESS:
+		case DXGI_FORMAT_BC3_UNORM:
+		case DXGI_FORMAT_BC3_UNORM_SRGB:
+		case DXGI_FORMAT_BC4_TYPELESS:
+		case DXGI_FORMAT_BC4_UNORM:
+		case DXGI_FORMAT_BC5_TYPELESS:
+		case DXGI_FORMAT_BC5_UNORM:
+			srcBox.right = (srcBox.right + 3) / 4 * 4;
+			srcBox.bottom = (srcBox.bottom + 3) / 4 * 4;
+			break;
+		}
 
 		CommandList->CopyTextureRegion(&dest, x, y, 0, &src, &srcBox);
 	}

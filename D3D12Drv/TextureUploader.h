@@ -12,6 +12,7 @@ public:
 
 	virtual int GetUploadSize(int x, int y, int w, int h) = 0;
 	virtual void UploadRect(void* dst, FMipmapBase* mip, int x, int y, int w, int h, FColor* palette, bool masked) = 0;
+	virtual int GetUploadHeight(int h) { return h; }
 
 	DXGI_FORMAT GetDxgiFormat() const { return Format; }
 
@@ -94,6 +95,7 @@ public:
 
 	int GetUploadSize(int x, int y, int w, int h) override;
 	void UploadRect(void* dst, FMipmapBase* mip, int x, int y, int w, int h, FColor* palette, bool masked) override;
+	int GetUploadHeight(int h) override { return (h + 3) / 4; }
 
 private:
 	int BytesPerBlock;
@@ -106,6 +108,7 @@ public:
 
 	int GetUploadSize(int x, int y, int w, int h) override;
 	void UploadRect(void* dst, FMipmapBase* mip, int x, int y, int w, int h, FColor* palette, bool masked) override;
+	int GetUploadHeight(int h) override { return (h + BlockY - 1) / BlockY; }
 
 private:
 	int BlockX;
