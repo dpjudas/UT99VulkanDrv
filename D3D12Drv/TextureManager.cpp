@@ -90,9 +90,6 @@ CachedTexture* TextureManager::GetNullTexture()
 		NullTexture->Texture.InitPtr());
 	ThrowIfFailed(result, "CreateCommittedResource(NullTexture) failed");
 
-	// NullTexture->TextureSRV = renderer->Heaps.Common->Alloc(1);
-	// renderer->Device->CreateShaderResourceView(NullTexture->Texture, nullptr, NullTexture->TextureSRV.CPUHandle());
-
 	renderer->Uploads->UploadWhite(NullTexture->Texture);
 
 	return NullTexture.get();

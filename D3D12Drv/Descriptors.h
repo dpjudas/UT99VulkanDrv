@@ -31,6 +31,8 @@ public:
 
 	void reset();
 
+	operator bool() const { return Count != 0; }
+
 private:
 	DescriptorHeap* Allocator = nullptr;
 	int BaseIndex = 0;

@@ -41,6 +41,40 @@ struct BloomPushConstants
 	float SampleWeights[8];
 };
 
+struct TexDescriptorKey
+{
+	TexDescriptorKey(CachedTexture* tex, CachedTexture* lightmap, CachedTexture* detailtex, CachedTexture* macrotex) : tex(tex), lightmap(lightmap), detailtex(detailtex), macrotex(macrotex) { }
+
+	bool operator==(const TexDescriptorKey& other) const
+	{
+		return tex == other.tex && lightmap == other.lightmap && detailtex == other.detailtex && macrotex == other.macrotex;
+	}
+
+	bool operator<(const TexDescriptorKey& other) const
+	{
+		if (tex != other.tex)
+			return tex < other.tex;
+		else if (lightmap != other.lightmap)
+			return lightmap < other.lightmap;
+		else if (detailtex != other.detailtex)
+			return detailtex < other.detailtex;
+		return macrotex < other.macrotex;
+	}
+
+	CachedTexture* tex;
+	CachedTexture* lightmap;
+	CachedTexture* detailtex;
+	CachedTexture* macrotex;
+};
+
+template<> struct std::hash<TexDescriptorKey>
+{
+	std::size_t operator()(const TexDescriptorKey& k) const
+	{
+		return (((std::size_t)k.tex ^ (std::size_t)k.lightmap));
+	}
+};
+
 #if defined(OLDUNREAL469SDK)
 class UD3D12RenderDevice : public URenderDeviceOldUnreal469
 {
@@ -114,6 +148,12 @@ public:
 		std::unique_ptr<DescriptorHeap> DSV;
 	} Heaps;
 
+	struct
+	{
+		std::unordered_map<TexDescriptorKey, DescriptorSet> Tex;
+		std::unordered_map<uint32_t, DescriptorSet> Sampler;
+	} Descriptors;
+
 	ComPtr<ID3D12CommandAllocator> CommandAllocator;
 	ComPtr<ID3D12GraphicsCommandList> CommandList;
 
@@ -161,12 +201,13 @@ public:
 		ComPtr<ID3D12Resource> IndexBuffer;
 		D3D12_VERTEX_BUFFER_VIEW VertexBufferView = {};
 		D3D12_INDEX_BUFFER_VIEW IndexBufferView = {};
-		DescriptorSet Samplers;
+		D3D12_SAMPLER_DESC Samplers[16] = {};
 		ComPtr<ID3D12RootSignature> RootSignature;
 		ComPtr<ID3D12PipelineState> Pipelines[32];
 		ComPtr<ID3D12PipelineState> LinePipeline[2];
 		ComPtr<ID3D12PipelineState> PointPipeline;
 		FLOAT LODBias = 0.0f;
+		int Multisample = 1;
 	} ScenePass;
 
 	static const int SceneVertexBufferSize = 1024 * 1024;
@@ -281,7 +322,7 @@ private:
 
 	void CreateSceneSamplers();
 	void ReleaseSceneSamplers();
-	void UpdateLODBias();
+	void UpdateScenePass();
 
 	void ReleaseSceneBuffers();
 

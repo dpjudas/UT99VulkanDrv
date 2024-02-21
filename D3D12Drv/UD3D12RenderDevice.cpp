@@ -204,7 +204,6 @@ UBOOL UD3D12RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 		CommandList->SetDescriptorHeaps(2, heaps);
 
 		CreateUploadBuffer();
-		CreateScenePass();
 		CreatePresentPass();
 		CreateBloomPass();
 
@@ -887,7 +886,6 @@ void UD3D12RenderDevice::CreateScenePass()
 
 void UD3D12RenderDevice::CreateSceneSamplers()
 {
-	ScenePass.Samplers = Heaps.Sampler->Alloc(16);
 	for (int i = 0; i < 16; i++)
 	{
 		int dummyMipmapCount = (i >> 2) & 3;
@@ -907,8 +905,7 @@ void UD3D12RenderDevice::CreateSceneSamplers()
 		samplerDesc.AddressU = addressmode;
 		samplerDesc.AddressV = addressmode;
 		samplerDesc.AddressW = addressmode;
-
-		Device->CreateSampler(&samplerDesc, ScenePass.Samplers.CPUHandle(i));
+		ScenePass.Samplers[i] = samplerDesc;
 	}
 
 	ScenePass.LODBias = LODBias;
@@ -916,12 +913,20 @@ void UD3D12RenderDevice::CreateSceneSamplers()
 
 void UD3D12RenderDevice::ReleaseSceneSamplers()
 {
-	ScenePass.Samplers.reset();
+	for (auto& it : Descriptors.Sampler)
+		it.second.reset();
+	Descriptors.Sampler.clear();
 	ScenePass.LODBias = 0.0f;
 }
 
-void UD3D12RenderDevice::UpdateLODBias()
+void UD3D12RenderDevice::UpdateScenePass()
 {
+	if (!ScenePass.RootSignature || ScenePass.Multisample != SceneBuffers.Multisample)
+	{
+		ReleaseScenePass();
+		CreateScenePass();
+	}
+
 	if (ScenePass.LODBias != LODBias)
 	{
 		ReleaseSceneSamplers();
@@ -1658,6 +1663,8 @@ void UD3D12RenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane Scr
 		}
 	}
 
+	UpdateScenePass();
+
 	HitData = InHitData;
 	HitSize = InHitSize;
 
@@ -1898,8 +1905,6 @@ void UD3D12RenderDevice::Unlock(UBOOL Blit)
 
 		ID3D12DescriptorHeap* heaps[] = { Heaps.Common->GetHeap(), Heaps.Sampler->GetHeap() };
 		CommandList->SetDescriptorHeaps(2, heaps);
-
-		UpdateLODBias();
 	}
 
 	if (HitData)
@@ -2939,6 +2944,9 @@ void UD3D12RenderDevice::PrecacheTexture(FTextureInfo& Info, DWORD PolyFlags)
 void UD3D12RenderDevice::ClearTextureCache()
 {
 	Textures->ClearCache();
+	for (auto& it : Descriptors.Tex)
+		it.second.reset();
+	Descriptors.Tex.clear();
 }
 
 void UD3D12RenderDevice::AddDrawBatch()
@@ -2973,34 +2981,32 @@ void UD3D12RenderDevice::DrawEntry(const DrawBatchEntry& entry)
 {
 	size_t icount = entry.SceneIndexEnd - entry.SceneIndexStart;
 
-	/*
-	ID3D12ShaderResourceView* views[4] =
+	DescriptorSet& common = Descriptors.Tex[{ entry.Tex, entry.Lightmap, entry.Detailtex, entry.Macrotex }];
+	if (!common)
 	{
-		entry.Tex ? entry.Tex->View : Textures->GetNullTexture()->View,
-		entry.Lightmap ? entry.Lightmap->View : Textures->GetNullTexture()->View,
-		entry.Macrotex ? entry.Macrotex->View : Textures->GetNullTexture()->View,
-		entry.Detailtex ? entry.Detailtex->View : Textures->GetNullTexture()->View
-	};
+		common = Heaps.Common->Alloc(4);
+		Device->CreateShaderResourceView(entry.Tex ? entry.Tex->Texture : Textures->GetNullTexture()->Texture, nullptr, common.CPUHandle(0));
+		Device->CreateShaderResourceView(entry.Lightmap ? entry.Lightmap->Texture : Textures->GetNullTexture()->Texture, nullptr, common.CPUHandle(1));
+		Device->CreateShaderResourceView(entry.Macrotex ? entry.Macrotex->Texture : Textures->GetNullTexture()->Texture, nullptr, common.CPUHandle(2));
+		Device->CreateShaderResourceView(entry.Detailtex ? entry.Detailtex->Texture : Textures->GetNullTexture()->Texture, nullptr, common.CPUHandle(3));
+	}
 
-	ID3D12SamplerState* samplers[4] =
+	DescriptorSet& sampler = Descriptors.Sampler[(entry.TexSamplerMode << 16) | (entry.DetailtexSamplerMode << 8) | entry.MacrotexSamplerMode];
+	if (!sampler)
 	{
-		ScenePass.Samplers[entry.TexSamplerMode],
-		ScenePass.Samplers[0],
-		ScenePass.Samplers[entry.MacrotexSamplerMode],
-		ScenePass.Samplers[entry.DetailtexSamplerMode]
-	};
+		sampler = Heaps.Sampler->Alloc(4);
+		Device->CreateSampler(&ScenePass.Samplers[entry.TexSamplerMode], sampler.CPUHandle(0));
+		Device->CreateSampler(&ScenePass.Samplers[0], sampler.CPUHandle(1));
+		Device->CreateSampler(&ScenePass.Samplers[entry.MacrotexSamplerMode], sampler.CPUHandle(2));
+		Device->CreateSampler(&ScenePass.Samplers[entry.DetailtexSamplerMode], sampler.CPUHandle(3));
+	}
 
-	CommandList->PSSetSamplers(0, 4, samplers);
-	CommandList->PSSetShaderResources(0, 4, views);
-	CommandList->PSSetShader(entry.Pipeline->PixelShader, nullptr, 0);
+	// CommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST); // To do: can also be lines and points
 
-	CommandList->OMSetBlendState(entry.Pipeline->BlendState, nullptr, 0xffffffff);
-	CommandList->OMSetDepthStencilState(entry.Pipeline->DepthStencilState, 0);
-
-	CommandList->IASetPrimitiveTopology(entry.Pipeline->PrimitiveTopology);
-
-	CommandList->DrawIndexed(icount, entry.SceneIndexStart, 0);
-	*/
+	CommandList->SetPipelineState(entry.Pipeline);
+	CommandList->SetGraphicsRootDescriptorTable(0, common.GPUHandle());
+	CommandList->SetGraphicsRootDescriptorTable(1, sampler.GPUHandle());
+	CommandList->DrawIndexedInstanced(icount, 0, entry.SceneIndexStart, 0, 0);
 
 	Stats.DrawCalls++;
 }

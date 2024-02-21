@@ -89,9 +89,6 @@ void UploadManager::UploadTexture(CachedTexture* tex, const FTextureInfo& Info, 
 			tex->Texture.GetIID(),
 			tex->Texture.InitPtr());
 		ThrowIfFailed(result, "CreateCommittedResource(GameTexture) failed");
-
-		// tex->TextureSRV = renderer->Heaps.Common->Alloc(1);
-		// renderer->Device->CreateShaderResourceView(tex->Texture, nullptr, tex->TextureSRV.CPUHandle());
 	}
 
 	if (uploader)
