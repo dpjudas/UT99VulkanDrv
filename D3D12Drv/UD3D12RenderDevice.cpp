@@ -3006,7 +3006,7 @@ void UD3D12RenderDevice::DrawEntry(const DrawBatchEntry& entry)
 	CommandList->SetPipelineState(entry.Pipeline);
 	CommandList->SetGraphicsRootDescriptorTable(0, common.GPUHandle());
 	CommandList->SetGraphicsRootDescriptorTable(1, sampler.GPUHandle());
-	CommandList->DrawIndexedInstanced(icount, 0, entry.SceneIndexStart, 0, 0);
+	CommandList->DrawIndexedInstanced(icount, 1, entry.SceneIndexStart, 0, 0);
 
 	Stats.DrawCalls++;
 }
