@@ -343,6 +343,12 @@ void UD3D12RenderDevice::WaitForCommands(bool present)
 	CommandAllocator->Reset();
 	CommandList->Reset(CommandAllocator, nullptr);
 
+	if (Heaps.Common && Heaps.Sampler)
+	{
+		ID3D12DescriptorHeap* heaps[] = { Heaps.Common->GetHeap(), Heaps.Sampler->GetHeap() };
+		CommandList->SetDescriptorHeaps(2, heaps);
+	}
+
 	Upload.Pos = 0;
 }
 
@@ -648,7 +654,7 @@ void UD3D12RenderDevice::CreateUploadBuffer()
 
 	D3D12_RANGE readRange = {};
 	result = Upload.Buffer->Map(0, &readRange, (void**)&Upload.Data);
-	ThrowIfFailed(result, "Map(ScenePass.VertexBuffer) failed");
+	ThrowIfFailed(result, "Map(Upload.Buffer) failed");
 }
 
 void UD3D12RenderDevice::ReleaseUploadBuffer()
@@ -1414,7 +1420,7 @@ void UD3D12RenderDevice::CreatePresentPass()
 	static const char* transferFunctions[2] = { nullptr, "HDR_MODE" };
 	static const char* gammaModes[2] = { "GAMMA_MODE_D3D9", "GAMMA_MODE_XOPENGL" };
 	static const char* colorModes[4] = { nullptr, "COLOR_CORRECT_MODE0", "COLOR_CORRECT_MODE1", "COLOR_CORRECT_MODE2" };
-	for (int i = 0; i < 16; i++)
+	for (int i = 0; i < 32; i++)
 	{
 		std::vector<std::string> defines;
 		if (transferFunctions[i & 1]) defines.push_back(transferFunctions[i & 1]);
@@ -1438,7 +1444,7 @@ void UD3D12RenderDevice::CreatePresentPass()
 		psoDesc.SampleDesc.Count = 1;
 		psoDesc.SampleMask = UINT_MAX;
 		psoDesc.NumRenderTargets = 1;
-		psoDesc.RTVFormats[0] = ActiveHdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM;
+		psoDesc.RTVFormats[0] = (i & 16) ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM;
 
 		HRESULT result = Device->CreateGraphicsPipelineState(&psoDesc, PresentPass.Present[i].GetIID(), PresentPass.Present[i].InitPtr());
 		ThrowIfFailed(result, "CreateGraphicsPipelineState(Present) failed");
@@ -1867,7 +1873,7 @@ void UD3D12RenderDevice::Unlock(UBOOL Blit)
 
 		// Select present shader based on what the user is actually using
 		int presentShader = 0;
-		if (ActiveHdr) presentShader |= 1;
+		if (ActiveHdr) presentShader |= (1 | 16); // 1 = HDR in shader, 16 = output is rgba16f
 		if (GammaMode == 1) presentShader |= 2;
 		if (pushconstants.Brightness != 0.0f || pushconstants.Contrast != 1.0f || pushconstants.Saturation != 1.0f) presentShader |= (Clamp(GrayFormula, 0, 2) + 1) << 2;
 
@@ -1891,9 +1897,6 @@ void UD3D12RenderDevice::Unlock(UBOOL Blit)
 		SceneIndexPos = 0;
 
 		WaitForCommands(true);
-
-		ID3D12DescriptorHeap* heaps[] = { Heaps.Common->GetHeap(), Heaps.Sampler->GetHeap() };
-		CommandList->SetDescriptorHeaps(2, heaps);
 	}
 
 	if (HitData)
@@ -2746,27 +2749,15 @@ void UD3D12RenderDevice::ReadPixels(FColor* Pixels)
 {
 	guard(UD3D12RenderDevice::GetStats);
 
-	/*
-	ID3D12Texture2D* stagingTexture = nullptr;
-
-	D3D12_TEXTURE2D_DESC texDesc = {};
-	texDesc.Usage = D3D12_USAGE_STAGING;
-	texDesc.BindFlags = 0;
-	texDesc.Width = SceneBuffers.Width;
-	texDesc.Height = SceneBuffers.Height;
-	texDesc.MipLevels = 1;
-	texDesc.ArraySize = 1;
-	texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
-	texDesc.SampleDesc.Count = 1;
-	texDesc.SampleDesc.Quality = 0;
-	texDesc.CPUAccessFlags = D3D12_CPU_ACCESS_READ;
-	HRESULT result = Device->CreateTexture2D(&texDesc, nullptr, &stagingTexture);
-	if (FAILED(result))
-		return;
+	ID3D12Resource* imageResource = nullptr;
 
 	if (GammaCorrectScreenshots)
 	{
-		CommandList->OMSetRenderTargets(1, &SceneBuffers.PPImageView[1], FALSE, nullptr);
+		TransitionResourceBarrier(SceneBuffers.PPImage[1], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
+
+		D3D12_CPU_DESCRIPTOR_HANDLE rtv = SceneBuffers.PPImageRTV[1].CPUHandle();
+		CommandList->SetGraphicsRootSignature(PresentPass.RootSignature);
+		CommandList->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
 
 		D3D12_VIEWPORT viewport = {};
 		viewport.Width = Viewport->SizeX;
@@ -2774,40 +2765,84 @@ void UD3D12RenderDevice::ReadPixels(FColor* Pixels)
 		viewport.MaxDepth = 1.0f;
 		CommandList->RSSetViewports(1, &viewport);
 
+		D3D12_RECT box = {};
+		box.right = Viewport->SizeX;
+		box.bottom = Viewport->SizeY;
+		CommandList->RSSetScissorRects(1, &box);
+
 		PresentPushConstants pushconstants = GetPresentPushConstants();
 
 		// Select present shader based on what the user is actually using
-		int presentShader = 0;
-		if (ActiveHdr) presentShader |= 1;
+		int presentShader = 16; // output is always for rgba16f for PPImage[1]
+		if (ActiveHdr) presentShader |= (1 | 16); // 1 = HDR in shader, 16 = output is rgba16f
 		if (GammaMode == 1) presentShader |= 2;
 		if (pushconstants.Brightness != 0.0f || pushconstants.Contrast != 1.0f || pushconstants.Saturation != 1.0f) presentShader |= (Clamp(GrayFormula, 0, 2) + 1) << 2;
 
-		ID3D12ShaderResourceView* psResources[] = { SceneBuffers.PPImageShaderView[0], PresentPass.DitherTextureView };
+		CommandList->SetPipelineState(PresentPass.Present[presentShader]);
 		CommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 		CommandList->IASetVertexBuffers(0, 1, &PresentPass.PPStepVertexBufferView);
-		CommandList->IASetInputLayout(PresentPass.PPStepLayout);
-		CommandList->VSSetShader(PresentPass.PPStep, nullptr, 0);
-		CommandList->RSSetState(PresentPass.RasterizerState);
-		CommandList->PSSetShader(PresentPass.Present[presentShader], nullptr, 0);
-		CommandList->PSSetConstantBuffers(0, 1, &PresentPass.PresentConstantBuffer);
-		CommandList->PSSetShaderResources(0, 2, psResources);
-		CommandList->OMSetDepthStencilState(PresentPass.DepthStencilState, 0);
-		CommandList->OMSetBlendState(PresentPass.BlendState, nullptr, 0xffffffff);
-		CommandList->SetGraphicsRoot32BitConstants(2, sizeof(PresentPushConstants) / sizeof(uint32_t), &pushconstants, 0);
-		CommandList->Draw(6, 0);
+		CommandList->SetGraphicsRootDescriptorTable(0, SceneBuffers.PresentSRVs.GPUHandle());
+		CommandList->SetGraphicsRoot32BitConstants(1, sizeof(PresentPushConstants) / sizeof(uint32_t), &pushconstants, 0);
+		CommandList->DrawInstanced(6, 1, 0, 0);
 
-		CommandList->CopyResource(stagingTexture, SceneBuffers.PPImage[1]);
+		TransitionResourceBarrier(SceneBuffers.PPImage[1], D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COPY_SOURCE);
+		imageResource = SceneBuffers.PPImage[1];
 	}
 	else
 	{
-		CommandList->CopyResource(stagingTexture, SceneBuffers.PPImage[0]);
+		TransitionResourceBarrier(SceneBuffers.PPImage[0], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_SOURCE);
+		imageResource = SceneBuffers.PPImage[0];
 	}
 
-	D3D12_MAPPED_SUBRESOURCE mapped = {};
-	result = CommandList->Map(stagingTexture, 0, D3D12_MAP_READ, 0, &mapped);
+	D3D12_RESOURCE_DESC desc = imageResource->GetDesc();
+	UINT64 totalSize = 0, rowSizeInBytes = 0;
+	D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint = {};
+	UINT numRows = 0;
+	Device->GetCopyableFootprints(&desc, 0, 1, 0, &footprint, &numRows, &rowSizeInBytes, &totalSize);
+
+	D3D12_HEAP_PROPERTIES readbackHeapProps = { D3D12_HEAP_TYPE_READBACK };
+
+	D3D12_RESOURCE_DESC bufDesc = {};
+	bufDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+	bufDesc.Width = totalSize;
+	bufDesc.Height = 1;
+	bufDesc.DepthOrArraySize = 1;
+	bufDesc.MipLevels = 1;
+	bufDesc.SampleDesc.Count = 1;
+	bufDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+	bufDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+
+	ComPtr<ID3D12Resource> buffer;
+	HRESULT result = Device->CreateCommittedResource(
+		&readbackHeapProps,
+		D3D12_HEAP_FLAG_NONE,
+		&bufDesc,
+		D3D12_RESOURCE_STATE_COPY_DEST,
+		nullptr,
+		buffer.GetIID(),
+		buffer.InitPtr());
+	ThrowIfFailed(result, "CreateCommittedResource(ReadPixelsBuffer) failed");
+	buffer->SetName(TEXT("ReadPixelsBuffer"));
+
+	D3D12_TEXTURE_COPY_LOCATION src = {};
+	src.pResource = imageResource;
+	src.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+
+	D3D12_TEXTURE_COPY_LOCATION dest = {};
+	dest.pResource = buffer;
+	dest.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+	dest.PlacedFootprint = footprint;
+
+	CommandList->CopyTextureRegion(&dest, 0, 0, 0, &src, nullptr);
+
+	TransitionResourceBarrier(imageResource, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+	WaitForCommands(false);
+
+	void* data = nullptr;
+	result = buffer->Map(0, nullptr, &data);
 	if (SUCCEEDED(result))
 	{
-		uint8_t* srcpixels = (uint8_t*)mapped.pData;
+		uint8_t* srcpixels = (uint8_t*)data;
 		int w = Viewport->SizeX;
 		int h = Viewport->SizeY;
 		void* data = Pixels;
@@ -2816,7 +2851,7 @@ void UD3D12RenderDevice::ReadPixels(FColor* Pixels)
 		{
 			int desty = GammaCorrectScreenshots ? y : (h - y - 1);
 			uint8_t* dest = (uint8_t*)data + desty * w * 4;
-			uint16_t* src = (uint16_t*)(srcpixels + y * mapped.RowPitch);
+			uint16_t* src = (uint16_t*)(srcpixels + y * footprint.Footprint.RowPitch);
 			for (int x = 0; x < w; x++)
 			{
 				float red = halfToFloatSimple(*(src++));
@@ -2832,11 +2867,9 @@ void UD3D12RenderDevice::ReadPixels(FColor* Pixels)
 			}
 		}
 
-		CommandList->Unmap(stagingTexture, 0);
+		D3D12_RANGE writtenRange = {};
+		buffer->Unmap(0, &writtenRange);
 	}
-
-	stagingTexture->Release();
-	*/
 
 	unguard;
 }

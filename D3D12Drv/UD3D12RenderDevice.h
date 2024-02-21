@@ -252,7 +252,7 @@ public:
 	{
 		ComPtr<ID3D12RootSignature> RootSignature;
 		ComPtr<ID3D12PipelineState> HitResolve;
-		ComPtr<ID3D12PipelineState> Present[16];
+		ComPtr<ID3D12PipelineState> Present[32];
 		ComPtr<ID3D12Resource> PPStepVertexBuffer;
 		ComPtr<ID3D12Resource> DitherTexture;
 		D3D12_VERTEX_BUFFER_VIEW PPStepVertexBufferView = {};
