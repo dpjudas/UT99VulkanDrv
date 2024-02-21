@@ -327,7 +327,7 @@ private:
 	void ReleaseSceneBuffers();
 
 	void RunBloomPass();
-	// void BlurStep(ID3D12ShaderResourceView* input, ID3D12RenderTargetView* output, bool vertical);
+	void BlurStep(const DescriptorSet& input, const DescriptorSet& output, ID3D12Resource* outputResource, bool vertical);
 	float ComputeBlurGaussian(float n, float theta);
 	void ComputeBlurSamples(int sampleCount, float blurAmount, float* sampleWeights);
 
@@ -352,6 +352,8 @@ private:
 
 	void WaitDeviceIdle();
 	void WaitForCommands(bool present);
+	void TransitionResourceBarrier(ID3D12Resource* resource, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after);
+	void TransitionResourceBarrier(ID3D12Resource* resource0, D3D12_RESOURCE_STATES before0, D3D12_RESOURCE_STATES after0, ID3D12Resource* resource1, D3D12_RESOURCE_STATES before1, D3D12_RESOURCE_STATES after1);
 
 	UBOOL UsePrecache;
 	FPlane FlashScale;

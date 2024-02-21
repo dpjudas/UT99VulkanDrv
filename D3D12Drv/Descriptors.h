@@ -26,8 +26,8 @@ private:
 class DescriptorSet
 {
 public:
-	D3D12_CPU_DESCRIPTOR_HANDLE CPUHandle(int index = 0);
-	D3D12_GPU_DESCRIPTOR_HANDLE GPUHandle(int index = 0);
+	D3D12_CPU_DESCRIPTOR_HANDLE CPUHandle(int index = 0) const;
+	D3D12_GPU_DESCRIPTOR_HANDLE GPUHandle(int index = 0) const;
 
 	void reset();
 
@@ -94,7 +94,7 @@ inline void DescriptorSet::reset()
 	Count = 0;
 }
 
-inline D3D12_CPU_DESCRIPTOR_HANDLE DescriptorSet::CPUHandle(int index)
+inline D3D12_CPU_DESCRIPTOR_HANDLE DescriptorSet::CPUHandle(int index) const
 {
 	if (Allocator->CPUStart.ptr == 0)
 	{
@@ -106,7 +106,7 @@ inline D3D12_CPU_DESCRIPTOR_HANDLE DescriptorSet::CPUHandle(int index)
 	return handle;
 }
 
-inline D3D12_GPU_DESCRIPTOR_HANDLE DescriptorSet::GPUHandle(int index)
+inline D3D12_GPU_DESCRIPTOR_HANDLE DescriptorSet::GPUHandle(int index) const
 {
 	if (Allocator->GPUStart.ptr == 0)
 	{
