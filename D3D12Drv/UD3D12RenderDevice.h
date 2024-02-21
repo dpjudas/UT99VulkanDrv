@@ -217,6 +217,7 @@ public:
 	{
 		size_t SceneIndexStart = 0;
 		size_t SceneIndexEnd = 0;
+		D3D_PRIMITIVE_TOPOLOGY PrimitiveTopology = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 		ID3D12PipelineState* Pipeline = nullptr;
 		CachedTexture* Tex = nullptr;
 		CachedTexture* Lightmap = nullptr;
@@ -227,6 +228,8 @@ public:
 		uint32_t MacrotexSamplerMode = 0;
 	} Batch;
 	std::vector<DrawBatchEntry> QueuedBatches;
+
+	D3D_PRIMITIVE_TOPOLOGY CurrentPrimitiveTopology = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 
 	SceneVertex* SceneVertices = nullptr;
 	size_t SceneVertexPos = 0;
@@ -396,6 +399,7 @@ inline void UD3D12RenderDevice::SetPipeline(DWORD PolyFlags)
 	{
 		AddDrawBatch();
 		Batch.Pipeline = pipeline;
+		Batch.PrimitiveTopology = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 	}
 }
 

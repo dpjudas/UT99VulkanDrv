@@ -510,7 +510,7 @@ void UD3D12RenderDevice::ResizeSceneBuffers(int width, int height, int multisamp
 		&defaultHeapProps,
 		D3D12_HEAP_FLAG_NONE,
 		&texDesc,
-		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+		D3D12_RESOURCE_STATE_COPY_SOURCE,
 		nullptr,
 		SceneBuffers.PPHitBuffer.GetIID(),
 		SceneBuffers.PPHitBuffer.InitPtr());
@@ -606,9 +606,15 @@ void UD3D12RenderDevice::ResizeSceneBuffers(int width, int height, int multisamp
 	D3D12_HEAP_PROPERTIES readbackHeapProps = {};
 	readbackHeapProps.Type = D3D12_HEAP_TYPE_READBACK;
 
+	D3D12_RESOURCE_DESC desc = SceneBuffers.PPHitBuffer->GetDesc();
+	UINT64 totalSize = 0, rowSizeInBytes = 0;
+	D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint = {};
+	UINT numRows = 0;
+	Device->GetCopyableFootprints(&desc, 0, 1, 0, &footprint, &numRows, &rowSizeInBytes, &totalSize);
+
 	D3D12_RESOURCE_DESC bufDesc = {};
 	bufDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-	bufDesc.Width = SceneBuffers.Width * SceneBuffers.Height * sizeof(uint32_t);
+	bufDesc.Width = totalSize;
 	bufDesc.Height = 1;
 	bufDesc.DepthOrArraySize = 1;
 	bufDesc.MipLevels = 1;
@@ -1728,6 +1734,7 @@ void UD3D12RenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane Scr
 	CommandList->ClearRenderTargetView(views[1], zero, 0, nullptr);
 	CommandList->ClearDepthStencilView(depthview, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 	CommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	CurrentPrimitiveTopology = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 	CommandList->IASetVertexBuffers(0, 1, &ScenePass.VertexBufferView);
 	CommandList->IASetIndexBuffer(&ScenePass.IndexBufferView);
 
@@ -1887,6 +1894,7 @@ void UD3D12RenderDevice::Unlock(UBOOL Blit)
 		TransitionResourceBarrier(FrameBuffers[BackBufferIndex], D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
 
 		Batch.Pipeline = nullptr;
+		Batch.PrimitiveTopology = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 		Batch.Tex = nullptr;
 		Batch.Lightmap = nullptr;
 		Batch.Detailtex = nullptr;
@@ -1901,7 +1909,6 @@ void UD3D12RenderDevice::Unlock(UBOOL Blit)
 
 	if (HitData)
 	{
-		/*
 		D3D12_BOX box = {};
 		box.left = Viewport->HitX;
 		box.right = Viewport->HitX + Viewport->HitXL;
@@ -1910,10 +1917,16 @@ void UD3D12RenderDevice::Unlock(UBOOL Blit)
 		box.front = 0;
 		box.back = 1;
 
-		// Resolve multisampling
+		// Resolve multisampling and place the result in PPHitBuffer
 		if (SceneBuffers.Multisample > 1)
 		{
-			CommandList->OMSetRenderTargets(1, &SceneBuffers.PPHitBufferView, FALSE, nullptr);
+			TransitionResourceBarrier(
+				SceneBuffers.HitBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+				SceneBuffers.PPHitBuffer, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
+
+			D3D12_CPU_DESCRIPTOR_HANDLE rtv = SceneBuffers.PPHitBufferRTV.CPUHandle();
+			CommandList->SetGraphicsRootSignature(PresentPass.RootSignature);
+			CommandList->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
 
 			D3D12_VIEWPORT viewport = {};
 			viewport.TopLeftX = box.left;
@@ -1923,44 +1936,76 @@ void UD3D12RenderDevice::Unlock(UBOOL Blit)
 			viewport.MaxDepth = 1.0f;
 			CommandList->RSSetViewports(1, &viewport);
 
+			D3D12_RECT box = {};
+			box.right = box.right - box.left;
+			box.bottom = box.bottom - box.top;
+			CommandList->RSSetScissorRects(1, &box);
+
+			CommandList->SetPipelineState(PresentPass.HitResolve);
 			CommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 			CommandList->IASetVertexBuffers(0, 1, &PresentPass.PPStepVertexBufferView);
-			CommandList->IASetInputLayout(PresentPass.PPStepLayout);
-			CommandList->IASetPrimitiveTopology(D3D12_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-			CommandList->VSSetShader(PresentPass.PPStep, nullptr, 0);
-			CommandList->RSSetState(PresentPass.RasterizerState);
-			CommandList->PSSetShader(PresentPass.HitResolve, nullptr, 0);
-			CommandList->PSSetShaderResources(0, 1, &SceneBuffers.HitBufferShaderView);
-			CommandList->OMSetDepthStencilState(PresentPass.DepthStencilState, 0);
-			CommandList->OMSetBlendState(PresentPass.BlendState, nullptr, 0xffffffff);
-
+			CommandList->SetGraphicsRootDescriptorTable(0, SceneBuffers.HitBufferSRV.GPUHandle());
 			CommandList->DrawInstanced(6, 1, 0, 0);
+
+			TransitionResourceBarrier(
+				SceneBuffers.HitBuffer, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET,
+				SceneBuffers.PPHitBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COPY_SOURCE);
 		}
 		else
 		{
-			CommandList->CopySubresourceRegion(SceneBuffers.PPHitBuffer, 0, box.left, box.top, 0, SceneBuffers.HitBuffer, 0, &box);
+			TransitionResourceBarrier(
+				SceneBuffers.HitBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COPY_SOURCE,
+				SceneBuffers.PPHitBuffer, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
+
+			D3D12_TEXTURE_COPY_LOCATION src = {}, dest = {};
+			src.pResource = SceneBuffers.HitBuffer;
+			src.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+			dest.pResource = SceneBuffers.PPHitBuffer;
+			dest.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+			CommandList->CopyTextureRegion(&dest, box.left, box.top, 0, &src, &box);
+
+			TransitionResourceBarrier(
+				SceneBuffers.HitBuffer, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET,
+				SceneBuffers.PPHitBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COPY_SOURCE);
 		}
 
-		// Copy the hit buffer to a mappable texture, but only the part we want to examine
-		CommandList->CopySubresourceRegion(SceneBuffers.StagingHitBuffer, 0, 0, 0, 0, SceneBuffers.PPHitBuffer, 0, &box);
+		// Copy PPHitBuffer to StagingHitbuffer, but only the part we want to examine
+		D3D12_RESOURCE_DESC desc = SceneBuffers.PPHitBuffer->GetDesc();
+		desc.Width = box.right - box.left;
+		desc.Height = box.bottom - box.top;
+		UINT64 totalSize = 0, rowSizeInBytes = 0;
+		D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint = {};
+		UINT numRows = 0;
+		Device->GetCopyableFootprints(&desc, 0, 1, 0, &footprint, &numRows, &rowSizeInBytes, &totalSize);
+		D3D12_TEXTURE_COPY_LOCATION src = {}, dest = {};
+		src.pResource = SceneBuffers.PPHitBuffer;
+		src.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+		dest.pResource = SceneBuffers.StagingHitBuffer;
+		dest.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+		dest.PlacedFootprint = footprint;
+		CommandList->CopyTextureRegion(&dest, 0, 0, 0, &src, &box);
 
 		WaitForCommands(false);
 
 		// Lock the buffer and look for the last hit
 		int hit = 0;
-		HRESULT result = SceneBuffers.StagingHitBuffer->Map(0, &readRange, &pData);
+		void* data = nullptr;
+		D3D12_RANGE readRange = {};
+		readRange.End = totalSize;
+		HRESULT result = SceneBuffers.StagingHitBuffer->Map(0, &readRange, &data);
 		if (SUCCEEDED(result))
 		{
 			int width = Viewport->HitXL;
 			int height = Viewport->HitYL;
 			for (int y = 0; y < height; y++)
 			{
-				const INT* line = (const INT*)(((const char*)mapping.pData) + y * mapping.RowPitch);
+				const INT* line = (const INT*)(((const char*)data) + y * footprint.Footprint.RowPitch);
 				for (int x = 0; x < width; x++)
 				{
 					hit = std::max(hit, line[x]);
 				}
 			}
+			D3D12_RANGE writtenRange = {};
 			SceneBuffers.StagingHitBuffer->Unmap(0, &writtenRange);
 		}
 		hit--;
@@ -1974,7 +2019,7 @@ void UD3D12RenderDevice::Unlock(UBOOL Blit)
 			memcpy(HitData, HitBuffer.data() + query.Start, query.Count);
 			*HitSize = query.Count;
 		}
-		else*/
+		else
 		{
 			*HitSize = 0;
 		}
@@ -2615,6 +2660,7 @@ void UD3D12RenderDevice::Draw3DLine(FSceneNode* Frame, FPlane Color, DWORD LineF
 		{
 			AddDrawBatch();
 			Batch.Pipeline = pipeline;
+			Batch.PrimitiveTopology = D3D_PRIMITIVE_TOPOLOGY_LINELIST;
 		}
 
 		SetDescriptorSet(PF_Highlighted);
@@ -2656,6 +2702,7 @@ void UD3D12RenderDevice::Draw2DLine(FSceneNode* Frame, FPlane Color, DWORD LineF
 	{
 		AddDrawBatch();
 		Batch.Pipeline = pipeline;
+		Batch.PrimitiveTopology = D3D_PRIMITIVE_TOPOLOGY_LINELIST;
 	}
 
 	SetDescriptorSet(PF_Highlighted);
@@ -2692,6 +2739,7 @@ void UD3D12RenderDevice::Draw2DPoint(FSceneNode* Frame, FPlane Color, DWORD Line
 	{
 		AddDrawBatch();
 		Batch.Pipeline = pipeline;
+		Batch.PrimitiveTopology = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 	}
 
 	SetDescriptorSet(PF_Highlighted);
@@ -2886,6 +2934,7 @@ void UD3D12RenderDevice::EndFlash()
 		CommandList->SetGraphicsRoot32BitConstants(2, sizeof(ScenePushConstants) / sizeof(uint32_t), &SceneConstants, 0);
 
 		Batch.Pipeline = ScenePass.Pipelines[2];
+		Batch.PrimitiveTopology = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 		SetDescriptorSet(0);
 
 		if (SceneVertices && SceneIndexes)
@@ -3024,7 +3073,11 @@ void UD3D12RenderDevice::DrawEntry(const DrawBatchEntry& entry)
 		Device->CreateSampler(&ScenePass.Samplers[entry.DetailtexSamplerMode], sampler.CPUHandle(3));
 	}
 
-	// CommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST); // To do: can also be lines and points
+	if (entry.PrimitiveTopology != CurrentPrimitiveTopology)
+	{
+		CurrentPrimitiveTopology = entry.PrimitiveTopology;
+		CommandList->IASetPrimitiveTopology(CurrentPrimitiveTopology);
+	}
 
 	CommandList->SetPipelineState(entry.Pipeline);
 	CommandList->SetGraphicsRootDescriptorTable(0, common.GPUHandle());
