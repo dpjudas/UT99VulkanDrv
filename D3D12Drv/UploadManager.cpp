@@ -131,8 +131,8 @@ void UploadManager::UploadTextureRect(CachedTexture* tex, const FTextureInfo& In
 
 void UploadManager::UploadData(ID3D12Resource* image, const FTextureInfo& Info, bool masked, TextureUploader* uploader, int dummyMipmapCount, INT minSize)
 {
-	uint32_t width = Max(Info.USize, minSize);
-	uint32_t height = Max(Info.VSize, minSize);
+	uint32_t width = Info.USize << dummyMipmapCount;
+	uint32_t height = Info.VSize << dummyMipmapCount;
 
 	auto onWriteSubresource = [&](uint8_t* dest, int subresource, const D3D12_SUBRESOURCE_FOOTPRINT& footprint)
 		{
