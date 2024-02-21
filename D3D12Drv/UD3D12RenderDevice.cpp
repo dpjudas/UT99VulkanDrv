@@ -882,6 +882,8 @@ void UD3D12RenderDevice::CreateScenePass()
 
 	result = ScenePass.IndexBuffer->Map(0, &readRange, (void**)&SceneIndexes);
 	ThrowIfFailed(result, "Map(ScenePass.IndexBuffer) failed");
+
+	ScenePass.Multisample = SceneBuffers.Multisample;
 }
 
 void UD3D12RenderDevice::CreateSceneSamplers()
