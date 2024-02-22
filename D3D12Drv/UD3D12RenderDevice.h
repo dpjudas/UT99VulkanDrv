@@ -130,6 +130,7 @@ public:
 	HWND WindowHandle = 0;
 	ComPtr<ID3D12Debug> DebugController;
 	ComPtr<ID3D12Device> Device;
+	ComPtr<ID3D12InfoQueue1> InfoQueue1;
 	ComPtr<ID3D12CommandQueue> GraphicsQueue;
 	D3D_FEATURE_LEVEL FeatureLevel = D3D_FEATURE_LEVEL_11_0; // To do: find out how to discover this
 	UINT64 FenceValue = 1;
@@ -357,6 +358,11 @@ private:
 	void WaitForCommands(bool present);
 	void TransitionResourceBarrier(ID3D12Resource* resource, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after);
 	void TransitionResourceBarrier(ID3D12Resource* resource0, D3D12_RESOURCE_STATES before0, D3D12_RESOURCE_STATES after0, ID3D12Resource* resource1, D3D12_RESOURCE_STATES before1, D3D12_RESOURCE_STATES after1);
+
+	static void CALLBACK OnDebugMessage(D3D12_MESSAGE_CATEGORY category, D3D12_MESSAGE_SEVERITY severity, D3D12_MESSAGE_ID id, LPCSTR description, void* context);
+
+	bool DebugMessageActive = false;
+	DWORD DebugMessageCookie = 0;
 
 	UBOOL UsePrecache;
 	FPlane FlashScale;

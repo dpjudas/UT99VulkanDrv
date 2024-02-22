@@ -158,6 +158,27 @@ UBOOL UD3D12RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 		result = Device->CreateCommandQueue(&queueDesc, GraphicsQueue.GetIID(), GraphicsQueue.InitPtr());
 		ThrowIfFailed(result, "CreateCommandQueue failed");
 
+		if (UseDebugLayer)
+		{
+			result = Device->QueryInterface(InfoQueue1.GetIID(), InfoQueue1.InitPtr());
+			if (SUCCEEDED(result))
+			{
+				result = InfoQueue1->RegisterMessageCallback(&UD3D12RenderDevice::OnDebugMessage, D3D12_MESSAGE_CALLBACK_FLAG_NONE, this, &DebugMessageCookie);
+				if (SUCCEEDED(result))
+				{
+					DebugMessageActive = true;
+				}
+				else
+				{
+					debugf(TEXT("D3D12InfoQueue1.RegisterMessageCallback failed"));
+				}
+			}
+			else
+			{
+				debugf(TEXT("Could not aquire ID3D12InfoQueue1 object"));
+			}
+		}
+
 		DXGI_SWAP_CHAIN_DESC1 swapDesc = {};
 		swapDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 		swapDesc.Width = NewX;
@@ -425,6 +446,11 @@ void UD3D12RenderDevice::Exit()
 	if (FenceEvent != INVALID_HANDLE_VALUE)
 		CloseHandle(FenceEvent);
 	GraphicsQueue.reset();
+
+	if (DebugMessageActive)
+		InfoQueue1->UnregisterMessageCallback(DebugMessageCookie);
+	InfoQueue1.reset();
+
 	Device.reset();
 	DebugController.reset();
 
@@ -3184,6 +3210,23 @@ std::vector<uint8_t> UD3D12RenderDevice::CompileHlsl(const std::string& filename
 	bytecode.resize(blob->GetBufferSize());
 	memcpy(bytecode.data(), blob->GetBufferPointer(), bytecode.size());
 	return bytecode;
+}
+
+void UD3D12RenderDevice::OnDebugMessage(D3D12_MESSAGE_CATEGORY category, D3D12_MESSAGE_SEVERITY severity, D3D12_MESSAGE_ID id, LPCSTR description, void* context)
+{
+	UD3D12RenderDevice* self = (UD3D12RenderDevice*)context;
+
+	const char* severitystr = "unknown";
+	switch (severity)
+	{
+	case D3D12_MESSAGE_SEVERITY_CORRUPTION: severitystr = "corruption"; break;
+	case D3D12_MESSAGE_SEVERITY_ERROR: severitystr = "error"; break;
+	case D3D12_MESSAGE_SEVERITY_WARNING: severitystr = "warning"; break;
+	case D3D12_MESSAGE_SEVERITY_INFO: severitystr = "info"; break;
+	case D3D12_MESSAGE_SEVERITY_MESSAGE: severitystr = "message"; break;
+	}
+
+	debugf(TEXT("[%s] %s"), to_utf16(severitystr).c_str(), to_utf16(description).c_str());
 }
 
 void ThrowError(HRESULT result, const char* msg)
