@@ -210,8 +210,8 @@ public:
 		int Multisample = 1;
 	} ScenePass;
 
-	static const int SceneVertexBufferSize = 1024 * 1024;
-	static const int SceneIndexBufferSize = 2048 * 1024;
+	static const int SceneVertexBufferSize = 512 * 1024;
+	static const int SceneIndexBufferSize = 1024 * 1024;
 
 	struct DrawBatchEntry
 	{
@@ -387,7 +387,8 @@ private:
 	bool ActiveHdr = false;
 };
 
-inline void ThrowIfFailed(HRESULT result, const char* msg) { if (FAILED(result)) throw std::runtime_error(msg); }
+void ThrowError(HRESULT result, const char* msg);
+inline void ThrowIfFailed(HRESULT result, const char* msg) { if (FAILED(result)) ThrowError(result, msg); }
 
 inline float GetUMult(const FTextureInfo& Info) { return 1.0f / (Info.UScale * Info.USize); }
 inline float GetVMult(const FTextureInfo& Info) { return 1.0f / (Info.VScale * Info.VSize); }

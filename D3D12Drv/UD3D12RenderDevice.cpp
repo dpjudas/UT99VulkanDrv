@@ -651,7 +651,7 @@ void UD3D12RenderDevice::CreateUploadBuffer()
 		&uploadHeapProps,
 		D3D12_HEAP_FLAG_NONE,
 		&bufDesc,
-		D3D12_RESOURCE_STATE_COPY_SOURCE,
+		D3D12_RESOURCE_STATE_GENERIC_READ,
 		nullptr,
 		Upload.Buffer.GetIID(),
 		Upload.Buffer.InitPtr());
@@ -900,7 +900,7 @@ void UD3D12RenderDevice::CreateScenePass()
 		&uploadHeapProps,
 		D3D12_HEAP_FLAG_NONE,
 		&bufDesc,
-		D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER,
+		D3D12_RESOURCE_STATE_GENERIC_READ,
 		nullptr,
 		ScenePass.VertexBuffer.GetIID(),
 		ScenePass.VertexBuffer.InitPtr());
@@ -912,7 +912,7 @@ void UD3D12RenderDevice::CreateScenePass()
 		&uploadHeapProps,
 		D3D12_HEAP_FLAG_NONE,
 		&bufDesc,
-		D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER,
+		D3D12_RESOURCE_STATE_GENERIC_READ,
 		nullptr,
 		ScenePass.IndexBuffer.GetIID(),
 		ScenePass.IndexBuffer.InitPtr());
@@ -1365,7 +1365,7 @@ void UD3D12RenderDevice::CreatePresentPass()
 		&uploadHeapProps,
 		D3D12_HEAP_FLAG_NONE,
 		&bufDesc,
-		D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER,
+		D3D12_RESOURCE_STATE_GENERIC_READ,
 		nullptr,
 		PresentPass.PPStepVertexBuffer.GetIID(),
 		PresentPass.PPStepVertexBuffer.InitPtr());
@@ -3184,4 +3184,44 @@ std::vector<uint8_t> UD3D12RenderDevice::CompileHlsl(const std::string& filename
 	bytecode.resize(blob->GetBufferSize());
 	memcpy(bytecode.data(), blob->GetBufferPointer(), bytecode.size());
 	return bytecode;
+}
+
+void ThrowError(HRESULT result, const char* msg)
+{
+	std::string message = msg;
+
+	switch (result)
+	{
+	case D3D12_ERROR_ADAPTER_NOT_FOUND: message += " (D3D12_ERROR_ADAPTER_NOT_FOUND)"; break;
+	case D3D12_ERROR_DRIVER_VERSION_MISMATCH: message += " (D3D12_ERROR_DRIVER_VERSION_MISMATCH)"; break;
+	case DXGI_ERROR_INVALID_CALL: message += " (DXGI_ERROR_INVALID_CALL)"; break;
+	case DXGI_ERROR_WAS_STILL_DRAWING: message += " (DXGI_ERROR_WAS_STILL_DRAWING)"; break;
+	case DXGI_ERROR_ACCESS_DENIED: message += " (DXGI_ERROR_ACCESS_DENIED)"; break;
+	case DXGI_ERROR_ACCESS_LOST: message += " (DXGI_ERROR_ACCESS_LOST)"; break;
+	case DXGI_ERROR_ALREADY_EXISTS: message += " (DXGI_ERROR_ALREADY_EXISTS)"; break;
+	case DXGI_ERROR_CANNOT_PROTECT_CONTENT: message += " (DXGI_ERROR_CANNOT_PROTECT_CONTENT)"; break;
+	case DXGI_ERROR_DEVICE_HUNG: message += " (DXGI_ERROR_DEVICE_HUNG)"; break;
+	case DXGI_ERROR_DEVICE_REMOVED: message += " (DXGI_ERROR_DEVICE_REMOVED)"; break;
+	case DXGI_ERROR_DEVICE_RESET: message += " (DXGI_ERROR_DEVICE_RESET)"; break;
+	case DXGI_ERROR_DRIVER_INTERNAL_ERROR: message += " (DXGI_ERROR_DRIVER_INTERNAL_ERROR)"; break;
+	case DXGI_ERROR_FRAME_STATISTICS_DISJOINT: message += " (DXGI_ERROR_FRAME_STATISTICS_DISJOINT)"; break;
+	case DXGI_ERROR_GRAPHICS_VIDPN_SOURCE_IN_USE: message += " (DXGI_ERROR_GRAPHICS_VIDPN_SOURCE_IN_USE)"; break;
+	case DXGI_ERROR_MORE_DATA: message += " (DXGI_ERROR_MORE_DATA)"; break;
+	case DXGI_ERROR_NAME_ALREADY_EXISTS: message += " (DXGI_ERROR_NAME_ALREADY_EXISTS)"; break;
+	case DXGI_ERROR_NONEXCLUSIVE: message += " (DXGI_ERROR_NONEXCLUSIVE)"; break;
+	case DXGI_ERROR_NOT_CURRENTLY_AVAILABLE: message += " (DXGI_ERROR_NOT_CURRENTLY_AVAILABLE)"; break;
+	case DXGI_ERROR_NOT_FOUND: message += " (DXGI_ERROR_NOT_FOUND)"; break;
+	case DXGI_ERROR_RESTRICT_TO_OUTPUT_STALE: message += " (DXGI_ERROR_RESTRICT_TO_OUTPUT_STALE)"; break;
+	case DXGI_ERROR_SDK_COMPONENT_MISSING: message += " (DXGI_ERROR_SDK_COMPONENT_MISSING)"; break;
+	case DXGI_ERROR_SESSION_DISCONNECTED: message += " (DXGI_ERROR_SESSION_DISCONNECTED)"; break;
+	case DXGI_ERROR_UNSUPPORTED: message += " (DXGI_ERROR_UNSUPPORTED)"; break;
+	case DXGI_ERROR_WAIT_TIMEOUT: message += " (DXGI_ERROR_WAIT_TIMEOUT)"; break;
+	case E_FAIL: message += " (E_FAIL)"; break;
+	case E_INVALIDARG: message += " (E_INVALIDARG)"; break;
+	case E_OUTOFMEMORY: message += " (E_OUTOFMEMORY)"; break;
+	case E_NOTIMPL: message += " (E_NOTIMPL)"; break;
+	default: message += " (HRESULT " + std::to_string(result) + ")"; break;
+	}
+
+	throw std::runtime_error(message);
 }
