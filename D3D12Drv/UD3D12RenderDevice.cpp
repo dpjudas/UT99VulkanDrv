@@ -1936,10 +1936,12 @@ void UD3D12RenderDevice::Unlock(UBOOL Blit)
 			viewport.MaxDepth = 1.0f;
 			CommandList->RSSetViewports(1, &viewport);
 
-			D3D12_RECT box = {};
-			box.right = box.right - box.left;
-			box.bottom = box.bottom - box.top;
-			CommandList->RSSetScissorRects(1, &box);
+			D3D12_RECT scissorbox = {};
+			scissorbox.left = box.left;
+			scissorbox.top = box.top;
+			scissorbox.right = box.right;
+			scissorbox.bottom = box.bottom;
+			CommandList->RSSetScissorRects(1, &scissorbox);
 
 			CommandList->SetPipelineState(PresentPass.HitResolve);
 			CommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
