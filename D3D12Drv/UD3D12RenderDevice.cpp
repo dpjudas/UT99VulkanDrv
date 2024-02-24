@@ -208,10 +208,16 @@ UBOOL UD3D12RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 		Heaps.RTV = std::make_unique<DescriptorHeap>(Device.get(), 64, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, D3D12_DESCRIPTOR_HEAP_FLAG_NONE);
 		Heaps.DSV = std::make_unique<DescriptorHeap>(Device.get(), 64, D3D12_DESCRIPTOR_HEAP_TYPE_DSV, D3D12_DESCRIPTOR_HEAP_FLAG_NONE);
 
-		result = Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, CommandAllocator.GetIID(), CommandAllocator.InitPtr());
+		result = Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, Commands.TransferAllocator.GetIID(), Commands.TransferAllocator.InitPtr());
 		ThrowIfFailed(result, "CreateCommandAllocator failed");
 
-		result = Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, CommandAllocator, nullptr, CommandList.GetIID(), CommandList.InitPtr());
+		result = Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, Commands.DrawAllocator.GetIID(), Commands.DrawAllocator.InitPtr());
+		ThrowIfFailed(result, "CreateCommandAllocator failed");
+
+		result = Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, Commands.TransferAllocator, nullptr, Commands.Transfer.GetIID(), Commands.Transfer.InitPtr());
+		ThrowIfFailed(result, "CreateCommandList failed");
+
+		result = Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, Commands.DrawAllocator, nullptr, Commands.Draw.GetIID(), Commands.Draw.InitPtr());
 		ThrowIfFailed(result, "CreateCommandList failed");
 
 		result = Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, Fence.GetIID(), Fence.InitPtr());
@@ -220,9 +226,6 @@ UBOOL UD3D12RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 		FenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
 		if (FenceEvent == INVALID_HANDLE_VALUE)
 			throw std::runtime_error("CreateEvent failed!");
-
-		ID3D12DescriptorHeap* heaps[] = { Heaps.Common->GetHeap(), Heaps.Sampler->GetHeap() };
-		CommandList->SetDescriptorHeaps(2, heaps);
 
 		CreateUploadBuffer();
 		CreatePresentPass();
@@ -345,13 +348,30 @@ UBOOL UD3D12RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 	unguard;
 }
 
+void UD3D12RenderDevice::SetSceneDrawState()
+{
+	ID3D12DescriptorHeap* heaps[] = { Heaps.Common->GetHeap(), Heaps.Sampler->GetHeap() };
+	D3D12_CPU_DESCRIPTOR_HANDLE views[2] = { SceneBuffers.SceneRTVs.CPUHandle(0), SceneBuffers.SceneRTVs.CPUHandle(1) };
+	D3D12_CPU_DESCRIPTOR_HANDLE depthview = SceneBuffers.SceneDSV.CPUHandle();
+
+	Commands.Draw->SetDescriptorHeaps(2, heaps);
+	Commands.Draw->SetGraphicsRootSignature(ScenePass.RootSignature);
+	Commands.Draw->OMSetRenderTargets(2, views, FALSE, &depthview);
+	Commands.Draw->IASetPrimitiveTopology(Commands.PrimitiveTopology);
+	Commands.Draw->IASetVertexBuffers(0, 1, &ScenePass.VertexBufferView);
+	Commands.Draw->IASetIndexBuffer(&ScenePass.IndexBufferView);
+}
+
 void UD3D12RenderDevice::WaitForCommands(bool present)
 {
-	HRESULT result = CommandList->Close();
-	ThrowIfFailed(result, "Could not close command list!");
+	HRESULT result = Commands.Transfer->Close();
+	ThrowIfFailed(result, "Could not close transfer command list!");
 
-	ID3D12CommandList* commandLists[] = { CommandList };
-	GraphicsQueue->ExecuteCommandLists(1, commandLists);
+	result = Commands.Draw->Close();
+	ThrowIfFailed(result, "Could not close draw command list!");
+
+	ID3D12CommandList* commandLists[] = { Commands.Transfer.get(), Commands.Draw.get() };
+	GraphicsQueue->ExecuteCommandLists(2, commandLists);
 
 	if (present)
 	{
@@ -361,14 +381,13 @@ void UD3D12RenderDevice::WaitForCommands(bool present)
 
 	WaitDeviceIdle();
 
-	CommandAllocator->Reset();
-	CommandList->Reset(CommandAllocator, nullptr);
+	Commands.TransferAllocator->Reset();
+	Commands.DrawAllocator->Reset();
+	Commands.Transfer->Reset(Commands.TransferAllocator, nullptr);
+	Commands.Draw->Reset(Commands.DrawAllocator, nullptr);
 
-	if (Heaps.Common && Heaps.Sampler)
-	{
-		ID3D12DescriptorHeap* heaps[] = { Heaps.Common->GetHeap(), Heaps.Sampler->GetHeap() };
-		CommandList->SetDescriptorHeaps(2, heaps);
-	}
+	if (Commands.InSceneDraw)
+		SetSceneDrawState();
 
 	Upload.Pos = 0;
 }
@@ -391,7 +410,7 @@ void UD3D12RenderDevice::WaitDeviceIdle()
 }
 
 
-void UD3D12RenderDevice::TransitionResourceBarrier(ID3D12Resource* resource, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after)
+void UD3D12RenderDevice::TransitionResourceBarrier(ID3D12GraphicsCommandList* cmdlist, ID3D12Resource* resource, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after)
 {
 	D3D12_RESOURCE_BARRIER barrier = {};
 	barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -399,10 +418,10 @@ void UD3D12RenderDevice::TransitionResourceBarrier(ID3D12Resource* resource, D3D
 	barrier.Transition.StateBefore = before;
 	barrier.Transition.StateAfter = after;
 	barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-	CommandList->ResourceBarrier(1, &barrier);
+	cmdlist->ResourceBarrier(1, &barrier);
 }
 
-void UD3D12RenderDevice::TransitionResourceBarrier(ID3D12Resource* resource0, D3D12_RESOURCE_STATES before0, D3D12_RESOURCE_STATES after0, ID3D12Resource* resource1, D3D12_RESOURCE_STATES before1, D3D12_RESOURCE_STATES after1)
+void UD3D12RenderDevice::TransitionResourceBarrier(ID3D12GraphicsCommandList* cmdlist, ID3D12Resource* resource0, D3D12_RESOURCE_STATES before0, D3D12_RESOURCE_STATES after0, ID3D12Resource* resource1, D3D12_RESOURCE_STATES before1, D3D12_RESOURCE_STATES after1)
 {
 	D3D12_RESOURCE_BARRIER barriers[2] = {};
 	barriers[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -415,7 +434,7 @@ void UD3D12RenderDevice::TransitionResourceBarrier(ID3D12Resource* resource0, D3
 	barriers[1].Transition.StateBefore = before1;
 	barriers[1].Transition.StateAfter = after1;
 	barriers[1].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-	CommandList->ResourceBarrier(2, barriers);
+	cmdlist->ResourceBarrier(2, barriers);
 }
 
 void UD3D12RenderDevice::Exit()
@@ -440,8 +459,10 @@ void UD3D12RenderDevice::Exit()
 	Heaps.Common.reset();
 	FrameBuffers.clear();
 	SwapChain3.reset();
-	CommandList.reset();
-	CommandAllocator.reset();
+	Commands.Draw.reset();
+	Commands.Transfer.reset();
+	Commands.DrawAllocator.reset();
+	Commands.TransferAllocator.reset();
 	Fence.reset();
 	if (FenceEvent != INVALID_HANDLE_VALUE)
 		CloseHandle(FenceEvent);
@@ -1138,10 +1159,10 @@ void UD3D12RenderDevice::RunBloomPass()
 	BloomPushConstants pushconstants;
 	ComputeBlurSamples(7, blurAmount, pushconstants.SampleWeights);
 
-	CommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-	CommandList->IASetVertexBuffers(0, 1, &PresentPass.PPStepVertexBufferView);
-	CommandList->SetGraphicsRootSignature(BloomPass.RootSignature);
-	CommandList->SetGraphicsRoot32BitConstants(1, sizeof(BloomPushConstants) / sizeof(uint32_t), &pushconstants, 0);
+	Commands.Draw->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	Commands.Draw->IASetVertexBuffers(0, 1, &PresentPass.PPStepVertexBufferView);
+	Commands.Draw->SetGraphicsRootSignature(BloomPass.RootSignature);
+	Commands.Draw->SetGraphicsRoot32BitConstants(1, sizeof(BloomPushConstants) / sizeof(uint32_t), &pushconstants, 0);
 
 	D3D12_VIEWPORT viewport = {};
 	viewport.MaxDepth = 1.0f;
@@ -1149,14 +1170,14 @@ void UD3D12RenderDevice::RunBloomPass()
 	// Extract overbright pixels that we want to bloom:
 	viewport.Width = SceneBuffers.BlurLevels[0].Width;
 	viewport.Height = SceneBuffers.BlurLevels[0].Height;
-	TransitionResourceBarrier(SceneBuffers.BlurLevels[0].VTexture, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
+	TransitionResourceBarrier(Commands.Draw, SceneBuffers.BlurLevels[0].VTexture, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
 	D3D12_CPU_DESCRIPTOR_HANDLE rtv = SceneBuffers.BlurLevels[0].VTextureRTV.CPUHandle();
-	CommandList->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
-	CommandList->RSSetViewports(1, &viewport);
-	CommandList->SetPipelineState(BloomPass.Extract);
-	CommandList->SetGraphicsRootDescriptorTable(0, SceneBuffers.PPImageSRV[0].GPUHandle());
-	CommandList->DrawInstanced(6, 1, 0, 0);
-	TransitionResourceBarrier(SceneBuffers.BlurLevels[0].VTexture, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+	Commands.Draw->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
+	Commands.Draw->RSSetViewports(1, &viewport);
+	Commands.Draw->SetPipelineState(BloomPass.Extract);
+	Commands.Draw->SetGraphicsRootDescriptorTable(0, SceneBuffers.PPImageSRV[0].GPUHandle());
+	Commands.Draw->DrawInstanced(6, 1, 0, 0);
+	TransitionResourceBarrier(Commands.Draw, SceneBuffers.BlurLevels[0].VTexture, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 
 	// Blur and downscale:
 	for (int i = 0; i < SceneBuffers.NumBloomLevels - 1; i++)
@@ -1166,21 +1187,21 @@ void UD3D12RenderDevice::RunBloomPass()
 
 		viewport.Width = blevel.Width;
 		viewport.Height = blevel.Height;
-		CommandList->RSSetViewports(1, &viewport);
+		Commands.Draw->RSSetViewports(1, &viewport);
 		BlurStep(blevel.VTextureSRV, blevel.HTextureRTV, blevel.HTexture, false);
 		BlurStep(blevel.HTextureSRV, blevel.VTextureRTV, blevel.VTexture, true);
 
 		// Linear downscale:
-		TransitionResourceBarrier(next.VTexture, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
+		TransitionResourceBarrier(Commands.Draw, next.VTexture, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
 		viewport.Width = next.Width;
 		viewport.Height = next.Height;
 		rtv = next.VTextureRTV.CPUHandle();
-		CommandList->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
-		CommandList->RSSetViewports(1, &viewport);
-		CommandList->SetPipelineState(BloomPass.Combine);
-		CommandList->SetGraphicsRootDescriptorTable(0, blevel.VTextureSRV.GPUHandle());
-		CommandList->DrawInstanced(6, 1, 0, 0);
-		TransitionResourceBarrier(next.VTexture, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+		Commands.Draw->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
+		Commands.Draw->RSSetViewports(1, &viewport);
+		Commands.Draw->SetPipelineState(BloomPass.Combine);
+		Commands.Draw->SetGraphicsRootDescriptorTable(0, blevel.VTextureSRV.GPUHandle());
+		Commands.Draw->DrawInstanced(6, 1, 0, 0);
+		TransitionResourceBarrier(Commands.Draw, next.VTexture, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 	}
 
 	// Blur and upscale:
@@ -1191,56 +1212,56 @@ void UD3D12RenderDevice::RunBloomPass()
 
 		viewport.Width = blevel.Width;
 		viewport.Height = blevel.Height;
-		CommandList->RSSetViewports(1, &viewport);
+		Commands.Draw->RSSetViewports(1, &viewport);
 		BlurStep(blevel.VTextureSRV, blevel.HTextureRTV, blevel.HTexture, false);
 		BlurStep(blevel.HTextureSRV, blevel.VTextureRTV, blevel.VTexture, true);
 
 		// Linear upscale:
-		TransitionResourceBarrier(next.VTexture, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
+		TransitionResourceBarrier(Commands.Draw, next.VTexture, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
 		viewport.Width = next.Width;
 		viewport.Height = next.Height;
 		rtv = next.VTextureRTV.CPUHandle();
-		CommandList->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
-		CommandList->RSSetViewports(1, &viewport);
-		CommandList->SetPipelineState(BloomPass.Combine);
-		CommandList->SetGraphicsRootDescriptorTable(0, blevel.VTextureSRV.GPUHandle());
-		CommandList->DrawInstanced(6, 1, 0, 0);
-		TransitionResourceBarrier(next.VTexture, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+		Commands.Draw->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
+		Commands.Draw->RSSetViewports(1, &viewport);
+		Commands.Draw->SetPipelineState(BloomPass.Combine);
+		Commands.Draw->SetGraphicsRootDescriptorTable(0, blevel.VTextureSRV.GPUHandle());
+		Commands.Draw->DrawInstanced(6, 1, 0, 0);
+		TransitionResourceBarrier(Commands.Draw, next.VTexture, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 	}
 
 	viewport.Width = SceneBuffers.BlurLevels[0].Width;
 	viewport.Height = SceneBuffers.BlurLevels[0].Height;
-	CommandList->RSSetViewports(1, &viewport);
+	Commands.Draw->RSSetViewports(1, &viewport);
 	BlurStep(SceneBuffers.BlurLevels[0].VTextureSRV, SceneBuffers.BlurLevels[0].HTextureRTV, SceneBuffers.BlurLevels[0].HTexture, false);
 	BlurStep(SceneBuffers.BlurLevels[0].HTextureSRV, SceneBuffers.BlurLevels[0].VTextureRTV, SceneBuffers.BlurLevels[0].VTexture, true);
 
 	// Add bloom back to scene post process texture:
 
-	TransitionResourceBarrier(SceneBuffers.PPImage[0], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
+	TransitionResourceBarrier(Commands.Draw, SceneBuffers.PPImage[0], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
 	viewport.Width = SceneBuffers.Width;
 	viewport.Height = SceneBuffers.Height;
 	rtv = SceneBuffers.PPImageRTV[0].CPUHandle();
-	CommandList->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
-	CommandList->RSSetViewports(1, &viewport);
-	CommandList->SetPipelineState(BloomPass.CombineAdditive);
-	CommandList->SetGraphicsRootDescriptorTable(0, SceneBuffers.BlurLevels[0].VTextureSRV.GPUHandle());
-	CommandList->DrawInstanced(6, 1, 0, 0);
+	Commands.Draw->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
+	Commands.Draw->RSSetViewports(1, &viewport);
+	Commands.Draw->SetPipelineState(BloomPass.CombineAdditive);
+	Commands.Draw->SetGraphicsRootDescriptorTable(0, SceneBuffers.BlurLevels[0].VTextureSRV.GPUHandle());
+	Commands.Draw->DrawInstanced(6, 1, 0, 0);
 
-	TransitionResourceBarrier(SceneBuffers.PPImage[0], D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+	TransitionResourceBarrier(Commands.Draw, SceneBuffers.PPImage[0], D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 }
 
 void UD3D12RenderDevice::BlurStep(const DescriptorSet& input, const DescriptorSet& output, ID3D12Resource* outputResource, bool vertical)
 {
-	TransitionResourceBarrier(outputResource, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
+	TransitionResourceBarrier(Commands.Draw, outputResource, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
 	D3D12_CPU_DESCRIPTOR_HANDLE rtv = output.CPUHandle();
-	CommandList->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
-	CommandList->SetPipelineState(vertical ? BloomPass.BlurVertical : BloomPass.BlurHorizontal);
-	CommandList->SetGraphicsRootDescriptorTable(0, input.GPUHandle());
-	CommandList->DrawInstanced(6, 1, 0, 0);
+	Commands.Draw->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
+	Commands.Draw->SetPipelineState(vertical ? BloomPass.BlurVertical : BloomPass.BlurHorizontal);
+	Commands.Draw->SetGraphicsRootDescriptorTable(0, input.GPUHandle());
+	Commands.Draw->DrawInstanced(6, 1, 0, 0);
 
-	TransitionResourceBarrier(outputResource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+	TransitionResourceBarrier(Commands.Draw, outputResource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 }
 
 float UD3D12RenderDevice::ComputeBlurGaussian(float n, float theta) // theta = Blur Amount
@@ -1558,7 +1579,7 @@ void UD3D12RenderDevice::UploadTexture(ID3D12Resource* resource, D3D12_RESOURCE_
 {
 	if (stateBefore != D3D12_RESOURCE_STATE_COPY_DEST)
 	{
-		TransitionResourceBarrier(resource, stateBefore, D3D12_RESOURCE_STATE_COPY_DEST);
+		TransitionResourceBarrier(Commands.Transfer, resource, stateBefore, D3D12_RESOURCE_STATE_COPY_DEST);
 	}
 
 	Upload.Transfer.Footprints.resize(numSubresources);
@@ -1575,6 +1596,7 @@ void UD3D12RenderDevice::UploadTexture(ID3D12Resource* resource, D3D12_RESOURCE_
 	if (Upload.Pos + totalSize > Upload.Size)
 	{
 		WaitForCommands(false);
+		Device->GetCopyableFootprints(&desc, firstSubresource, numSubresources, Upload.Pos, Upload.Transfer.Footprints.data(), Upload.Transfer.NumRows.data(), Upload.Transfer.RowSizeInBytes.data(), &totalSize);
 		if (Upload.Pos + totalSize > Upload.Size)
 		{
 			debugf(TEXT("Could not upload texture. Total memory requirements are bigger than the entire upload buffer!"));
@@ -1622,14 +1644,14 @@ void UD3D12RenderDevice::UploadTexture(ID3D12Resource* resource, D3D12_RESOURCE_
 			break;
 		}
 
-		CommandList->CopyTextureRegion(&dest, x, y, 0, &src, &srcBox);
+		Commands.Transfer->CopyTextureRegion(&dest, x, y, 0, &src, &srcBox);
 	}
 
 	Upload.Pos += totalSize;
 
 	if (stateAfter != D3D12_RESOURCE_STATE_COPY_DEST)
 	{
-		TransitionResourceBarrier(resource, D3D12_RESOURCE_STATE_COPY_DEST, stateAfter);
+		TransitionResourceBarrier(Commands.Transfer, resource, D3D12_RESOURCE_STATE_COPY_DEST, stateAfter);
 	}
 }
 
@@ -1750,24 +1772,22 @@ void UD3D12RenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane Scr
 	FlashScale = InFlashScale;
 	FlashFog = InFlashFog;
 
+	Commands.InSceneDraw = true;
+	Commands.PrimitiveTopology = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	SetSceneDrawState();
+
 	FLOAT color[4] = { ScreenClear.X, ScreenClear.Y, ScreenClear.Z, ScreenClear.W };
 	FLOAT zero[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	D3D12_CPU_DESCRIPTOR_HANDLE views[2] = { SceneBuffers.SceneRTVs.CPUHandle(0), SceneBuffers.SceneRTVs.CPUHandle(1) };
 	D3D12_CPU_DESCRIPTOR_HANDLE depthview = SceneBuffers.SceneDSV.CPUHandle();
-	CommandList->SetGraphicsRootSignature(ScenePass.RootSignature);
-	CommandList->OMSetRenderTargets(2, views, FALSE, &depthview);
-	CommandList->ClearRenderTargetView(views[0], color, 0, nullptr);
-	CommandList->ClearRenderTargetView(views[1], zero, 0, nullptr);
-	CommandList->ClearDepthStencilView(depthview, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
-	CommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-	CurrentPrimitiveTopology = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-	CommandList->IASetVertexBuffers(0, 1, &ScenePass.VertexBufferView);
-	CommandList->IASetIndexBuffer(&ScenePass.IndexBufferView);
+	Commands.Draw->ClearRenderTargetView(views[0], color, 0, nullptr);
+	Commands.Draw->ClearRenderTargetView(views[1], zero, 0, nullptr);
+	Commands.Draw->ClearDepthStencilView(depthview, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
 	D3D12_RECT box = {};
 	box.right = Viewport->SizeX;
 	box.bottom = Viewport->SizeY;
-	CommandList->RSSetScissorRects(1, &box);
+	Commands.Draw->RSSetScissorRects(1, &box);
 
 	SceneConstants.HitIndex = 0;
 	ForceHitIndex = -1;
@@ -1856,29 +1876,35 @@ void UD3D12RenderDevice::Unlock(UBOOL Blit)
 	if (Blit || HitData)
 		DrawBatches();
 
+	Commands.InSceneDraw = false;
+
 	if (Blit)
 	{
 		if (SceneBuffers.Multisample > 1)
 		{
 			TransitionResourceBarrier(
+				Commands.Draw,
 				SceneBuffers.PPImage[0], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RESOLVE_DEST,
 				SceneBuffers.ColorBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_RESOLVE_SOURCE);
 
-			CommandList->ResolveSubresource(SceneBuffers.PPImage[0], 0, SceneBuffers.ColorBuffer, 0, DXGI_FORMAT_R16G16B16A16_FLOAT);
+			Commands.Draw->ResolveSubresource(SceneBuffers.PPImage[0], 0, SceneBuffers.ColorBuffer, 0, DXGI_FORMAT_R16G16B16A16_FLOAT);
 
 			TransitionResourceBarrier(
+				Commands.Draw,
 				SceneBuffers.PPImage[0], D3D12_RESOURCE_STATE_RESOLVE_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
 				SceneBuffers.ColorBuffer, D3D12_RESOURCE_STATE_RESOLVE_SOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
 		}
 		else
 		{
 			TransitionResourceBarrier(
+				Commands.Draw,
 				SceneBuffers.PPImage[0], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST,
 				SceneBuffers.ColorBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COPY_SOURCE);
 
-			CommandList->CopyResource(SceneBuffers.PPImage[0], SceneBuffers.ColorBuffer);
+			Commands.Draw->CopyResource(SceneBuffers.PPImage[0], SceneBuffers.ColorBuffer);
 
 			TransitionResourceBarrier(
+				Commands.Draw,
 				SceneBuffers.PPImage[0], D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
 				SceneBuffers.ColorBuffer, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
 		}
@@ -1890,17 +1916,17 @@ void UD3D12RenderDevice::Unlock(UBOOL Blit)
 
 		int BackBufferIndex = SwapChain3->GetCurrentBackBufferIndex();
 
-		TransitionResourceBarrier(FrameBuffers[BackBufferIndex], D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
+		TransitionResourceBarrier(Commands.Draw, FrameBuffers[BackBufferIndex], D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
 		D3D12_CPU_DESCRIPTOR_HANDLE rtv = FrameBufferRTVs.CPUHandle(BackBufferIndex);
-		CommandList->SetGraphicsRootSignature(PresentPass.RootSignature);
-		CommandList->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
+		Commands.Draw->SetGraphicsRootSignature(PresentPass.RootSignature);
+		Commands.Draw->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
 
 		D3D12_VIEWPORT viewport = {};
 		viewport.Width = Viewport->SizeX;
 		viewport.Height = Viewport->SizeY;
 		viewport.MaxDepth = 1.0f;
-		CommandList->RSSetViewports(1, &viewport);
+		Commands.Draw->RSSetViewports(1, &viewport);
 
 		PresentPushConstants pushconstants = GetPresentPushConstants();
 
@@ -1910,14 +1936,14 @@ void UD3D12RenderDevice::Unlock(UBOOL Blit)
 		if (GammaMode == 1) presentShader |= 2;
 		if (pushconstants.Brightness != 0.0f || pushconstants.Contrast != 1.0f || pushconstants.Saturation != 1.0f) presentShader |= (Clamp(GrayFormula, 0, 2) + 1) << 2;
 
-		CommandList->SetPipelineState(PresentPass.Present[presentShader]);
-		CommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-		CommandList->IASetVertexBuffers(0, 1, &PresentPass.PPStepVertexBufferView);
-		CommandList->SetGraphicsRootDescriptorTable(0, SceneBuffers.PresentSRVs.GPUHandle());
-		CommandList->SetGraphicsRoot32BitConstants(1, sizeof(PresentPushConstants) / sizeof(uint32_t), &pushconstants, 0);
-		CommandList->DrawInstanced(6, 1, 0, 0);
+		Commands.Draw->SetPipelineState(PresentPass.Present[presentShader]);
+		Commands.Draw->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+		Commands.Draw->IASetVertexBuffers(0, 1, &PresentPass.PPStepVertexBufferView);
+		Commands.Draw->SetGraphicsRootDescriptorTable(0, SceneBuffers.PresentSRVs.GPUHandle());
+		Commands.Draw->SetGraphicsRoot32BitConstants(1, sizeof(PresentPushConstants) / sizeof(uint32_t), &pushconstants, 0);
+		Commands.Draw->DrawInstanced(6, 1, 0, 0);
 
-		TransitionResourceBarrier(FrameBuffers[BackBufferIndex], D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
+		TransitionResourceBarrier(Commands.Draw, FrameBuffers[BackBufferIndex], D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
 
 		Batch.Pipeline = nullptr;
 		Batch.PrimitiveTopology = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
@@ -1947,12 +1973,13 @@ void UD3D12RenderDevice::Unlock(UBOOL Blit)
 		if (SceneBuffers.Multisample > 1)
 		{
 			TransitionResourceBarrier(
+				Commands.Draw,
 				SceneBuffers.HitBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
 				SceneBuffers.PPHitBuffer, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
 			D3D12_CPU_DESCRIPTOR_HANDLE rtv = SceneBuffers.PPHitBufferRTV.CPUHandle();
-			CommandList->SetGraphicsRootSignature(PresentPass.RootSignature);
-			CommandList->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
+			Commands.Draw->SetGraphicsRootSignature(PresentPass.RootSignature);
+			Commands.Draw->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
 
 			D3D12_VIEWPORT viewport = {};
 			viewport.TopLeftX = box.left;
@@ -1960,28 +1987,30 @@ void UD3D12RenderDevice::Unlock(UBOOL Blit)
 			viewport.Width = box.right - box.left;
 			viewport.Height = box.bottom - box.top;
 			viewport.MaxDepth = 1.0f;
-			CommandList->RSSetViewports(1, &viewport);
+			Commands.Draw->RSSetViewports(1, &viewport);
 
 			D3D12_RECT scissorbox = {};
 			scissorbox.left = box.left;
 			scissorbox.top = box.top;
 			scissorbox.right = box.right;
 			scissorbox.bottom = box.bottom;
-			CommandList->RSSetScissorRects(1, &scissorbox);
+			Commands.Draw->RSSetScissorRects(1, &scissorbox);
 
-			CommandList->SetPipelineState(PresentPass.HitResolve);
-			CommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-			CommandList->IASetVertexBuffers(0, 1, &PresentPass.PPStepVertexBufferView);
-			CommandList->SetGraphicsRootDescriptorTable(0, SceneBuffers.HitBufferSRV.GPUHandle());
-			CommandList->DrawInstanced(6, 1, 0, 0);
+			Commands.Draw->SetPipelineState(PresentPass.HitResolve);
+			Commands.Draw->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+			Commands.Draw->IASetVertexBuffers(0, 1, &PresentPass.PPStepVertexBufferView);
+			Commands.Draw->SetGraphicsRootDescriptorTable(0, SceneBuffers.HitBufferSRV.GPUHandle());
+			Commands.Draw->DrawInstanced(6, 1, 0, 0);
 
 			TransitionResourceBarrier(
+				Commands.Draw,
 				SceneBuffers.HitBuffer, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET,
 				SceneBuffers.PPHitBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COPY_SOURCE);
 		}
 		else
 		{
 			TransitionResourceBarrier(
+				Commands.Draw,
 				SceneBuffers.HitBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COPY_SOURCE,
 				SceneBuffers.PPHitBuffer, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
 
@@ -1990,9 +2019,10 @@ void UD3D12RenderDevice::Unlock(UBOOL Blit)
 			src.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
 			dest.pResource = SceneBuffers.PPHitBuffer;
 			dest.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-			CommandList->CopyTextureRegion(&dest, box.left, box.top, 0, &src, &box);
+			Commands.Draw->CopyTextureRegion(&dest, box.left, box.top, 0, &src, &box);
 
 			TransitionResourceBarrier(
+				Commands.Draw,
 				SceneBuffers.HitBuffer, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET,
 				SceneBuffers.PPHitBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COPY_SOURCE);
 		}
@@ -2011,7 +2041,7 @@ void UD3D12RenderDevice::Unlock(UBOOL Blit)
 		dest.pResource = SceneBuffers.StagingHitBuffer;
 		dest.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
 		dest.PlacedFootprint = footprint;
-		CommandList->CopyTextureRegion(&dest, 0, 0, 0, &src, &box);
+		Commands.Draw->CopyTextureRegion(&dest, 0, 0, 0, &src, &box);
 
 		WaitForCommands(false);
 
@@ -2083,7 +2113,7 @@ void UD3D12RenderDevice::PushHit(const BYTE* Data, INT Count)
 	HitBuffer.insert(HitBuffer.end(), HitQueryStack.begin(), HitQueryStack.end());
 
 	SceneConstants.HitIndex = index + 1;
-	CommandList->SetGraphicsRoot32BitConstants(2, sizeof(ScenePushConstants) / sizeof(uint32_t), &SceneConstants, 0);
+	Commands.Draw->SetGraphicsRoot32BitConstants(2, sizeof(ScenePushConstants) / sizeof(uint32_t), &SceneConstants, 0);
 
 	unguard;
 }
@@ -2809,7 +2839,7 @@ void UD3D12RenderDevice::ClearZ(FSceneNode* Frame)
 
 	DrawBatches();
 
-	CommandList->ClearDepthStencilView(SceneBuffers.SceneDSV.CPUHandle(), D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+	Commands.Draw->ClearDepthStencilView(SceneBuffers.SceneDSV.CPUHandle(), D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
 	unguard;
 }
@@ -2829,22 +2859,22 @@ void UD3D12RenderDevice::ReadPixels(FColor* Pixels)
 
 	if (GammaCorrectScreenshots)
 	{
-		TransitionResourceBarrier(SceneBuffers.PPImage[1], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
+		TransitionResourceBarrier(Commands.Draw, SceneBuffers.PPImage[1], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
 		D3D12_CPU_DESCRIPTOR_HANDLE rtv = SceneBuffers.PPImageRTV[1].CPUHandle();
-		CommandList->SetGraphicsRootSignature(PresentPass.RootSignature);
-		CommandList->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
+		Commands.Draw->SetGraphicsRootSignature(PresentPass.RootSignature);
+		Commands.Draw->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
 
 		D3D12_VIEWPORT viewport = {};
 		viewport.Width = Viewport->SizeX;
 		viewport.Height = Viewport->SizeY;
 		viewport.MaxDepth = 1.0f;
-		CommandList->RSSetViewports(1, &viewport);
+		Commands.Draw->RSSetViewports(1, &viewport);
 
 		D3D12_RECT box = {};
 		box.right = Viewport->SizeX;
 		box.bottom = Viewport->SizeY;
-		CommandList->RSSetScissorRects(1, &box);
+		Commands.Draw->RSSetScissorRects(1, &box);
 
 		PresentPushConstants pushconstants = GetPresentPushConstants();
 
@@ -2854,19 +2884,19 @@ void UD3D12RenderDevice::ReadPixels(FColor* Pixels)
 		if (GammaMode == 1) presentShader |= 2;
 		if (pushconstants.Brightness != 0.0f || pushconstants.Contrast != 1.0f || pushconstants.Saturation != 1.0f) presentShader |= (Clamp(GrayFormula, 0, 2) + 1) << 2;
 
-		CommandList->SetPipelineState(PresentPass.Present[presentShader]);
-		CommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-		CommandList->IASetVertexBuffers(0, 1, &PresentPass.PPStepVertexBufferView);
-		CommandList->SetGraphicsRootDescriptorTable(0, SceneBuffers.PresentSRVs.GPUHandle());
-		CommandList->SetGraphicsRoot32BitConstants(1, sizeof(PresentPushConstants) / sizeof(uint32_t), &pushconstants, 0);
-		CommandList->DrawInstanced(6, 1, 0, 0);
+		Commands.Draw->SetPipelineState(PresentPass.Present[presentShader]);
+		Commands.Draw->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+		Commands.Draw->IASetVertexBuffers(0, 1, &PresentPass.PPStepVertexBufferView);
+		Commands.Draw->SetGraphicsRootDescriptorTable(0, SceneBuffers.PresentSRVs.GPUHandle());
+		Commands.Draw->SetGraphicsRoot32BitConstants(1, sizeof(PresentPushConstants) / sizeof(uint32_t), &pushconstants, 0);
+		Commands.Draw->DrawInstanced(6, 1, 0, 0);
 
-		TransitionResourceBarrier(SceneBuffers.PPImage[1], D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COPY_SOURCE);
+		TransitionResourceBarrier(Commands.Draw, SceneBuffers.PPImage[1], D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COPY_SOURCE);
 		imageResource = SceneBuffers.PPImage[1];
 	}
 	else
 	{
-		TransitionResourceBarrier(SceneBuffers.PPImage[0], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_SOURCE);
+		TransitionResourceBarrier(Commands.Draw, SceneBuffers.PPImage[0], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_SOURCE);
 		imageResource = SceneBuffers.PPImage[0];
 	}
 
@@ -2909,9 +2939,9 @@ void UD3D12RenderDevice::ReadPixels(FColor* Pixels)
 	dest.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
 	dest.PlacedFootprint = footprint;
 
-	CommandList->CopyTextureRegion(&dest, 0, 0, 0, &src, nullptr);
+	Commands.Draw->CopyTextureRegion(&dest, 0, 0, 0, &src, nullptr);
 
-	TransitionResourceBarrier(imageResource, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+	TransitionResourceBarrier(Commands.Draw, imageResource, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 	WaitForCommands(false);
 
 	void* data = nullptr;
@@ -2959,7 +2989,7 @@ void UD3D12RenderDevice::EndFlash()
 
 		SceneConstants.ObjectToProjection = mat4::identity();
 		SceneConstants.NearClip = vec4(0.0f, 0.0f, 0.0f, 1.0f);
-		CommandList->SetGraphicsRoot32BitConstants(2, sizeof(ScenePushConstants) / sizeof(uint32_t), &SceneConstants, 0);
+		Commands.Draw->SetGraphicsRoot32BitConstants(2, sizeof(ScenePushConstants) / sizeof(uint32_t), &SceneConstants, 0);
 
 		Batch.Pipeline = ScenePass.Pipelines[2];
 		Batch.PrimitiveTopology = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
@@ -3023,12 +3053,12 @@ void UD3D12RenderDevice::SetSceneNode(FSceneNode* Frame)
 	viewport.Height = Frame->Y;
 	viewport.MinDepth = 0.0f;
 	viewport.MaxDepth = 1.0f;
-	CommandList->RSSetViewports(1, &viewport);
+	Commands.Draw->RSSetViewports(1, &viewport);
 
 	SceneConstants.ObjectToProjection = mat4::frustum(-RProjZ, RProjZ, -Aspect * RProjZ, Aspect * RProjZ, 1.0f, 32768.0f, handedness::left, clipzrange::zero_positive_w);
 	SceneConstants.NearClip = vec4(Frame->NearClip.X, Frame->NearClip.Y, Frame->NearClip.Z, Frame->NearClip.W);
 
-	CommandList->SetGraphicsRoot32BitConstants(2, sizeof(ScenePushConstants) / sizeof(uint32_t), &SceneConstants, 0);
+	Commands.Draw->SetGraphicsRoot32BitConstants(2, sizeof(ScenePushConstants) / sizeof(uint32_t), &SceneConstants, 0);
 
 	unguardSlow;
 }
@@ -3101,16 +3131,16 @@ void UD3D12RenderDevice::DrawEntry(const DrawBatchEntry& entry)
 		Device->CreateSampler(&ScenePass.Samplers[entry.DetailtexSamplerMode], sampler.CPUHandle(3));
 	}
 
-	if (entry.PrimitiveTopology != CurrentPrimitiveTopology)
+	if (entry.PrimitiveTopology != Commands.PrimitiveTopology)
 	{
-		CurrentPrimitiveTopology = entry.PrimitiveTopology;
-		CommandList->IASetPrimitiveTopology(CurrentPrimitiveTopology);
+		Commands.PrimitiveTopology = entry.PrimitiveTopology;
+		Commands.Draw->IASetPrimitiveTopology(Commands.PrimitiveTopology);
 	}
 
-	CommandList->SetPipelineState(entry.Pipeline);
-	CommandList->SetGraphicsRootDescriptorTable(0, common.GPUHandle());
-	CommandList->SetGraphicsRootDescriptorTable(1, sampler.GPUHandle());
-	CommandList->DrawIndexedInstanced(icount, 1, entry.SceneIndexStart, 0, 0);
+	Commands.Draw->SetPipelineState(entry.Pipeline);
+	Commands.Draw->SetGraphicsRootDescriptorTable(0, common.GPUHandle());
+	Commands.Draw->SetGraphicsRootDescriptorTable(1, sampler.GPUHandle());
+	Commands.Draw->DrawIndexedInstanced(icount, 1, entry.SceneIndexStart, 0, 0);
 
 	Stats.DrawCalls++;
 }

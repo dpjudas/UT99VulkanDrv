@@ -155,8 +155,15 @@ public:
 		std::unordered_map<uint32_t, DescriptorSet> Sampler;
 	} Descriptors;
 
-	ComPtr<ID3D12CommandAllocator> CommandAllocator;
-	ComPtr<ID3D12GraphicsCommandList> CommandList;
+	struct
+	{
+		ComPtr<ID3D12CommandAllocator> TransferAllocator;
+		ComPtr<ID3D12CommandAllocator> DrawAllocator;
+		ComPtr<ID3D12GraphicsCommandList> Transfer;
+		ComPtr<ID3D12GraphicsCommandList> Draw;
+		bool InSceneDraw = false;
+		D3D_PRIMITIVE_TOPOLOGY PrimitiveTopology = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	} Commands;
 
 	struct PPBlurLevel
 	{
@@ -229,8 +236,6 @@ public:
 		uint32_t MacrotexSamplerMode = 0;
 	} Batch;
 	std::vector<DrawBatchEntry> QueuedBatches;
-
-	D3D_PRIMITIVE_TOPOLOGY CurrentPrimitiveTopology = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 
 	SceneVertex* SceneVertices = nullptr;
 	size_t SceneVertexPos = 0;
@@ -354,10 +359,11 @@ private:
 
 	PresentPushConstants GetPresentPushConstants();
 
+	void SetSceneDrawState();
 	void WaitDeviceIdle();
 	void WaitForCommands(bool present);
-	void TransitionResourceBarrier(ID3D12Resource* resource, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after);
-	void TransitionResourceBarrier(ID3D12Resource* resource0, D3D12_RESOURCE_STATES before0, D3D12_RESOURCE_STATES after0, ID3D12Resource* resource1, D3D12_RESOURCE_STATES before1, D3D12_RESOURCE_STATES after1);
+	void TransitionResourceBarrier(ID3D12GraphicsCommandList* cmdlist, ID3D12Resource* resource, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after);
+	void TransitionResourceBarrier(ID3D12GraphicsCommandList* cmdlist, ID3D12Resource* resource0, D3D12_RESOURCE_STATES before0, D3D12_RESOURCE_STATES after0, ID3D12Resource* resource1, D3D12_RESOURCE_STATES before1, D3D12_RESOURCE_STATES after1);
 
 	static void CALLBACK OnDebugMessage(D3D12_MESSAGE_CATEGORY category, D3D12_MESSAGE_SEVERITY severity, D3D12_MESSAGE_ID id, LPCSTR description, void* context);
 
