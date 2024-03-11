@@ -258,16 +258,17 @@ UBOOL UD3D12RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 	FrameBuffers.clear();
 	FrameBufferRTVs.reset();
 
-	if (!Viewport->ResizeViewport(Fullscreen ? (BLIT_Fullscreen | BLIT_Direct3D) : (BLIT_HardwarePaint | BLIT_Direct3D), NewX, NewY, NewColorBytes))
-	{
-		debugf(TEXT("Viewport.ResizeViewport failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
-		return FALSE;
-	}
-
 	HRESULT result;
 
 	if (Fullscreen)
 	{
+		// If we are going fullscreen we want to resize the window *prior* to entering fullscreen.
+		if (!Viewport->ResizeViewport(Fullscreen ? (BLIT_Fullscreen | BLIT_Direct3D) : (BLIT_HardwarePaint | BLIT_Direct3D), NewX, NewY, NewColorBytes))
+		{
+			debugf(TEXT("Viewport.ResizeViewport failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
+			return FALSE;
+		}
+
 		DXGI_MODE_DESC modeDesc = {};
 		modeDesc.Width = NewX;
 		modeDesc.Height = NewY;
@@ -288,6 +289,13 @@ UBOOL UD3D12RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 	if (FAILED(result))
 	{
 		debugf(TEXT("SwapChain.SetFullscreenState failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
+		return FALSE;
+	}
+
+	// If we exiting fullscreen, we want to resize/reposition the window *after* exiting fullscreen
+	if (!Fullscreen && !Viewport->ResizeViewport(Fullscreen ? (BLIT_Fullscreen | BLIT_Direct3D) : (BLIT_HardwarePaint | BLIT_Direct3D), NewX, NewY, NewColorBytes))
+	{
+		debugf(TEXT("Viewport.ResizeViewport failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
 		return FALSE;
 	}
 
