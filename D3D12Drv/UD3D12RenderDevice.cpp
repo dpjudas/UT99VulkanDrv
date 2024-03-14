@@ -1121,12 +1121,6 @@ void UD3D12RenderDevice::ReleaseSceneBuffers()
 
 ID3D12PipelineState* UD3D12RenderDevice::GetPipeline(DWORD PolyFlags)
 {
-	// Adjust PolyFlags according to Unreal's precedence rules.
-	if (!(PolyFlags & (PF_Translucent | PF_Modulated)))
-		PolyFlags |= PF_Occlude;
-	else if (PolyFlags & PF_Translucent)
-		PolyFlags &= ~PF_Masked;
-
 	int index;
 	if (PolyFlags & PF_Translucent)
 	{
@@ -2172,7 +2166,9 @@ void UD3D12RenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Sur
 {
 	guardSlow(UD3D12RenderDevice::DrawComplexSurface);
 
-	CachedTexture* tex = Textures->GetTexture(Surface.Texture, !!(Surface.PolyFlags & PF_Masked));
+	DWORD PolyFlags = ApplyPrecedenceRules(Surface.PolyFlags);
+
+	CachedTexture* tex = Textures->GetTexture(Surface.Texture, !!(PolyFlags & PF_Masked));
 	CachedTexture* lightmap = Textures->GetTexture(Surface.LightMap, false);
 	CachedTexture* macrotex = Textures->GetTexture(Surface.MacroTexture, false);
 	CachedTexture* detailtex = Textures->GetTexture(Surface.DetailTexture, false);
@@ -2222,8 +2218,8 @@ void UD3D12RenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Sur
 		DetailVMult = GetVMult(*Surface.FogMap);
 	}
 
-	SetPipeline(Surface.PolyFlags);
-	SetDescriptorSet(Surface.PolyFlags, tex, lightmap, macrotex, detailtex);
+	SetPipeline(PolyFlags);
+	SetDescriptorSet(PolyFlags, tex, lightmap, macrotex, detailtex);
 
 	vec4 color(1.0f);
 
@@ -2239,8 +2235,8 @@ void UD3D12RenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Sur
 		{
 			NextSceneBuffers();
 			if (SceneVertexPos + vcount > SceneVertexBufferSize || SceneIndexPos + vcount * 3 > SceneIndexBufferSize) return; // Surface is too large for our buffers
-			SetPipeline(Surface.PolyFlags);
-			SetDescriptorSet(Surface.PolyFlags, tex, lightmap, macrotex, detailtex);
+			SetPipeline(PolyFlags);
+			SetDescriptorSet(PolyFlags, tex, lightmap, macrotex, detailtex);
 		}
 
 		if (!SceneVertices || !SceneIndexes) return;
@@ -2286,7 +2282,7 @@ void UD3D12RenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Sur
 
 	Stats.ComplexSurfaces++;
 
-	if (!GIsEditor || (Surface.PolyFlags & (PF_Selected | PF_FlatShaded)) == 0)
+	if (!GIsEditor || (PolyFlags & (PF_Selected | PF_FlatShaded)) == 0)
 		return;
 
 	// Editor highlight surface (so stupid this is delegated to the renderdev as the engine could just issue a second call):
@@ -2294,13 +2290,13 @@ void UD3D12RenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Sur
 	SetPipeline(PF_Highlighted);
 	SetDescriptorSet(PF_Highlighted);
 
-	if (Surface.PolyFlags & PF_FlatShaded)
+	if (PolyFlags & PF_FlatShaded)
 	{
 		color.x = Surface.FlatColor.R / 255.0f;
 		color.y = Surface.FlatColor.G / 255.0f;
 		color.z = Surface.FlatColor.B / 255.0f;
 		color.w = 0.85f;
-		if (Surface.PolyFlags & PF_Selected)
+		if (PolyFlags & PF_Selected)
 		{
 			color.x *= 1.5f;
 			color.y *= 1.5f;
@@ -2379,6 +2375,8 @@ void UD3D12RenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& Inf
 
 	if (NumPts < 3) return; // This can apparently happen!!
 	if (SceneVertexPos + NumPts > SceneVertexBufferSize || SceneIndexPos + NumPts * 3 > SceneIndexBufferSize) NextSceneBuffers();
+
+	PolyFlags = ApplyPrecedenceRules(PolyFlags);
 
 	CachedTexture* tex = Textures->GetTexture(&Info, !!(PolyFlags & PF_Masked));
 
@@ -2480,6 +2478,8 @@ void UD3D12RenderDevice::DrawGouraudTriangles(const FSceneNode* Frame, const FTe
 
 	if (NumPts < 3) return; // This can apparently happen!!
 	if (SceneVertexPos + NumPts > SceneVertexBufferSize || SceneIndexPos + NumPts * 3 > SceneIndexBufferSize) NextSceneBuffers();
+
+	PolyFlags = ApplyPrecedenceRules(PolyFlags);
 
 	CachedTexture* tex = Textures->GetTexture(const_cast<FTextureInfo*>(&Info), !!(PolyFlags & PF_Masked));
 
@@ -2617,6 +2617,8 @@ void UD3D12RenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT X
 	{
 		Z = 1.f;
 	}
+
+	PolyFlags = ApplyPrecedenceRules(PolyFlags);
 
 	if ((PolyFlags & (PF_Modulated)) == (PF_Modulated) && Info.Format == TEXF_P8)
 		PolyFlags = PF_Modulated;
@@ -3074,6 +3076,7 @@ void UD3D12RenderDevice::SetSceneNode(FSceneNode* Frame)
 void UD3D12RenderDevice::PrecacheTexture(FTextureInfo& Info, DWORD PolyFlags)
 {
 	guard(UD3D12RenderDevice::PrecacheTexture);
+	PolyFlags = ApplyPrecedenceRules(PolyFlags);
 	Textures->GetTexture(&Info, !!(PolyFlags & PF_Masked));
 	unguard;
 }

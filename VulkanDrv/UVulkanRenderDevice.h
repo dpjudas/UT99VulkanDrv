@@ -257,3 +257,13 @@ inline void UVulkanRenderDevice::SetDescriptorSet(VulkanDescriptorSet* descripto
 
 inline float GetUMult(const FTextureInfo& Info) { return 1.0f / (Info.UScale * Info.USize); }
 inline float GetVMult(const FTextureInfo& Info) { return 1.0f / (Info.VScale * Info.VSize); }
+
+inline DWORD ApplyPrecedenceRules(DWORD PolyFlags)
+{
+	// Adjust PolyFlags according to Unreal's precedence rules.
+	if (!(PolyFlags & (PF_Translucent | PF_Modulated)))
+		PolyFlags |= PF_Occlude;
+	else if (PolyFlags & PF_Translucent)
+		PolyFlags &= ~PF_Masked;
+	return PolyFlags;
+}

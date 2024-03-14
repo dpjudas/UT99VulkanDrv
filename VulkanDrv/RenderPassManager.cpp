@@ -91,12 +91,6 @@ void RenderPassManager::EndPresent(VulkanCommandBuffer* cmdbuffer)
 
 VulkanPipeline* RenderPassManager::GetPipeline(DWORD PolyFlags, bool bindless)
 {
-	// Adjust PolyFlags according to Unreal's precedence rules.
-	if (!(PolyFlags & (PF_Translucent | PF_Modulated)))
-		PolyFlags |= PF_Occlude;
-	else if (PolyFlags & PF_Translucent)
-		PolyFlags &= ~PF_Masked;
-
 	int index;
 	if (PolyFlags & PF_Translucent)
 	{

@@ -701,7 +701,9 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 {
 	guardSlow(UVulkanRenderDevice::DrawComplexSurface);
 
-	CachedTexture* tex = Textures->GetTexture(Surface.Texture, !!(Surface.PolyFlags & PF_Masked));
+	DWORD PolyFlags = ApplyPrecedenceRules(Surface.PolyFlags);
+
+	CachedTexture* tex = Textures->GetTexture(Surface.Texture, !!(PolyFlags & PF_Masked));
 	CachedTexture* lightmap = Textures->GetTexture(Surface.LightMap, false);
 	CachedTexture* macrotex = Textures->GetTexture(Surface.MacroTexture, false);
 	CachedTexture* detailtex = Textures->GetTexture(Surface.DetailTexture, false);
@@ -750,9 +752,9 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 		DetailVMult = GetVMult(*Surface.FogMap);
 	}
 
-	SetPipeline(RenderPasses->GetPipeline(Surface.PolyFlags, UsesBindless));
+	SetPipeline(RenderPasses->GetPipeline(PolyFlags, UsesBindless));
 
-	ivec4 textureBinds = SetDescriptorSet(Surface.PolyFlags, tex, lightmap, macrotex, detailtex);
+	ivec4 textureBinds = SetDescriptorSet(PolyFlags, tex, lightmap, macrotex, detailtex);
 	vec4 color(1.0f);
 
 	uint32_t vpos = SceneVertexPos;
@@ -809,7 +811,7 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 
 	Stats.ComplexSurfaces++;
 
-	if (!GIsEditor || (Surface.PolyFlags & (PF_Selected | PF_FlatShaded)) == 0)
+	if (!GIsEditor || (PolyFlags & (PF_Selected | PF_FlatShaded)) == 0)
 		return;
 
 	// Editor highlight surface (so stupid this is delegated to the renderdev as the engine could just issue a second call):
@@ -820,13 +822,13 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 	SetPipeline(RenderPasses->GetPipeline(PF_Highlighted, UsesBindless));
 	textureBinds = SetDescriptorSet(PF_Highlighted, nullptr);
 
-	if (Surface.PolyFlags & PF_FlatShaded)
+	if (PolyFlags & PF_FlatShaded)
 	{
 		color.x = Surface.FlatColor.R / 255.0f;
 		color.y = Surface.FlatColor.G / 255.0f;
 		color.z = Surface.FlatColor.B / 255.0f;
 		color.w = 0.85f;
-		if (Surface.PolyFlags & PF_Selected)
+		if (PolyFlags & PF_Selected)
 		{
 			color.x *= 1.5f;
 			color.y *= 1.5f;
@@ -899,6 +901,8 @@ void UVulkanRenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& In
 	guardSlow(UVulkanRenderDevice::DrawGouraudPolygon);
 
 	if (NumPts < 3) return; // This can apparently happen!!
+
+	PolyFlags = ApplyPrecedenceRules(PolyFlags);
 
 	SetPipeline(RenderPasses->GetPipeline(PolyFlags, UsesBindless));
 
@@ -999,6 +1003,8 @@ void UVulkanRenderDevice::DrawGouraudTriangles(const FSceneNode* Frame, const FT
 	guardSlow(UVulkanRenderDevice::DrawGouraudTriangles);
 
 	if (NumPts < 3) return; // This can apparently happen!!
+
+	PolyFlags = ApplyPrecedenceRules(PolyFlags);
 
 	SetPipeline(RenderPasses->GetPipeline(PolyFlags, UsesBindless));
 
@@ -1134,6 +1140,8 @@ void UVulkanRenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT 
 	{
 		Z = 1.f;
 	}
+
+	PolyFlags = ApplyPrecedenceRules(PolyFlags);
 
 	if ((PolyFlags & (PF_Modulated)) == (PF_Modulated) && Info.Format == TEXF_P8)
 		PolyFlags = PF_Modulated;
@@ -1593,6 +1601,7 @@ void UVulkanRenderDevice::SetSceneNode(FSceneNode* Frame)
 void UVulkanRenderDevice::PrecacheTexture(FTextureInfo& Info, DWORD PolyFlags)
 {
 	guard(UVulkanRenderDevice::PrecacheTexture);
+	PolyFlags = ApplyPrecedenceRules(PolyFlags);
 	Textures->GetTexture(&Info, !!(PolyFlags & PF_Masked));
 	unguard;
 }

@@ -437,3 +437,13 @@ inline void UD3D12RenderDevice::SetDescriptorSet(DWORD PolyFlags, CachedTexture*
 		Batch.MacrotexSamplerMode = macrosamplermode;
 	}
 }
+
+inline DWORD ApplyPrecedenceRules(DWORD PolyFlags)
+{
+	// Adjust PolyFlags according to Unreal's precedence rules.
+	if (!(PolyFlags & (PF_Translucent | PF_Modulated)))
+		PolyFlags |= PF_Occlude;
+	else if (PolyFlags & PF_Translucent)
+		PolyFlags &= ~PF_Masked;
+	return PolyFlags;
+}
