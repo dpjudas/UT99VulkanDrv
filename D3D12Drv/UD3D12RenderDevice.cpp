@@ -2620,9 +2620,6 @@ void UD3D12RenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT X
 
 	PolyFlags = ApplyPrecedenceRules(PolyFlags);
 
-	if ((PolyFlags & (PF_Modulated)) == (PF_Modulated) && Info.Format == TEXF_P8)
-		PolyFlags = PF_Modulated;
-
 	CachedTexture* tex = Textures->GetTexture(&Info, !!(PolyFlags & PF_Masked));
 
 	SetPipeline(PolyFlags);
