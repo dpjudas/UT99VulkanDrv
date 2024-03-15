@@ -177,17 +177,18 @@ void UploadManager::SubmitUploads()
 		PipelineBarrier beforeBarrier;
 		for (CachedTexture* tex : PendingUploads)
 		{
-			if (tex->pendingUploads[i].empty())
-				continue;
-			foundUpload = true;
-			beforeBarrier.AddImage(
-				tex->image->image,
-				partialUpdates ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED,
-				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-				partialUpdates ? VK_ACCESS_SHADER_READ_BIT : 0,
-				VK_ACCESS_TRANSFER_WRITE_BIT,
-				VK_IMAGE_ASPECT_COLOR_BIT,
-				0, partialUpdates ? 1 : tex->pendingUploads[0].size());
+			if (!tex->pendingUploads[i].empty())
+			{
+				beforeBarrier.AddImage(
+					tex->image->image,
+					partialUpdates ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED,
+					VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+					partialUpdates ? VK_ACCESS_SHADER_READ_BIT : 0,
+					VK_ACCESS_TRANSFER_WRITE_BIT,
+					VK_IMAGE_ASPECT_COLOR_BIT,
+					0, partialUpdates ? 1 : tex->pendingUploads[i].size());
+				foundUpload = true;
+			}
 		}
 		if (!foundUpload)
 			continue;
@@ -215,16 +216,19 @@ void UploadManager::SubmitUploads()
 		PipelineBarrier afterBarrier;
 		for (CachedTexture* tex : PendingUploads)
 		{
-			afterBarrier.AddImage(
-				tex->image->image,
-				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-				VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-				VK_ACCESS_TRANSFER_WRITE_BIT,
-				VK_ACCESS_SHADER_READ_BIT,
-				VK_IMAGE_ASPECT_COLOR_BIT,
-				0, partialUpdates ? 1 : tex->pendingUploads[0].size());
+			if (!tex->pendingUploads[i].empty())
+			{
+				afterBarrier.AddImage(
+					tex->image->image,
+					VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+					VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+					VK_ACCESS_TRANSFER_WRITE_BIT,
+					VK_ACCESS_SHADER_READ_BIT,
+					VK_IMAGE_ASPECT_COLOR_BIT,
+					0, partialUpdates ? 1 : tex->pendingUploads[i].size());
 
-			tex->pendingUploads[i].clear();
+				tex->pendingUploads[i].clear();
+			}
 		}
 		afterBarrier.Execute(cmdbuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
 	}
