@@ -179,6 +179,13 @@ UBOOL UD3D12RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 			}
 		}
 
+		D3D12MA::ALLOCATOR_DESC allocatorDesc = {};
+		allocatorDesc.pDevice = Device.get();
+		allocatorDesc.pAdapter = hardwareAdapter.get();
+		allocatorDesc.Flags = D3D12MA::ALLOCATOR_FLAG_MSAA_TEXTURES_ALWAYS_COMMITTED | D3D12MA::ALLOCATOR_FLAG_DEFAULT_POOLS_NOT_ZEROED;
+		result = D3D12MA::CreateAllocator(&allocatorDesc, &MemAllocator);
+		ThrowIfFailed(result, "D3D12MA::CreateAllocator failed");
+
 		DXGI_SWAP_CHAIN_DESC1 swapDesc = {};
 		swapDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 		swapDesc.Width = NewX;
@@ -475,6 +482,10 @@ void UD3D12RenderDevice::Exit()
 	if (FenceEvent != INVALID_HANDLE_VALUE)
 		CloseHandle(FenceEvent);
 	GraphicsQueue.reset();
+
+	if (MemAllocator)
+		MemAllocator->Release();
+	MemAllocator = nullptr;
 
 	if (DebugMessageActive)
 		InfoQueue1->UnregisterMessageCallback(DebugMessageCookie);

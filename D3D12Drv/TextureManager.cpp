@@ -70,9 +70,6 @@ CachedTexture* TextureManager::GetNullTexture()
 
 	NullTexture.reset(new CachedTexture());
 
-	D3D12_HEAP_PROPERTIES defaultHeapProps = {};
-	defaultHeapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
-
 	D3D12_RESOURCE_DESC texDesc = {};
 	texDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
 	texDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
@@ -83,15 +80,10 @@ CachedTexture* TextureManager::GetNullTexture()
 	texDesc.MipLevels = 1;
 	texDesc.SampleDesc.Count = 1;
 
-	HRESULT result = renderer->Device->CreateCommittedResource(
-		&defaultHeapProps,
-		D3D12_HEAP_FLAG_NONE,
-		&texDesc,
-		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
-		nullptr,
-		NullTexture->Texture.GetIID(),
-		NullTexture->Texture.InitPtr());
-	ThrowIfFailed(result, "CreateCommittedResource(NullTexture) failed");
+	D3D12MA::ALLOCATION_DESC allocationDesc = {};
+	allocationDesc.HeapType = D3D12_HEAP_TYPE_DEFAULT;
+	HRESULT result = renderer->MemAllocator->CreateResource(&allocationDesc, &texDesc, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, nullptr, &NullTexture->Allocation, __uuidof(ID3D12Resource), (void**)&NullTexture->Texture);
+	ThrowIfFailed(result, "CreateResource(NullTexture) failed");
 
 	renderer->Uploads->UploadWhite(NullTexture->Texture);
 

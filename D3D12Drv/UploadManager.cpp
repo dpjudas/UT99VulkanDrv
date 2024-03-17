@@ -67,9 +67,6 @@ void UploadManager::UploadTexture(CachedTexture* tex, const FTextureInfo& Info, 
 			}
 		}
 
-		D3D12_HEAP_PROPERTIES defaultHeapProps = {};
-		defaultHeapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
-
 		D3D12_RESOURCE_DESC texDesc = {};
 		texDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
 		texDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
@@ -80,15 +77,10 @@ void UploadManager::UploadTexture(CachedTexture* tex, const FTextureInfo& Info, 
 		texDesc.MipLevels = mipcount;
 		texDesc.SampleDesc.Count = 1;
 
-		HRESULT result = renderer->Device->CreateCommittedResource(
-			&defaultHeapProps,
-			D3D12_HEAP_FLAG_NONE,
-			&texDesc,
-			D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
-			nullptr,
-			tex->Texture.GetIID(),
-			tex->Texture.InitPtr());
-		ThrowIfFailed(result, "CreateCommittedResource(GameTexture) failed");
+		D3D12MA::ALLOCATION_DESC allocationDesc = {};
+		allocationDesc.HeapType = D3D12_HEAP_TYPE_DEFAULT;
+		HRESULT result = renderer->MemAllocator->CreateResource(&allocationDesc, &texDesc, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, nullptr, &tex->Allocation, __uuidof(ID3D12Resource), (void**)&tex->Texture);
+		ThrowIfFailed(result, "CreateResource(GameTexture) failed");
 	}
 
 	if (uploader)

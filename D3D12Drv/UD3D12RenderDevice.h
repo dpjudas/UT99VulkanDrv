@@ -6,6 +6,7 @@
 #include "TextureManager.h"
 #include "UploadManager.h"
 #include "CachedTexture.h"
+#include "D3D12MemAlloc/D3D12MemAlloc.h"
 #include <functional>
 
 struct SceneVertex
@@ -140,6 +141,8 @@ public:
 	int BufferCount = 2;
 	std::vector<ComPtr<ID3D12Resource>> FrameBuffers;
 	DescriptorSet FrameBufferRTVs;
+
+	D3D12MA::Allocator* MemAllocator = nullptr;
 
 	struct
 	{

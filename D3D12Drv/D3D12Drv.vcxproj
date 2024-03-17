@@ -267,6 +267,7 @@
   <ItemGroup>
     <ClInclude Include="CachedTexture.h" />
     <ClInclude Include="ComPtr.h" />
+    <ClInclude Include="D3D12MemAlloc\D3D12MemAlloc.h" />
     <ClInclude Include="Descriptors.h" />
     <ClInclude Include="FileResource.h" />
     <ClInclude Include="halffloat.h" />
@@ -281,6 +282,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="D3D12Drv.cpp" />
+    <ClCompile Include="D3D12MemAlloc\D3D12MemAlloc.cpp" />
     <ClCompile Include="FileResource.cpp" />
     <ClCompile Include="halffloat.cpp" />
     <ClCompile Include="mat.cpp" />
@@ -300,6 +302,9 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="..\D3D12Drv.int" />
+  </ItemGroup>
+  <ItemGroup>
+    <Natvis Include="D3D12MemAlloc\D3D12MemAlloc.natvis" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

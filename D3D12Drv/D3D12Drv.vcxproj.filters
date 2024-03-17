@@ -1,0 +1,49 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="D3D12Drv.cpp" />
+    <ClCompile Include="FileResource.cpp" />
+    <ClCompile Include="halffloat.cpp" />
+    <ClCompile Include="mat.cpp" />
+    <ClCompile Include="Precomp.cpp" />
+    <ClCompile Include="TextureManager.cpp" />
+    <ClCompile Include="TextureUploader.cpp" />
+    <ClCompile Include="UploadManager.cpp" />
+    <ClCompile Include="UTF16.cpp" />
+    <ClCompile Include="UD3D12RenderDevice.cpp" />
+    <ClCompile Include="D3D12MemAlloc\D3D12MemAlloc.cpp">
+      <Filter>D3D12MemAlloc</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="CachedTexture.h" />
+    <ClInclude Include="ComPtr.h" />
+    <ClInclude Include="Descriptors.h" />
+    <ClInclude Include="FileResource.h" />
+    <ClInclude Include="halffloat.h" />
+    <ClInclude Include="mat.h" />
+    <ClInclude Include="Precomp.h" />
+    <ClInclude Include="TextureManager.h" />
+    <ClInclude Include="TextureUploader.h" />
+    <ClInclude Include="UploadManager.h" />
+    <ClInclude Include="UTF16.h" />
+    <ClInclude Include="UD3D12RenderDevice.h" />
+    <ClInclude Include="vec.h" />
+    <ClInclude Include="D3D12MemAlloc\D3D12MemAlloc.h">
+      <Filter>D3D12MemAlloc</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\D3D12Drv.int" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="D3D12MemAlloc">
+      <UniqueIdentifier>{a68fcf32-4dc2-42e6-a07a-3438ad0968bd}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <Natvis Include="D3D12MemAlloc\D3D12MemAlloc.natvis">
+      <Filter>D3D12MemAlloc</Filter>
+    </Natvis>
+  </ItemGroup>
+</Project>
