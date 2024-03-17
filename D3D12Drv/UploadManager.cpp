@@ -79,7 +79,7 @@ void UploadManager::UploadTexture(CachedTexture* tex, const FTextureInfo& Info, 
 
 		D3D12MA::ALLOCATION_DESC allocationDesc = {};
 		allocationDesc.HeapType = D3D12_HEAP_TYPE_DEFAULT;
-		HRESULT result = renderer->MemAllocator->CreateResource(&allocationDesc, &texDesc, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, nullptr, &tex->Allocation, __uuidof(ID3D12Resource), (void**)&tex->Texture);
+		HRESULT result = renderer->MemAllocator->CreateResource(&allocationDesc, &texDesc, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, nullptr, &tex->Allocation, tex->Texture.GetIID(), tex->Texture.InitPtr());
 		ThrowIfFailed(result, "CreateResource(GameTexture) failed");
 	}
 

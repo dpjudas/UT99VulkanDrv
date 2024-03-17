@@ -8,12 +8,13 @@ class CachedTexture
 public:
 	~CachedTexture()
 	{
+		Texture.reset();
 		if (Allocation)
 			Allocation->Release();
 	}
 
 	D3D12MA::Allocation* Allocation = nullptr;
-	ID3D12Resource* Texture = nullptr;
+	ComPtr<ID3D12Resource> Texture;
 
 	int RealtimeChangeCount = 0;
 	int DummyMipmapCount = 0;
