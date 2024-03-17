@@ -1555,6 +1555,7 @@ void UVulkanRenderDevice::EndFlash()
 			UseVertices(4, 6);
 		}
 
+		DrawBatch(Commands->GetDrawCommands());
 		if (CurrentFrame)
 			SetSceneNode(CurrentFrame);
 	}
