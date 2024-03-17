@@ -2832,6 +2832,12 @@ void UD3D12RenderDevice::ReadPixels(FColor* Pixels)
 	{
 		TransitionResourceBarrier(Commands.Draw, SceneBuffers.PPImage[1], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
+		if (!Commands.InSceneDraw)
+		{
+			ID3D12DescriptorHeap* heaps[] = { Heaps.Common->GetHeap(), Heaps.Sampler->GetHeap() };
+			Commands.Draw->SetDescriptorHeaps(2, heaps);
+		}
+
 		D3D12_CPU_DESCRIPTOR_HANDLE rtv = SceneBuffers.PPImageRTV[1].CPUHandle();
 		Commands.Draw->SetGraphicsRootSignature(PresentPass.RootSignature);
 		Commands.Draw->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
