@@ -28,6 +28,9 @@ CachedTexture* TextureManager::GetTexture(FTextureInfo* info, bool masked)
 	if (!info)
 		return nullptr;
 
+	if (info->Format != TEXF_P8)
+		masked = false;
+
 	std::unique_ptr<CachedTexture>& tex = TextureCache[(int)masked][info->CacheID];
 	if (!tex)
 	{
