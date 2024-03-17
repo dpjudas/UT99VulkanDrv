@@ -69,6 +69,15 @@ void RenderPassManager::BeginScene(VulkanCommandBuffer* cmdbuffer, float r, floa
 		.Execute(cmdbuffer);
 }
 
+void RenderPassManager::ContinueScene(VulkanCommandBuffer* cmdbuffer)
+{
+	RenderPassBegin()
+		.RenderPass(Scene.RenderPassContinue.get())
+		.Framebuffer(renderer->Framebuffers->SceneFramebuffer.get())
+		.RenderArea(0, 0, renderer->Textures->Scene->Width, renderer->Textures->Scene->Height)
+		.Execute(cmdbuffer);
+}
+
 void RenderPassManager::EndScene(VulkanCommandBuffer* cmdbuffer)
 {
 	cmdbuffer->endRenderPass();
@@ -324,6 +333,42 @@ void RenderPassManager::CreateRenderPass()
 		.AddSubpassColorAttachmentRef(1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
 		.AddSubpassDepthStencilAttachmentRef(2, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
 		.DebugName("SceneRenderPass")
+		.Create(renderer->Device.get());
+
+	Scene.RenderPassContinue = RenderPassBuilder()
+		.AddAttachment(
+			VK_FORMAT_R16G16B16A16_SFLOAT,
+			renderer->Textures->Scene->SceneSamples,
+			VK_ATTACHMENT_LOAD_OP_LOAD,
+			VK_ATTACHMENT_STORE_OP_STORE,
+			VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+			VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+		.AddAttachment(
+			VK_FORMAT_R32_UINT,
+			renderer->Textures->Scene->SceneSamples,
+			VK_ATTACHMENT_LOAD_OP_LOAD,
+			VK_ATTACHMENT_STORE_OP_STORE,
+			VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+			VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+		.AddDepthStencilAttachment(
+			VK_FORMAT_D32_SFLOAT,
+			renderer->Textures->Scene->SceneSamples,
+			VK_ATTACHMENT_LOAD_OP_LOAD,
+			VK_ATTACHMENT_STORE_OP_STORE,
+			VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+			VK_ATTACHMENT_STORE_OP_DONT_CARE,
+			VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+			VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+		.AddExternalSubpassDependency(
+			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT,
+			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT)
+		.AddSubpass()
+		.AddSubpassColorAttachmentRef(0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+		.AddSubpassColorAttachmentRef(1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+		.AddSubpassDepthStencilAttachmentRef(2, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+		.DebugName("SceneRenderPassContinue")
 		.Create(renderer->Device.get());
 }
 

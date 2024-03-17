@@ -141,6 +141,45 @@ private:
 	void ClearTextureCache();
 	void BlitSceneToPostprocess();
 
+	struct VertexReserveInfo
+	{
+		SceneVertex* vptr;
+		uint32_t* iptr;
+		uint32_t vpos;
+	};
+
+	VertexReserveInfo ReserveVertices(size_t vcount, size_t icount)
+	{
+		// If buffers are full, flush and wait for room.
+		if (SceneVertexPos + vcount > (size_t)BufferManager::SceneVertexBufferSize || SceneIndexPos + icount > (size_t)BufferManager::SceneIndexBufferSize)
+		{
+			// If the request is larger than our buffers we can't draw this.
+			if (vcount > (size_t)BufferManager::SceneVertexBufferSize || icount > (size_t)BufferManager::SceneIndexBufferSize)
+				return { nullptr, nullptr, 0 };
+
+			DrawBatch(Commands->GetDrawCommands());
+			RenderPasses->EndScene(Commands->GetDrawCommands());
+			SubmitAndWait(false, 0, 0, false);
+			auto drawcommands = Commands->GetDrawCommands();
+			RenderPasses->ContinueScene(drawcommands);
+			VkBuffer vertexBuffers[] = { Buffers->SceneVertexBuffer->buffer };
+			VkDeviceSize offsets[] = { 0 };
+			drawcommands->bindVertexBuffers(0, 1, vertexBuffers, offsets);
+			drawcommands->bindIndexBuffer(Buffers->SceneIndexBuffer->buffer, 0, VK_INDEX_TYPE_UINT32);
+			drawcommands->setViewport(0, 1, &viewportdesc);
+		}
+
+		return { Buffers->SceneVertices + SceneVertexPos, Buffers->SceneIndexes + SceneIndexPos, (uint32_t)SceneVertexPos };
+	}
+
+	void UseVertices(size_t vcount, size_t icount)
+	{
+		SceneVertexPos += vcount;
+		SceneIndexPos += icount;
+	}
+
+	VkViewport viewportdesc = {};
+
 	UBOOL UsePrecache;
 	FPlane FlashScale;
 	FPlane FlashFog;

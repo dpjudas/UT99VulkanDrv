@@ -19,6 +19,7 @@ public:
 	void CreateBloomPipeline();
 
 	void BeginScene(VulkanCommandBuffer* cmdbuffer, float r, float g, float b, float a);
+	void ContinueScene(VulkanCommandBuffer* cmdbuffer);
 	void EndScene(VulkanCommandBuffer* cmdbuffer);
 
 	void BeginPresent(VulkanCommandBuffer* cmdbuffer);
@@ -34,6 +35,7 @@ public:
 		std::unique_ptr<VulkanPipelineLayout> PipelineLayout;
 		std::unique_ptr<VulkanPipelineLayout> BindlessPipelineLayout;
 		std::unique_ptr<VulkanRenderPass> RenderPass;
+		std::unique_ptr<VulkanRenderPass> RenderPassContinue;
 		std::unique_ptr<VulkanPipeline> Pipeline[2][32];
 		std::unique_ptr<VulkanPipeline> LinePipeline[2][2];
 		std::unique_ptr<VulkanPipeline> PointPipeline[2][2];
