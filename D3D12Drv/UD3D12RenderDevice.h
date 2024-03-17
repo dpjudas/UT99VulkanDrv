@@ -184,7 +184,7 @@ public:
 		ComPtr<ID3D12Resource> DepthBuffer;
 		ComPtr<ID3D12Resource> PPImage[2];
 		ComPtr<ID3D12Resource> PPHitBuffer;
-		ComPtr<ID3D12Resource> StagingHitBuffer; // Note: was a texture in d3d11, now a buffer where we need to use CopyTextureRegion
+		ComPtr<ID3D12Resource> StagingHitBuffer;
 
 		DescriptorSet SceneRTVs; // ColorBuffer, HitBuffer
 		DescriptorSet SceneDSV;  // DepthBuffer
@@ -341,12 +341,40 @@ private:
 	void ComputeBlurSamples(int sampleCount, float blurAmount, float* sampleWeights);
 
 	void SetPipeline(DWORD polyflags);
+	void SetPipeline(ID3D12PipelineState* pipeline, D3D_PRIMITIVE_TOPOLOGY PrimitiveTopology = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	void SetDescriptorSet(DWORD polyflags, CachedTexture* tex = nullptr, CachedTexture* lightmap = nullptr, CachedTexture* macrotex = nullptr, CachedTexture* detailtex = nullptr, bool clamp = false);
 
 	void AddDrawBatch();
-	void NextSceneBuffers() { DrawBatches(true); }
 	void DrawBatches(bool nextBuffer = false);
 	void DrawEntry(const DrawBatchEntry& entry);
+
+	struct VertexReserveInfo
+	{
+		SceneVertex* vptr;
+		uint32_t* iptr;
+		uint32_t vpos;
+	};
+
+	VertexReserveInfo ReserveVertices(size_t vcount, size_t icount)
+	{
+		// If buffers are full, flush and wait for room.
+		if (SceneVertexPos + vcount > (size_t)SceneVertexBufferSize || SceneIndexPos + icount > (size_t)SceneIndexBufferSize)
+		{
+			// If the request is larger than our buffers we can't draw this.
+			if (vcount > (size_t)SceneVertexBufferSize || icount > (size_t)SceneIndexBufferSize)
+				return { nullptr, nullptr, 0 };
+
+			DrawBatches(true);
+		}
+
+		return { SceneVertices + SceneVertexPos, SceneIndexes + SceneIndexPos, (uint32_t)SceneVertexPos };
+	}
+
+	void UseVertices(size_t vcount, size_t icount)
+	{
+		SceneVertexPos += vcount;
+		SceneIndexPos += icount;
+	}
 
 	int GetSettingsMultisample();
 
@@ -407,12 +435,16 @@ inline float GetVMult(const FTextureInfo& Info) { return 1.0f / (Info.VScale * I
 
 inline void UD3D12RenderDevice::SetPipeline(DWORD PolyFlags)
 {
-	auto pipeline = GetPipeline(PolyFlags);
-	if (pipeline != Batch.Pipeline)
+	SetPipeline(GetPipeline(PolyFlags), D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+}
+
+inline void UD3D12RenderDevice::SetPipeline(ID3D12PipelineState* pipeline, D3D_PRIMITIVE_TOPOLOGY PrimitiveTopology)
+{
+	if (pipeline != Batch.Pipeline || PrimitiveTopology != Batch.PrimitiveTopology)
 	{
 		AddDrawBatch();
 		Batch.Pipeline = pipeline;
-		Batch.PrimitiveTopology = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+		Batch.PrimitiveTopology = PrimitiveTopology;
 	}
 }
 
