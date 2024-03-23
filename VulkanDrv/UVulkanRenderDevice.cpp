@@ -37,6 +37,7 @@ void UVulkanRenderDevice::StaticConstructor()
 	SupportsUpdateTextureRect = 1;
 	MaxTextureSize = 4096;
 	NeedsMaskedFonts = 0;
+	DescFlags |= RDDESCF_Certified;
 #endif
 
 	GammaMode = 0;

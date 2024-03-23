@@ -42,6 +42,7 @@ void UD3D12RenderDevice::StaticConstructor()
 	SupportsUpdateTextureRect = 1;
 	MaxTextureSize = 4096;
 	NeedsMaskedFonts = 0;
+	DescFlags |= RDDESCF_Certified;
 #endif
 
 	GammaMode = 0;
