@@ -253,6 +253,8 @@ std::string FileResource::readAllText(const std::string& filename)
 
 			float3 gammaCorrect(float3 c)
 			{
+				c = clamp(c, 0.0, 1.0); // XOpenGLDrv doesn't use a half-float scene buffer
+
 				if (GammaCorrection.w > 1.0)
 				{
 					// Obtains a multiplier required to offset value according to the following
