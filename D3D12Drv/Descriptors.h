@@ -9,6 +9,9 @@ public:
 
 	DescriptorSet Alloc(int count);
 
+	int GetUsedCount() const;
+	int GetHeapSize() const { return HeapSize; }
+
 	ID3D12DescriptorHeap* GetHeap() { return Heap; }
 
 private:
@@ -53,6 +56,18 @@ inline DescriptorHeap::DescriptorHeap(ID3D12Device* device, int maxDescriptors, 
 
 	HeapSize = maxDescriptors;
 	HandleSize = device->GetDescriptorHandleIncrementSize(type);
+}
+
+inline int DescriptorHeap::GetUsedCount() const
+{
+	int used = Next;
+	int i = 0;
+	for (const auto& list : FreeLists)
+	{
+		used -= i * list.size();
+		i++;
+	}
+	return used;
 }
 
 inline DescriptorSet DescriptorHeap::Alloc(int count)
