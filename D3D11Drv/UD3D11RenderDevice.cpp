@@ -127,6 +127,11 @@ UBOOL UD3D11RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 	Viewport = InViewport;
 	ActiveHdr = Hdr;
 
+	HDC screenDC = GetDC(0);
+	DesktopResolution.Width = GetDeviceCaps(screenDC, HORZRES);
+	DesktopResolution.Height = GetDeviceCaps(screenDC, VERTRES);
+	ReleaseDC(0, screenDC);
+
 	try
 	{
 		std::vector<D3D_FEATURE_LEVEL> featurelevels =
@@ -1239,11 +1244,28 @@ UBOOL UD3D11RenderDevice::Exec(const TCHAR* Cmd, FOutputDevice& Ar)
 		std::set<Resolution> resolutions;
 
 		// Always include what the monitor is currently using
-		HDC screenDC = GetDC(0);
-		int screenWidth = GetDeviceCaps(screenDC, HORZRES);
-		int screenHeight = GetDeviceCaps(screenDC, VERTRES);
-		resolutions.insert({ screenWidth, screenHeight });
-		ReleaseDC(0, screenDC);
+		resolutions.insert({ DesktopResolution.Width, DesktopResolution.Height });
+
+		IDXGIOutput* output = nullptr;
+		HRESULT result = SwapChain->GetContainingOutput(&output);
+		if (SUCCEEDED(result))
+		{
+			UINT numModes = 0;
+			result = output->GetDisplayModeList(ActiveHdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM, 0, &numModes, nullptr);
+			if (SUCCEEDED(result))
+			{
+				std::vector<DXGI_MODE_DESC> descs(numModes);
+				result = output->GetDisplayModeList(ActiveHdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM, 0, &numModes, descs.data());
+				if (SUCCEEDED(result))
+				{
+					for (const DXGI_MODE_DESC& desc : descs)
+					{
+						resolutions.insert({ (int)desc.Width, (int)desc.Height });
+					}
+				}
+			}
+			output->Release();
+		}
 
 		FString Str;
 		for (const Resolution& resolution : resolutions)

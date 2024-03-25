@@ -428,6 +428,12 @@ private:
 
 	bool IsLocked = false;
 	bool ActiveHdr = false;
+
+	struct
+	{
+		int Width = 0;
+		int Height = 0;
+	} DesktopResolution;
 };
 
 void ThrowError(HRESULT result, const char* msg);
