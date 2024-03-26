@@ -56,7 +56,7 @@ void UVulkanRenderDevice::StaticConstructor()
 	Bloom = 0;
 	BloomAmount = 128;
 
-	LODBias = -0.5f;
+	LODBias = 0.0f;
 	LightMode = 0;
 
 	GammaCorrectScreenshots = 1;
