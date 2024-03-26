@@ -1609,6 +1609,9 @@ void UD3D12RenderDevice::UploadTexture(ID3D12Resource* resource, D3D12_RESOURCE_
 	desc.Width = width;
 	desc.Height = height;
 
+	// GetCopyableFootprints in Windows 10 needs the BaseOffset to be aligned already.
+	Upload.Pos = (Upload.Pos + (D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT - 1)) / D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT * D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT;
+
 	UINT64 totalSize = 0;
 	Device->GetCopyableFootprints(&desc, firstSubresource, numSubresources, Upload.Pos, Upload.Transfer.Footprints.data(), Upload.Transfer.NumRows.data(), Upload.Transfer.RowSizeInBytes.data(), &totalSize);
 
