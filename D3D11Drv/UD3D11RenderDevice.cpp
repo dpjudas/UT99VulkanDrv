@@ -178,6 +178,8 @@ UBOOL UD3D11RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 			swapDesc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
 			swapDesc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
 			result = dxgiFactory->CreateSwapChainForHwnd(Device, (HWND)Viewport->GetWindow(), &swapDesc, nullptr, nullptr, &SwapChain1);
+			if (SUCCEEDED(result))
+				dxgiFactory->MakeWindowAssociation((HWND)Viewport->GetWindow(), DXGI_MWA_NO_ALT_ENTER);
 		}
 		if (SUCCEEDED(result))
 		{
@@ -334,7 +336,7 @@ UBOOL UD3D11RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 		}
 	}
 
-	result = SwapChain->ResizeBuffers(2, NewX, NewY, ActiveHdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
+	result = SwapChain->ResizeBuffers(2, Viewport->SizeX, Viewport->SizeY, ActiveHdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
 	if (FAILED(result))
 	{
 		debugf(TEXT("SwapChain.ResizeBuffers failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
@@ -352,11 +354,11 @@ UBOOL UD3D11RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 		}
 	}
 
-	if (NewX && NewY)
+	if (Viewport->SizeX && Viewport->SizeY)
 	{
 		try
 		{
-			ResizeSceneBuffers(NewX, NewY, GetSettingsMultisample());
+			ResizeSceneBuffers(Viewport->SizeX, Viewport->SizeY, GetSettingsMultisample());
 		}
 		catch (const std::exception& e)
 		{

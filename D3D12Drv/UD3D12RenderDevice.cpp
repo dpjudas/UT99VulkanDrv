@@ -63,7 +63,6 @@ void UD3D12RenderDevice::StaticConstructor()
 
 	LODBias = 0.0f;
 	LightMode = 0;
-	RefreshRate = 0;
 
 	GammaCorrectScreenshots = 1;
 	UseDebugLayer = 0;
@@ -89,7 +88,6 @@ void UD3D12RenderDevice::StaticConstructor()
 	new(GetClass(), TEXT("Bloom"), RF_Public) UBoolProperty(CPP_PROPERTY(Bloom), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("BloomAmount"), RF_Public) UByteProperty(CPP_PROPERTY(BloomAmount), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("LODBias"), RF_Public) UFloatProperty(CPP_PROPERTY(LODBias), TEXT("Display"), CPF_Config);
-	new(GetClass(), TEXT("RefreshRate"), RF_Public) UIntProperty(CPP_PROPERTY(RefreshRate), TEXT("Display"), CPF_Config);
 
 	UEnum* AntialiasModes = new(GetClass(), TEXT("AntialiasModes"))UEnum(nullptr);
 	new(AntialiasModes->Names)FName(TEXT("Off"));
@@ -216,6 +214,9 @@ UBOOL UD3D12RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 			SwapChain3->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709);
 		}
 
+		result = factory->MakeWindowAssociation((HWND)Viewport->GetWindow(), DXGI_MWA_NO_WINDOW_CHANGES);
+		ThrowIfFailed(result, "MakeWindowAssociation failed");
+
 		Heaps.Common = std::make_unique<DescriptorHeap>(Device.get(), 64 * 1024, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
 		Heaps.Sampler = std::make_unique<DescriptorHeap>(Device.get(), 64, D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
 		Heaps.RTV = std::make_unique<DescriptorHeap>(Device.get(), 64, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, D3D12_DESCRIPTOR_HEAP_FLAG_NONE);
@@ -268,57 +269,97 @@ UBOOL UD3D12RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 {
 	guard(UD3D12RenderDevice::SetRes);
 
+	if (NewX == 0 || NewY == 0)
+		return 1;
+
 	FrameBuffers.clear();
 	FrameBufferRTVs.reset();
 
 	HRESULT result;
 
-	if (Fullscreen)
+	if (!Fullscreen && FullscreenState.Enabled) // Leaving fullscreen
 	{
-		// If we are going fullscreen we want to resize the window *prior* to entering fullscreen.
-		if (!Viewport->ResizeViewport(Fullscreen ? (BLIT_Fullscreen | BLIT_Direct3D) : (BLIT_HardwarePaint | BLIT_Direct3D), NewX, NewY, NewColorBytes))
-		{
-			debugf(TEXT("Viewport.ResizeViewport failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
-			return FALSE;
-		}
+		// Restore old state
+		SetWindowLong((HWND)Viewport->GetWindow(), GWL_STYLE, FullscreenState.Style);
+		SetWindowLong((HWND)Viewport->GetWindow(), GWL_EXSTYLE, FullscreenState.ExStyle);
+		SetWindowPos(
+			(HWND)Viewport->GetWindow(),
+			HWND_TOP,
+			FullscreenState.WindowPos.left,
+			FullscreenState.WindowPos.top,
+			FullscreenState.WindowPos.right - FullscreenState.WindowPos.left,
+			FullscreenState.WindowPos.bottom - FullscreenState.WindowPos.top,
+			SWP_FRAMECHANGED | SWP_NOSENDCHANGING | SWP_NOACTIVATE | SWP_NOZORDER);
 
-		DXGI_MODE_DESC modeDesc = {};
-		modeDesc.Width = NewX;
-		modeDesc.Height = NewY;
-		modeDesc.Format = ActiveHdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM;
-		if (RefreshRate != 0)
-		{
-			modeDesc.RefreshRate.Numerator = RefreshRate;
-			modeDesc.RefreshRate.Denominator = 1;
-		}
-		result = SwapChain3->ResizeTarget(&modeDesc);
-		if (FAILED(result))
-		{
-			debugf(TEXT("SwapChain.ResizeTarget failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
-		}
+		FullscreenState.Enabled = false;
 	}
 
-	result = SwapChain3->SetFullscreenState(Fullscreen ? TRUE : FALSE, nullptr);
-	if (FAILED(result))
-	{
-		debugf(TEXT("SwapChain.SetFullscreenState failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
-		return FALSE;
-	}
-
-	// If we exiting fullscreen, we want to resize/reposition the window *after* exiting fullscreen
-	if (!Fullscreen && !Viewport->ResizeViewport(Fullscreen ? (BLIT_Fullscreen | BLIT_Direct3D) : (BLIT_HardwarePaint | BLIT_Direct3D), NewX, NewY, NewColorBytes))
+	if (!Viewport->ResizeViewport(Fullscreen ? (BLIT_Fullscreen | BLIT_Direct3D) : (BLIT_HardwarePaint | BLIT_Direct3D), NewX, NewY, NewColorBytes))
 	{
 		debugf(TEXT("Viewport.ResizeViewport failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
 		return FALSE;
 	}
 
-	BufferCount = UseVSync ? 2 : 3;
-
-	result = SwapChain3->ResizeBuffers(BufferCount, NewX, NewY, ActiveHdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
-	if (FAILED(result))
+	if (Fullscreen && !FullscreenState.Enabled) // Entering fullscreen
 	{
-		debugf(TEXT("SwapChain.ResizeBuffers failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
-		return FALSE;
+		// Save old state
+		GetWindowRect((HWND)Viewport->GetWindow(), &FullscreenState.WindowPos);
+		FullscreenState.Style = GetWindowLong((HWND)Viewport->GetWindow(), GWL_STYLE);
+		FullscreenState.ExStyle = GetWindowLong((HWND)Viewport->GetWindow(), GWL_EXSTYLE);
+
+		// Find primary monitor resolution
+		HDC screenDC = GetDC(0);
+		int screenWidth = GetDeviceCaps(screenDC, HORZRES);
+		int screenHeight = GetDeviceCaps(screenDC, VERTRES);
+		ReleaseDC(0, screenDC);
+
+		// Create borderless full screen window (our present shader will letterbox any resolution to fit)
+		SetWindowLong((HWND)Viewport->GetWindow(), GWL_STYLE, WS_OVERLAPPED | WS_VISIBLE);
+		SetWindowLong((HWND)Viewport->GetWindow(), GWL_EXSTYLE, WS_EX_APPWINDOW);
+		SetWindowPos((HWND)Viewport->GetWindow(), HWND_TOP, 0, 0, screenWidth, screenHeight, SWP_FRAMECHANGED | SWP_NOSENDCHANGING | SWP_NOACTIVATE | SWP_NOZORDER);
+
+		DXGI_MODE_DESC modeDesc = {};
+		modeDesc.Width = screenWidth;
+		modeDesc.Height = screenHeight;
+		modeDesc.Format = ActiveHdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM;
+		result = SwapChain3->ResizeTarget(&modeDesc);
+		if (FAILED(result))
+		{
+			debugf(TEXT("SwapChain.ResizeTarget failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
+		}
+
+		BufferCount = UseVSync ? 2 : 3;
+
+		result = SwapChain3->ResizeBuffers(BufferCount, screenWidth, screenHeight, ActiveHdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
+		if (FAILED(result))
+		{
+			debugf(TEXT("SwapChain.ResizeBuffers failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
+			return FALSE;
+		}
+
+		FullscreenState.Enabled = true;
+	}
+	
+	if (!Fullscreen)
+	{
+		DXGI_MODE_DESC modeDesc = {};
+		modeDesc.Width = Viewport->SizeX;
+		modeDesc.Height = Viewport->SizeY;
+		modeDesc.Format = ActiveHdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM;
+		result = SwapChain3->ResizeTarget(&modeDesc);
+		if (FAILED(result))
+		{
+			debugf(TEXT("SwapChain.ResizeTarget failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
+		}
+
+		BufferCount = UseVSync ? 2 : 3;
+
+		result = SwapChain3->ResizeBuffers(BufferCount, Viewport->SizeX, Viewport->SizeY, ActiveHdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
+		if (FAILED(result))
+		{
+			debugf(TEXT("SwapChain.ResizeBuffers failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
+			return FALSE;
+		}
 	}
 
 	if (ActiveHdr)
@@ -326,11 +367,11 @@ UBOOL UD3D12RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 		SwapChain3->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709);
 	}
 
-	if (NewX && NewY)
+	if (Viewport->SizeX && Viewport->SizeY)
 	{
 		try
 		{
-			ResizeSceneBuffers(NewX, NewY, GetSettingsMultisample());
+			ResizeSceneBuffers(Viewport->SizeX, Viewport->SizeY, GetSettingsMultisample());
 		}
 		catch (const std::exception& e)
 		{
@@ -463,9 +504,6 @@ void UD3D12RenderDevice::Exit()
 	guard(UD3D12RenderDevice::Exit);
 
 	WaitDeviceIdle();
-
-	if (SwapChain3)
-		SwapChain3->SetFullscreenState(FALSE, nullptr);
 
 	Uploads.reset();
 	Textures.reset();
@@ -1987,11 +2025,30 @@ void UD3D12RenderDevice::Unlock(UBOOL Blit)
 			Commands.Draw->SetGraphicsRootSignature(PresentPass.RootSignature);
 			Commands.Draw->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
 
+			RECT box = {};
+			GetClientRect((HWND)Viewport->GetWindow(), &box);
+			int width = box.right;
+			int height = box.bottom;
+			float scale = std::min(width / (float)Viewport->SizeX, height / (float)Viewport->SizeY);
+			int letterboxWidth = (int)std::round(Viewport->SizeX * scale);
+			int letterboxHeight = (int)std::round(Viewport->SizeY * scale);
+			int letterboxX = (width - letterboxWidth) / 2;
+			int letterboxY = (height - letterboxHeight) / 2;
+
 			D3D12_VIEWPORT viewport = {};
-			viewport.Width = Viewport->SizeX;
-			viewport.Height = Viewport->SizeY;
+			viewport.TopLeftX = letterboxX;
+			viewport.TopLeftY = letterboxY;
+			viewport.Width = letterboxWidth;
+			viewport.Height = letterboxHeight;
 			viewport.MaxDepth = 1.0f;
 			Commands.Draw->RSSetViewports(1, &viewport);
+
+			D3D12_RECT scissorbox = {};
+			scissorbox.left = box.left;
+			scissorbox.top = box.top;
+			scissorbox.right = box.right;
+			scissorbox.bottom = box.bottom;
+			Commands.Draw->RSSetScissorRects(1, &scissorbox);
 
 			PresentPushConstants pushconstants = GetPresentPushConstants();
 

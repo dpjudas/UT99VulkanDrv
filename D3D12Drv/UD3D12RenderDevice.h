@@ -301,7 +301,6 @@ public:
 	BYTE AntialiasMode;
 	BYTE GammaMode;
 	BYTE LightMode;
-	INT RefreshRate;
 	BITFIELD GammaCorrectScreenshots;
 	BITFIELD UseDebugLayer;
 
@@ -434,6 +433,14 @@ private:
 		int Width = 0;
 		int Height = 0;
 	} DesktopResolution;
+
+	struct
+	{
+		RECT WindowPos = {};
+		LONG Style = 0;
+		LONG ExStyle = 0;
+		bool Enabled = false;
+	} FullscreenState;
 };
 
 void ThrowError(HRESULT result, const char* msg);
