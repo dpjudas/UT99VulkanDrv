@@ -279,43 +279,59 @@ UBOOL UD3D11RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 
 	HRESULT result;
 
+	DXGI_MODE_DESC modeDesc = {};
+	modeDesc.Width = NewX;
+	modeDesc.Height = NewY;
+	modeDesc.Format = ActiveHdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM;
+	if (RefreshRate != 0)
+	{
+		modeDesc.RefreshRate.Numerator = RefreshRate;
+		modeDesc.RefreshRate.Denominator = 1;
+	}
+
 	if (Fullscreen)
 	{
 		// If we are going fullscreen we want to resize the window *prior* to entering fullscreen.
-		if (!Viewport->ResizeViewport(Fullscreen ? (BLIT_Fullscreen | BLIT_Direct3D) : (BLIT_HardwarePaint | BLIT_Direct3D), NewX, NewY, NewColorBytes))
+		if (!Viewport->ResizeViewport(BLIT_Fullscreen | BLIT_Direct3D, NewX, NewY, NewColorBytes))
 		{
 			debugf(TEXT("Viewport.ResizeViewport failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
 			return FALSE;
 		}
 
-		DXGI_MODE_DESC modeDesc = {};
-		modeDesc.Width = NewX;
-		modeDesc.Height = NewY;
-		modeDesc.Format = ActiveHdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM;
-		if (RefreshRate != 0)
-		{
-			modeDesc.RefreshRate.Numerator = RefreshRate;
-			modeDesc.RefreshRate.Denominator = 1;
-		}
 		result = SwapChain->ResizeTarget(&modeDesc);
 		if (FAILED(result))
 		{
 			debugf(TEXT("SwapChain.ResizeTarget failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
 		}
-	}
 
-	result = SwapChain->SetFullscreenState(Fullscreen ? TRUE : FALSE, nullptr);
-	if (FAILED(result))
-	{
-		debugf(TEXT("SwapChain.SetFullscreenState failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
-		return FALSE;
+		result = SwapChain->SetFullscreenState(TRUE, nullptr);
+		if (FAILED(result))
+		{
+			debugf(TEXT("SwapChain.SetFullscreenState failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
+			return FALSE;
+		}
 	}
-
-	// If we exiting fullscreen, we want to resize/reposition the window *after* exiting fullscreen
-	if (!Fullscreen && !Viewport->ResizeViewport(Fullscreen ? (BLIT_Fullscreen | BLIT_Direct3D) : (BLIT_HardwarePaint | BLIT_Direct3D), NewX, NewY, NewColorBytes))
+	else
 	{
-		debugf(TEXT("Viewport.ResizeViewport failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
-		return FALSE;
+		result = SwapChain->SetFullscreenState(FALSE, nullptr);
+		if (FAILED(result))
+		{
+			debugf(TEXT("SwapChain.SetFullscreenState failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
+			return FALSE;
+		}
+
+		// If we exiting fullscreen, we want to resize/reposition the window *after* exiting fullscreen
+		if (!Viewport->ResizeViewport(BLIT_HardwarePaint | BLIT_Direct3D, NewX, NewY, NewColorBytes))
+		{
+			debugf(TEXT("Viewport.ResizeViewport failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
+			return FALSE;
+		}
+
+		result = SwapChain->ResizeTarget(&modeDesc);
+		if (FAILED(result))
+		{
+			debugf(TEXT("SwapChain.ResizeTarget failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
+		}
 	}
 
 	result = SwapChain->ResizeBuffers(2, NewX, NewY, ActiveHdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
