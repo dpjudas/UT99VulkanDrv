@@ -272,9 +272,27 @@ UBOOL UD3D11RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 	unguard;
 }
 
+class SetResCallLock
+{
+public:
+	SetResCallLock(bool &value) : value(value)
+	{
+		value = true;
+	}
+	~SetResCallLock()
+	{
+		value = false;
+	}
+	bool& value;
+};
+
 UBOOL UD3D11RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fullscreen)
 {
 	guard(UD3D11RenderDevice::SetRes);
+
+	if (InSetResCall)
+		return TRUE;
+	SetResCallLock lock(InSetResCall);
 
 	ReleaseObject(BackBuffer);
 	ReleaseObject(BackBufferView);
@@ -293,6 +311,27 @@ UBOOL UD3D11RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 
 	if (Fullscreen)
 	{
+#if 0
+		IDXGIOutput* output = nullptr;
+		result = SwapChain->GetContainingOutput(&output);
+		if (SUCCEEDED(result))
+		{
+			DXGI_MODE_DESC modeToMatch = modeDesc;
+			result = output->FindClosestMatchingMode(&modeToMatch, &modeDesc, Device);
+			if (FAILED(result))
+			{
+				debugf(TEXT("FindClosestMatchingMode failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
+			}
+			NewX = modeDesc.Width;
+			NewY = modeDesc.Height;
+			output->Release();
+		}
+		else
+		{
+			debugf(TEXT("GetContainingOutput failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
+		}
+#endif
+
 		// If we are going fullscreen we want to resize the window *prior* to entering fullscreen.
 		if (!Viewport->ResizeViewport(BLIT_Fullscreen | BLIT_Direct3D, NewX, NewY, NewColorBytes))
 		{
@@ -300,17 +339,17 @@ UBOOL UD3D11RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 			return FALSE;
 		}
 
-		result = SwapChain->ResizeTarget(&modeDesc);
-		if (FAILED(result))
-		{
-			debugf(TEXT("SwapChain.ResizeTarget failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
-		}
-
 		result = SwapChain->SetFullscreenState(TRUE, nullptr);
 		if (FAILED(result))
 		{
 			debugf(TEXT("SwapChain.SetFullscreenState failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
 			return FALSE;
+		}
+
+		result = SwapChain->ResizeTarget(&modeDesc);
+		if (FAILED(result))
+		{
+			debugf(TEXT("SwapChain.ResizeTarget failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
 		}
 	}
 	else

@@ -441,6 +441,8 @@ private:
 		LONG ExStyle = 0;
 		bool Enabled = false;
 	} FullscreenState;
+
+	bool InSetResCall = false;
 };
 
 void ThrowError(HRESULT result, const char* msg);

@@ -235,6 +235,8 @@ private:
 		LONG ExStyle = 0;
 		bool Enabled = false;
 	} FullscreenState;
+
+	bool InSetResCall = false;
 };
 
 inline void UVulkanRenderDevice::SetPipeline(VulkanPipeline* pipeline)

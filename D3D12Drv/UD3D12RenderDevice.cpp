@@ -265,9 +265,27 @@ UBOOL UD3D12RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 	unguard;
 }
 
+class SetResCallLock
+{
+public:
+	SetResCallLock(bool& value) : value(value)
+	{
+		value = true;
+	}
+	~SetResCallLock()
+	{
+		value = false;
+	}
+	bool& value;
+};
+
 UBOOL UD3D12RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fullscreen)
 {
 	guard(UD3D12RenderDevice::SetRes);
+
+	if (InSetResCall)
+		return TRUE;
+	SetResCallLock lock(InSetResCall);
 
 	if (NewX == 0 || NewY == 0)
 		return 1;
