@@ -168,7 +168,7 @@ void DescriptorSetManager::CreateBloomLayout()
 void DescriptorSetManager::CreateBloomSets()
 {
 	Bloom.Pool = DescriptorPoolBuilder()
-		.AddPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, NumBloomLevels * 2 + 1)
+		.AddPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, (NumBloomLevels * 2 + 1) * 2)
 		.MaxSets(NumBloomLevels * 2 + 1)
 		.DebugName("BloomPool")
 		.Create(renderer->Device.get());
