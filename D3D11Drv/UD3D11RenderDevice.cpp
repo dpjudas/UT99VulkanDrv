@@ -343,7 +343,7 @@ UBOOL UD3D11RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 		if (FAILED(result))
 		{
 			debugf(TEXT("SwapChain.SetFullscreenState failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
-			return FALSE;
+			// Don't fail this as it can happen if the application isn't the foreground process
 		}
 
 		result = SwapChain->ResizeTarget(&modeDesc);
@@ -358,7 +358,7 @@ UBOOL UD3D11RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 		if (FAILED(result))
 		{
 			debugf(TEXT("SwapChain.SetFullscreenState failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
-			return FALSE;
+			// Don't fail this as it can happen if the application isn't the foreground process
 		}
 
 		// If we exiting fullscreen, we want to resize/reposition the window *after* exiting fullscreen
