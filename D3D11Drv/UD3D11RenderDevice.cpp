@@ -1806,54 +1806,44 @@ void UD3D11RenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Sur
 		if (vcount < 3) continue;
 
 		uint32_t icount = (vcount - 2) * 3;
-
-		if (SceneVertexPos + vcount > SceneVertexBufferSize || SceneIndexPos + vcount * 3 > SceneIndexBufferSize)
+		auto alloc = ReserveVertices(vcount, icount);
+		if (alloc.vptr)
 		{
-			NextSceneBuffers();
-			if (SceneVertexPos + vcount > SceneVertexBufferSize || SceneIndexPos + vcount * 3 > SceneIndexBufferSize) return; // Surface is too large for our buffers
-			SetPipeline(PolyFlags);
-			SetDescriptorSet(PolyFlags, tex, lightmap, macrotex, detailtex);
+			SceneVertex* vptr = alloc.vptr;
+			uint32_t* iptr = alloc.iptr;
+			uint32_t vpos = alloc.vpos;
+
+			for (uint32_t i = 0; i < vcount; i++)
+			{
+				FVector point = pts[i]->Point;
+				FLOAT u = Facet.MapCoords.XAxis | point;
+				FLOAT v = Facet.MapCoords.YAxis | point;
+
+				vptr->Flags = flags;
+				vptr->Position.x = point.X;
+				vptr->Position.y = point.Y;
+				vptr->Position.z = point.Z;
+				vptr->TexCoord.s = (u - UPan) * UMult;
+				vptr->TexCoord.t = (v - VPan) * VMult;
+				vptr->TexCoord2.s = (u - LMUPan) * LMUMult;
+				vptr->TexCoord2.t = (v - LMVPan) * LMVMult;
+				vptr->TexCoord3.s = (u - MacroUPan) * MacroUMult;
+				vptr->TexCoord3.t = (v - MacroVPan) * MacroVMult;
+				vptr->TexCoord4.s = (u - DetailUPan) * DetailUMult;
+				vptr->TexCoord4.t = (v - DetailVPan) * DetailVMult;
+				vptr->Color = color;
+				vptr++;
+			}
+
+			for (uint32_t i = vpos + 2; i < vpos + vcount; i++)
+			{
+				*(iptr++) = vpos;
+				*(iptr++) = i - 1;
+				*(iptr++) = i;
+			}
+
+			UseVertices(vcount, icount);
 		}
-
-		if (!SceneVertices || !SceneIndexes) return;
-
-		uint32_t vpos = SceneVertexPos;
-		uint32_t ipos = SceneIndexPos;
-
-		SceneVertex* vptr = SceneVertices + vpos;
-		uint32_t* iptr = SceneIndexes + ipos;
-
-		for (uint32_t i = 0; i < vcount; i++)
-		{
-			FVector point = pts[i]->Point;
-			FLOAT u = Facet.MapCoords.XAxis | point;
-			FLOAT v = Facet.MapCoords.YAxis | point;
-
-			vptr->Flags = flags;
-			vptr->Position.x = point.X;
-			vptr->Position.y = point.Y;
-			vptr->Position.z = point.Z;
-			vptr->TexCoord.s = (u - UPan) * UMult;
-			vptr->TexCoord.t = (v - VPan) * VMult;
-			vptr->TexCoord2.s = (u - LMUPan) * LMUMult;
-			vptr->TexCoord2.t = (v - LMVPan) * LMVMult;
-			vptr->TexCoord3.s = (u - MacroUPan) * MacroUMult;
-			vptr->TexCoord3.t = (v - MacroVPan) * MacroVMult;
-			vptr->TexCoord4.s = (u - DetailUPan) * DetailUMult;
-			vptr->TexCoord4.t = (v - DetailVPan) * DetailVMult;
-			vptr->Color = color;
-			vptr++;
-		}
-
-		for (uint32_t i = vpos + 2; i < vpos + vcount; i++)
-		{
-			*(iptr++) = vpos;
-			*(iptr++) = i - 1;
-			*(iptr++) = i;
-		}
-
-		SceneVertexPos += vcount;
-		SceneIndexPos += icount;
 	}
 
 	Stats.ComplexSurfaces++;
@@ -1892,54 +1882,44 @@ void UD3D11RenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Sur
 		if (vcount < 3) continue;
 
 		uint32_t icount = (vcount - 2) * 3;
-
-		if (SceneVertexPos + vcount > SceneVertexBufferSize || SceneIndexPos + vcount * 3 > SceneIndexBufferSize)
+		auto alloc = ReserveVertices(vcount, icount);
+		if (alloc.vptr)
 		{
-			NextSceneBuffers();
-			if (SceneVertexPos + vcount > SceneVertexBufferSize || SceneIndexPos + vcount * 3 > SceneIndexBufferSize) return; // Surface is too large for our buffers
-			SetPipeline(PF_Highlighted);
-			SetDescriptorSet(PF_Highlighted);
+			SceneVertex* vptr = alloc.vptr;
+			uint32_t* iptr = alloc.iptr;
+			uint32_t vpos = alloc.vpos;
+
+			for (uint32_t i = 0; i < vcount; i++)
+			{
+				FVector point = pts[i]->Point;
+				FLOAT u = Facet.MapCoords.XAxis | point;
+				FLOAT v = Facet.MapCoords.YAxis | point;
+
+				vptr->Flags = flags;
+				vptr->Position.x = point.X;
+				vptr->Position.y = point.Y;
+				vptr->Position.z = point.Z;
+				vptr->TexCoord.s = (u - UPan) * UMult;
+				vptr->TexCoord.t = (v - VPan) * VMult;
+				vptr->TexCoord2.s = (u - LMUPan) * LMUMult;
+				vptr->TexCoord2.t = (v - LMVPan) * LMVMult;
+				vptr->TexCoord3.s = (u - MacroUPan) * MacroUMult;
+				vptr->TexCoord3.t = (v - MacroVPan) * MacroVMult;
+				vptr->TexCoord4.s = (u - DetailUPan) * DetailUMult;
+				vptr->TexCoord4.t = (v - DetailVPan) * DetailVMult;
+				vptr->Color = color;
+				vptr++;
+			}
+
+			for (uint32_t i = vpos + 2; i < vpos + vcount; i++)
+			{
+				*(iptr++) = vpos;
+				*(iptr++) = i - 1;
+				*(iptr++) = i;
+			}
+
+			UseVertices(vcount, icount);
 		}
-
-		if (!SceneVertices || !SceneIndexes) return;
-
-		uint32_t vpos = SceneVertexPos;
-		uint32_t ipos = SceneIndexPos;
-
-		SceneVertex* vptr = SceneVertices + vpos;
-		uint32_t* iptr = SceneIndexes + ipos;
-
-		for (uint32_t i = 0; i < vcount; i++)
-		{
-			FVector point = pts[i]->Point;
-			FLOAT u = Facet.MapCoords.XAxis | point;
-			FLOAT v = Facet.MapCoords.YAxis | point;
-
-			vptr->Flags = flags;
-			vptr->Position.x = point.X;
-			vptr->Position.y = point.Y;
-			vptr->Position.z = point.Z;
-			vptr->TexCoord.s = (u - UPan) * UMult;
-			vptr->TexCoord.t = (v - VPan) * VMult;
-			vptr->TexCoord2.s = (u - LMUPan) * LMUMult;
-			vptr->TexCoord2.t = (v - LMVPan) * LMVMult;
-			vptr->TexCoord3.s = (u - MacroUPan) * MacroUMult;
-			vptr->TexCoord3.t = (v - MacroVPan) * MacroVMult;
-			vptr->TexCoord4.s = (u - DetailUPan) * DetailUMult;
-			vptr->TexCoord4.t = (v - DetailVPan) * DetailVMult;
-			vptr->Color = color;
-			vptr++;
-		}
-
-		for (uint32_t i = vpos + 2; i < vpos + vcount; i++)
-		{
-			*(iptr++) = vpos;
-			*(iptr++) = i - 1;
-			*(iptr++) = i;
-		}
-
-		SceneVertexPos += vcount;
-		SceneIndexPos += icount;
 	}
 
 	unguardSlow;
@@ -1950,7 +1930,6 @@ void UD3D11RenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& Inf
 	guardSlow(UD3D11RenderDevice::DrawGouraudPolygon);
 
 	if (NumPts < 3) return; // This can apparently happen!!
-	if (SceneVertexPos + NumPts > SceneVertexBufferSize || SceneIndexPos + NumPts * 3 > SceneIndexBufferSize) NextSceneBuffers();
 
 	PolyFlags = ApplyPrecedenceRules(PolyFlags);
 
@@ -1959,80 +1938,81 @@ void UD3D11RenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& Inf
 	SetPipeline(PolyFlags);
 	SetDescriptorSet(PolyFlags, tex);
 
-	if (!SceneVertices || !SceneIndexes) return;
-
 	float UMult = GetUMult(Info);
 	float VMult = GetVMult(Info);
 	int flags = (PolyFlags & (PF_RenderFog | PF_Translucent | PF_Modulated)) == PF_RenderFog ? 16 : 0;
 
 	if ((PolyFlags & (PF_Translucent | PF_Modulated)) == 0 && LightMode == 2) flags |= 32;
 
-	if (PolyFlags & PF_Modulated)
+	auto alloc = ReserveVertices(NumPts, (NumPts - 2) * 3);
+	if (alloc.vptr)
 	{
-		SceneVertex* vertex = &SceneVertices[SceneVertexPos];
-		for (INT i = 0; i < NumPts; i++)
+		SceneVertex* vptr = alloc.vptr;
+		uint32_t* iptr = alloc.iptr;
+		uint32_t vpos = alloc.vpos;
+
+		if (PolyFlags & PF_Modulated)
 		{
-			FTransTexture* P = Pts[i];
-			vertex->Flags = flags;
-			vertex->Position.x = P->Point.X;
-			vertex->Position.y = P->Point.Y;
-			vertex->Position.z = P->Point.Z;
-			vertex->TexCoord.s = P->U * UMult;
-			vertex->TexCoord.t = P->V * VMult;
-			vertex->TexCoord2.s = P->Fog.X;
-			vertex->TexCoord2.t = P->Fog.Y;
-			vertex->TexCoord3.s = P->Fog.Z;
-			vertex->TexCoord3.t = P->Fog.W;
-			vertex->TexCoord4.s = 0.0f;
-			vertex->TexCoord4.t = 0.0f;
-			vertex->Color.r = 1.0f;
-			vertex->Color.g = 1.0f;
-			vertex->Color.b = 1.0f;
-			vertex->Color.a = 1.0f;
-			vertex++;
+			SceneVertex* vertex = vptr;
+			for (INT i = 0; i < NumPts; i++)
+			{
+				FTransTexture* P = Pts[i];
+				vertex->Flags = flags;
+				vertex->Position.x = P->Point.X;
+				vertex->Position.y = P->Point.Y;
+				vertex->Position.z = P->Point.Z;
+				vertex->TexCoord.s = P->U * UMult;
+				vertex->TexCoord.t = P->V * VMult;
+				vertex->TexCoord2.s = P->Fog.X;
+				vertex->TexCoord2.t = P->Fog.Y;
+				vertex->TexCoord3.s = P->Fog.Z;
+				vertex->TexCoord3.t = P->Fog.W;
+				vertex->TexCoord4.s = 0.0f;
+				vertex->TexCoord4.t = 0.0f;
+				vertex->Color.r = 1.0f;
+				vertex->Color.g = 1.0f;
+				vertex->Color.b = 1.0f;
+				vertex->Color.a = 1.0f;
+				vertex++;
+			}
 		}
-	}
-	else
-	{
-		SceneVertex* vertex = &SceneVertices[SceneVertexPos];
-		for (INT i = 0; i < NumPts; i++)
+		else
 		{
-			FTransTexture* P = Pts[i];
-			vertex->Flags = flags;
-			vertex->Position.x = P->Point.X;
-			vertex->Position.y = P->Point.Y;
-			vertex->Position.z = P->Point.Z;
-			vertex->TexCoord.s = P->U * UMult;
-			vertex->TexCoord.t = P->V * VMult;
-			vertex->TexCoord2.s = P->Fog.X;
-			vertex->TexCoord2.t = P->Fog.Y;
-			vertex->TexCoord3.s = P->Fog.Z;
-			vertex->TexCoord3.t = P->Fog.W;
-			vertex->TexCoord4.s = 0.0f;
-			vertex->TexCoord4.t = 0.0f;
-			vertex->Color.r = P->Light.X;
-			vertex->Color.g = P->Light.Y;
-			vertex->Color.b = P->Light.Z;
-			vertex->Color.a = 1.0f;
-			vertex++;
+			SceneVertex* vertex = vptr;
+			for (INT i = 0; i < NumPts; i++)
+			{
+				FTransTexture* P = Pts[i];
+				vertex->Flags = flags;
+				vertex->Position.x = P->Point.X;
+				vertex->Position.y = P->Point.Y;
+				vertex->Position.z = P->Point.Z;
+				vertex->TexCoord.s = P->U * UMult;
+				vertex->TexCoord.t = P->V * VMult;
+				vertex->TexCoord2.s = P->Fog.X;
+				vertex->TexCoord2.t = P->Fog.Y;
+				vertex->TexCoord3.s = P->Fog.Z;
+				vertex->TexCoord3.t = P->Fog.W;
+				vertex->TexCoord4.s = 0.0f;
+				vertex->TexCoord4.t = 0.0f;
+				vertex->Color.r = P->Light.X;
+				vertex->Color.g = P->Light.Y;
+				vertex->Color.b = P->Light.Z;
+				vertex->Color.a = 1.0f;
+				vertex++;
+			}
 		}
+
+		uint32_t vstart = vpos;
+		uint32_t vcount = NumPts;
+		for (uint32_t i = vstart + 2; i < vstart + vcount; i++)
+		{
+			*(iptr++) = vstart;
+			*(iptr++) = i - 1;
+			*(iptr++) = i;
+		}
+
+		UseVertices(NumPts, (NumPts - 2) * 3);
 	}
-
-	size_t vstart = SceneVertexPos;
-	size_t vcount = NumPts;
-	size_t istart = SceneIndexPos;
-	size_t icount = (vcount - 2) * 3;
-
-	uint32_t* iptr = SceneIndexes + istart;
-	for (uint32_t i = vstart + 2; i < vstart + vcount; i++)
-	{
-		*(iptr++) = vstart;
-		*(iptr++) = i - 1;
-		*(iptr++) = i;
-	}
-
-	SceneVertexPos += vcount;
-	SceneIndexPos += icount;
 
 	Stats.GouraudPolygons++;
 
@@ -2053,7 +2033,6 @@ void UD3D11RenderDevice::DrawGouraudTriangles(const FSceneNode* Frame, const FTe
 	guardSlow(UD3D11RenderDevice::DrawGouraudTriangles);
 
 	if (NumPts < 3) return; // This can apparently happen!!
-	if (SceneVertexPos + NumPts > SceneVertexBufferSize || SceneIndexPos + NumPts * 3 > SceneIndexBufferSize) NextSceneBuffers();
 
 	PolyFlags = ApplyPrecedenceRules(PolyFlags);
 
@@ -2061,8 +2040,6 @@ void UD3D11RenderDevice::DrawGouraudTriangles(const FSceneNode* Frame, const FTe
 
 	SetPipeline(PolyFlags);
 	SetDescriptorSet(PolyFlags, tex);
-
-	if (!SceneVertices || !SceneIndexes) return;
 
 	float UMult = GetUMult(Info);
 	float VMult = GetVMult(Info);
@@ -2079,101 +2056,105 @@ void UD3D11RenderDevice::DrawGouraudTriangles(const FSceneNode* Frame, const FTe
 			::EnviroMap(Frame, Pts[i], UScale, VScale);
 	}
 
-	if (PolyFlags & PF_Modulated)
+	auto alloc = ReserveVertices(NumPts, (NumPts - 2) * 3);
+	if (alloc.vptr)
 	{
-		SceneVertex* vertex = &SceneVertices[SceneVertexPos];
-		for (INT i = 0; i < NumPts; i++)
+		SceneVertex* vptr = alloc.vptr;
+		uint32_t* iptr = alloc.iptr;
+		uint32_t vpos = alloc.vpos;
+
+		if (PolyFlags & PF_Modulated)
 		{
-			FTransTexture* P = &Pts[i];
-			vertex->Flags = flags;
-			vertex->Position.x = P->Point.X;
-			vertex->Position.y = P->Point.Y;
-			vertex->Position.z = P->Point.Z;
-			vertex->TexCoord.s = P->U * UMult;
-			vertex->TexCoord.t = P->V * VMult;
-			vertex->TexCoord2.s = P->Fog.X;
-			vertex->TexCoord2.t = P->Fog.Y;
-			vertex->TexCoord3.s = P->Fog.Z;
-			vertex->TexCoord3.t = P->Fog.W;
-			vertex->TexCoord4.s = 0.0f;
-			vertex->TexCoord4.t = 0.0f;
-			vertex->Color.r = 1.0f;
-			vertex->Color.g = 1.0f;
-			vertex->Color.b = 1.0f;
-			vertex->Color.a = 1.0f;
-			vertex++;
-		}
-	}
-	else
-	{
-		SceneVertex* vertex = &SceneVertices[SceneVertexPos];
-		for (INT i = 0; i < NumPts; i++)
-		{
-			FTransTexture* P = &Pts[i];
-			vertex->Flags = flags;
-			vertex->Position.x = P->Point.X;
-			vertex->Position.y = P->Point.Y;
-			vertex->Position.z = P->Point.Z;
-			vertex->TexCoord.s = P->U * UMult;
-			vertex->TexCoord.t = P->V * VMult;
-			vertex->TexCoord2.s = P->Fog.X;
-			vertex->TexCoord2.t = P->Fog.Y;
-			vertex->TexCoord3.s = P->Fog.Z;
-			vertex->TexCoord3.t = P->Fog.W;
-			vertex->TexCoord4.s = 0.0f;
-			vertex->TexCoord4.t = 0.0f;
-			vertex->Color.r = P->Light.X;
-			vertex->Color.g = P->Light.Y;
-			vertex->Color.b = P->Light.Z;
-			vertex->Color.a = 1.0f;
-			vertex++;
-		}
-	}
-
-	bool mirror = (Frame->Mirror == -1.0);
-
-	size_t vstart = SceneVertexPos;
-	size_t vcount = NumPts;
-	size_t istart = SceneIndexPos;
-	size_t icount = 0;
-
-	if (PolyFlags & PF_TwoSided)
-	{
-		uint32_t* iptr = SceneIndexes + istart;
-		for (uint32_t i = 2; i < vcount; i += 3)
-		{
-			// If outcoded, skip it.
-			if (Pts[i - 2].Flags & Pts[i - 1].Flags & Pts[i].Flags)
-				continue;
-
-			*(iptr++) = vstart + i;
-			*(iptr++) = vstart + i - 1;
-			*(iptr++) = vstart + i - 2;
-			icount += 3;
-		}
-	}
-	else
-	{
-		uint32_t* iptr = SceneIndexes + istart;
-		for (uint32_t i = 2; i < vcount; i += 3)
-		{
-			// If outcoded, skip it.
-			if (Pts[i - 2].Flags & Pts[i - 1].Flags & Pts[i].Flags)
-				continue;
-
-			bool backface = FTriple(Pts[i - 2].Point, Pts[i - 1].Point, Pts[i].Point) <= 0.0;
-			if (mirror == backface)
+			SceneVertex* vertex = vptr;
+			for (INT i = 0; i < NumPts; i++)
 			{
-				*(iptr++) = vstart + i - 2;
-				*(iptr++) = vstart + i - 1;
+				FTransTexture* P = &Pts[i];
+				vertex->Flags = flags;
+				vertex->Position.x = P->Point.X;
+				vertex->Position.y = P->Point.Y;
+				vertex->Position.z = P->Point.Z;
+				vertex->TexCoord.s = P->U * UMult;
+				vertex->TexCoord.t = P->V * VMult;
+				vertex->TexCoord2.s = P->Fog.X;
+				vertex->TexCoord2.t = P->Fog.Y;
+				vertex->TexCoord3.s = P->Fog.Z;
+				vertex->TexCoord3.t = P->Fog.W;
+				vertex->TexCoord4.s = 0.0f;
+				vertex->TexCoord4.t = 0.0f;
+				vertex->Color.r = 1.0f;
+				vertex->Color.g = 1.0f;
+				vertex->Color.b = 1.0f;
+				vertex->Color.a = 1.0f;
+				vertex++;
+			}
+		}
+		else
+		{
+			SceneVertex* vertex = vptr;
+			for (INT i = 0; i < NumPts; i++)
+			{
+				FTransTexture* P = &Pts[i];
+				vertex->Flags = flags;
+				vertex->Position.x = P->Point.X;
+				vertex->Position.y = P->Point.Y;
+				vertex->Position.z = P->Point.Z;
+				vertex->TexCoord.s = P->U * UMult;
+				vertex->TexCoord.t = P->V * VMult;
+				vertex->TexCoord2.s = P->Fog.X;
+				vertex->TexCoord2.t = P->Fog.Y;
+				vertex->TexCoord3.s = P->Fog.Z;
+				vertex->TexCoord3.t = P->Fog.W;
+				vertex->TexCoord4.s = 0.0f;
+				vertex->TexCoord4.t = 0.0f;
+				vertex->Color.r = P->Light.X;
+				vertex->Color.g = P->Light.Y;
+				vertex->Color.b = P->Light.Z;
+				vertex->Color.a = 1.0f;
+				vertex++;
+			}
+		}
+
+		bool mirror = (Frame->Mirror == -1.0);
+
+		size_t vstart = vpos;
+		size_t vcount = NumPts;
+		size_t icount = 0;
+
+		if (PolyFlags & PF_TwoSided)
+		{
+			for (uint32_t i = 2; i < vcount; i += 3)
+			{
+				// If outcoded, skip it.
+				if (Pts[i - 2].Flags & Pts[i - 1].Flags & Pts[i].Flags)
+					continue;
+
 				*(iptr++) = vstart + i;
+				*(iptr++) = vstart + i - 1;
+				*(iptr++) = vstart + i - 2;
 				icount += 3;
 			}
 		}
-	}
+		else
+		{
+			for (uint32_t i = 2; i < vcount; i += 3)
+			{
+				// If outcoded, skip it.
+				if (Pts[i - 2].Flags & Pts[i - 1].Flags & Pts[i].Flags)
+					continue;
 
-	SceneVertexPos += vcount;
-	SceneIndexPos += icount;
+				bool backface = FTriple(Pts[i - 2].Point, Pts[i - 1].Point, Pts[i].Point) <= 0.0;
+				if (mirror == backface)
+				{
+					*(iptr++) = vstart + i - 2;
+					*(iptr++) = vstart + i - 1;
+					*(iptr++) = vstart + i;
+					icount += 3;
+				}
+			}
+		}
+
+		UseVertices(vcount, icount);
+	}
 
 	Stats.GouraudPolygons++;
 
@@ -2185,8 +2166,6 @@ void UD3D11RenderDevice::DrawGouraudTriangles(const FSceneNode* Frame, const FTe
 void UD3D11RenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT X, FLOAT Y, FLOAT XL, FLOAT YL, FLOAT U, FLOAT V, FLOAT UL, FLOAT VL, class FSpanBuffer* Span, FLOAT Z, FPlane Color, FPlane Fog, DWORD PolyFlags)
 {
 	guardSlow(UD3D11RenderDevice::DrawTile);
-
-	if (SceneVertexPos + 4 > SceneVertexBufferSize || SceneIndexPos + 6 > SceneIndexBufferSize) NextSceneBuffers();
 
 	// stijn: fix for invisible actor icons in ortho viewports
 	if (GIsEditor && Frame->Viewport->Actor && (Frame->Viewport->IsOrtho() || Abs(Z) <= SMALL_NUMBER))
@@ -2207,10 +2186,6 @@ void UD3D11RenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT X
 
 	SetPipeline(PolyFlags);
 	SetDescriptorSet(PolyFlags, tex, nullptr, nullptr, nullptr, clamp);
-
-	if (!SceneVertices || !SceneIndexes) return;
-
-	SceneVertex* v = &SceneVertices[SceneVertexPos];
 
 	float r, g, b, a;
 	if (PolyFlags & PF_Modulated)
@@ -2237,26 +2212,27 @@ void UD3D11RenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT X
 		YL = YL - Y;
 	}
 
-	v[0] = { 0, vec3(RFX2 * Z * (X - Frame->FX2),      RFY2 * Z * (Y - Frame->FY2),      Z), vec2(u0, v0), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec4(r, g, b, a), };
-	v[1] = { 0, vec3(RFX2 * Z * (X + XL - Frame->FX2), RFY2 * Z * (Y - Frame->FY2),      Z), vec2(u1, v0), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec4(r, g, b, a), };
-	v[2] = { 0, vec3(RFX2 * Z * (X + XL - Frame->FX2), RFY2 * Z * (Y + YL - Frame->FY2), Z), vec2(u1, v1), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec4(r, g, b, a), };
-	v[3] = { 0, vec3(RFX2 * Z * (X - Frame->FX2),      RFY2 * Z * (Y + YL - Frame->FY2), Z), vec2(u0, v1), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec4(r, g, b, a), };
-
-	size_t vstart = SceneVertexPos;
-	size_t vcount = 4;
-	size_t istart = SceneIndexPos;
-	size_t icount = (vcount - 2) * 3;
-
-	uint32_t* iptr = SceneIndexes + istart;
-	for (uint32_t i = vstart + 2; i < vstart + vcount; i++)
+	auto alloc = ReserveVertices(4, 6);
+	if (alloc.vptr)
 	{
-		*(iptr++) = vstart;
-		*(iptr++) = i - 1;
-		*(iptr++) = i;
-	}
+		SceneVertex* vptr = alloc.vptr;
+		uint32_t* iptr = alloc.iptr;
+		uint32_t vpos = alloc.vpos;
 
-	SceneVertexPos += vcount;
-	SceneIndexPos += icount;
+		vptr[0] = { 0, vec3(RFX2 * Z * (X - Frame->FX2),      RFY2 * Z * (Y - Frame->FY2),      Z), vec2(U * UMult,        V * VMult),        vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec4(r, g, b, a), };
+		vptr[1] = { 0, vec3(RFX2 * Z * (X + XL - Frame->FX2), RFY2 * Z * (Y - Frame->FY2),      Z), vec2((U + UL) * UMult, V * VMult),        vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec4(r, g, b, a), };
+		vptr[2] = { 0, vec3(RFX2 * Z * (X + XL - Frame->FX2), RFY2 * Z * (Y + YL - Frame->FY2), Z), vec2((U + UL) * UMult, (V + VL) * VMult), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec4(r, g, b, a), };
+		vptr[3] = { 0, vec3(RFX2 * Z * (X - Frame->FX2),      RFY2 * Z * (Y + YL - Frame->FY2), Z), vec2(U * UMult,        (V + VL) * VMult), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec4(r, g, b, a), };
+
+		iptr[0] = vpos;
+		iptr[1] = vpos + 1;
+		iptr[2] = vpos + 2;
+		iptr[3] = vpos;
+		iptr[4] = vpos + 2;
+		iptr[5] = vpos + 3;
+
+		UseVertices(4, 6);
+	}
 
 	Stats.Tiles++;
 
@@ -2300,31 +2276,25 @@ void UD3D11RenderDevice::Draw3DLine(FSceneNode* Frame, FPlane Color, DWORD LineF
 	}
 	else
 	{
-		auto pipeline = &ScenePass.LinePipeline[OccludeLines];
-		if (pipeline != Batch.Pipeline)
-		{
-			AddDrawBatch();
-			Batch.Pipeline = pipeline;
-		}
-
+		SetPipeline(&ScenePass.LinePipeline[OccludeLines]);
 		SetDescriptorSet(PF_Highlighted);
-
-		if (SceneVertexPos + 2 > SceneVertexBufferSize || SceneIndexPos + 2 > SceneIndexBufferSize) NextSceneBuffers();
-		if (!SceneVertices || !SceneIndexes) return;
-
-		SceneVertex* v = &SceneVertices[SceneVertexPos];
-		uint32_t* iptr = &SceneIndexes[SceneIndexPos];
-
 		vec4 color = ApplyInverseGamma(vec4(Color.X, Color.Y, Color.Z, 1.0f));
 
-		v[0] = { 0, vec3(P1.X, P1.Y, P1.Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), color };
-		v[1] = { 0, vec3(P2.X, P2.Y, P2.Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), color };
+		auto alloc = ReserveVertices(2, 2);
+		if (alloc.vptr)
+		{
+			SceneVertex* vptr = alloc.vptr;
+			uint32_t* iptr = alloc.iptr;
+			uint32_t vpos = alloc.vpos;
 
-		iptr[0] = SceneVertexPos;
-		iptr[1] = SceneVertexPos + 1;
+			vptr[0] = { 0, vec3(P1.X, P1.Y, P1.Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), color };
+			vptr[1] = { 0, vec3(P2.X, P2.Y, P2.Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), color };
 
-		SceneVertexPos += 2;
-		SceneIndexPos += 2;
+			iptr[0] = vpos;
+			iptr[1] = vpos + 1;
+
+			UseVertices(2, 2);
+		}
 	}
 
 	unguard;
@@ -2341,31 +2311,25 @@ void UD3D11RenderDevice::Draw2DLine(FSceneNode* Frame, FPlane Color, DWORD LineF
 {
 	guard(UD3D11RenderDevice::Draw2DLine);
 
-	auto pipeline = &ScenePass.LinePipeline[OccludeLines];
-	if (pipeline != Batch.Pipeline)
-	{
-		AddDrawBatch();
-		Batch.Pipeline = pipeline;
-	}
-
+	SetPipeline(&ScenePass.LinePipeline[OccludeLines]);
 	SetDescriptorSet(PF_Highlighted);
-
-	if (SceneVertexPos + 2 > SceneVertexBufferSize || SceneIndexPos + 2 > SceneIndexBufferSize) NextSceneBuffers();
-	if (!SceneVertices || !SceneIndexes) return;
-
-	SceneVertex* v = &SceneVertices[SceneVertexPos];
-	uint32_t* iptr = &SceneIndexes[SceneIndexPos];
-
 	vec4 color = ApplyInverseGamma(vec4(Color.X, Color.Y, Color.Z, 1.0f));
 
-	v[0] = { 0, vec3(RFX2 * P1.Z * (P1.X - Frame->FX2), RFY2 * P1.Z * (P1.Y - Frame->FY2), P1.Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), color };
-	v[1] = { 0, vec3(RFX2 * P2.Z * (P2.X - Frame->FX2), RFY2 * P2.Z * (P2.Y - Frame->FY2), P2.Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), color };
+	auto alloc = ReserveVertices(2, 2);
+	if (alloc.vptr)
+	{
+		SceneVertex* vptr = alloc.vptr;
+		uint32_t* iptr = alloc.iptr;
+		uint32_t vpos = alloc.vpos;
 
-	iptr[0] = SceneVertexPos;
-	iptr[1] = SceneVertexPos + 1;
+		vptr[0] = { 0, vec3(RFX2 * P1.Z * (P1.X - Frame->FX2), RFY2 * P1.Z * (P1.Y - Frame->FY2), P1.Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), color };
+		vptr[1] = { 0, vec3(RFX2 * P2.Z * (P2.X - Frame->FX2), RFY2 * P2.Z * (P2.Y - Frame->FY2), P2.Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), color };
 
-	SceneVertexPos += 2;
-	SceneIndexPos += 2;
+		iptr[0] = vpos;
+		iptr[1] = vpos + 1;
+
+		UseVertices(2, 2);
+	}
 
 	unguard;
 }
@@ -2377,42 +2341,31 @@ void UD3D11RenderDevice::Draw2DPoint(FSceneNode* Frame, FPlane Color, DWORD Line
 	// Hack to fix UED selection problem with selection brush
 	if (GIsEditor) Z = 1.0f;
 
-	auto pipeline = &ScenePass.PointPipeline;
-	if (pipeline != Batch.Pipeline)
-	{
-		AddDrawBatch();
-		Batch.Pipeline = pipeline;
-	}
-
+	SetPipeline(&ScenePass.PointPipeline);
 	SetDescriptorSet(PF_Highlighted);
-
-	if (SceneVertexPos + 4 > SceneVertexBufferSize || SceneIndexPos + 6 > SceneIndexBufferSize) NextSceneBuffers();
-	if (!SceneVertices || !SceneIndexes) return;
-
-	SceneVertex* v = &SceneVertices[SceneVertexPos];
-
 	vec4 color = ApplyInverseGamma(vec4(Color.X, Color.Y, Color.Z, 1.0f));
 
-	v[0] = { 0, vec3(RFX2 * Z * (X1 - Frame->FX2 - 0.5f), RFY2 * Z * (Y1 - Frame->FY2 - 0.5f), Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), color };
-	v[1] = { 0, vec3(RFX2 * Z * (X2 - Frame->FX2 + 0.5f), RFY2 * Z * (Y1 - Frame->FY2 - 0.5f), Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), color };
-	v[2] = { 0, vec3(RFX2 * Z * (X2 - Frame->FX2 + 0.5f), RFY2 * Z * (Y2 - Frame->FY2 + 0.5f), Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), color };
-	v[3] = { 0, vec3(RFX2 * Z * (X1 - Frame->FX2 - 0.5f), RFY2 * Z * (Y2 - Frame->FY2 + 0.5f), Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), color };
-
-	size_t vstart = SceneVertexPos;
-	size_t vcount = 4;
-	size_t istart = SceneIndexPos;
-	size_t icount = (vcount - 2) * 3;
-
-	uint32_t* iptr = SceneIndexes + istart;
-	for (uint32_t i = vstart + 2; i < vstart + vcount; i++)
+	auto alloc = ReserveVertices(4, 6);
+	if (alloc.vptr)
 	{
-		*(iptr++) = vstart;
-		*(iptr++) = i - 1;
-		*(iptr++) = i;
-	}
+		SceneVertex* vptr = alloc.vptr;
+		uint32_t* iptr = alloc.iptr;
+		uint32_t vpos = alloc.vpos;
 
-	SceneVertexPos += vcount;
-	SceneIndexPos += icount;
+		vptr[0] = { 0, vec3(RFX2 * Z * (X1 - Frame->FX2 - 0.5f), RFY2 * Z * (Y1 - Frame->FY2 - 0.5f), Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), color };
+		vptr[1] = { 0, vec3(RFX2 * Z * (X2 - Frame->FX2 + 0.5f), RFY2 * Z * (Y1 - Frame->FY2 - 0.5f), Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), color };
+		vptr[2] = { 0, vec3(RFX2 * Z * (X2 - Frame->FX2 + 0.5f), RFY2 * Z * (Y2 - Frame->FY2 + 0.5f), Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), color };
+		vptr[3] = { 0, vec3(RFX2 * Z * (X1 - Frame->FX2 - 0.5f), RFY2 * Z * (Y2 - Frame->FY2 + 0.5f), Z), vec2(0.0f), vec2(0.0f), vec2(0.0f), vec2(0.0f), color };
+
+		iptr[0] = vpos;
+		iptr[1] = vpos + 1;
+		iptr[2] = vpos + 2;
+		iptr[3] = vpos;
+		iptr[4] = vpos + 2;
+		iptr[5] = vpos + 3;
+
+		UseVertices(4, 6);
+	}
 
 	unguard;
 }
@@ -2541,46 +2494,39 @@ void UD3D11RenderDevice::EndFlash()
 	{
 		DrawBatches();
 
+		vec4 color(FlashFog.X, FlashFog.Y, FlashFog.Z, 1.0f - Min(FlashScale.X * 2.0f, 1.0f));
+		vec2 zero2(0.0f);
+
 		SceneConstants.ObjectToProjection = mat4::identity();
 		SceneConstants.NearClip = vec4(0.0f, 0.0f, 0.0f, 1.0f);
 		Context->UpdateSubresource(ScenePass.ConstantBuffer, 0, nullptr, &SceneConstants, 0, 0);
 
-		Batch.Pipeline = &ScenePass.Pipelines[2];
+		SetPipeline(&ScenePass.Pipelines[2]);
 		SetDescriptorSet(0);
 
-		if (SceneVertices && SceneIndexes)
+		auto alloc = ReserveVertices(4, 6);
+		if (alloc.vptr)
 		{
-			vec4 color(FlashFog.X, FlashFog.Y, FlashFog.Z, 1.0f - Min(FlashScale.X * 2.0f, 1.0f));
-			vec2 zero2(0.0f);
+			SceneVertex* vptr = alloc.vptr;
+			uint32_t* iptr = alloc.iptr;
+			uint32_t vpos = alloc.vpos;
 
-			if (SceneVertexPos + 4 > SceneVertexBufferSize || SceneIndexPos + 6 > SceneIndexBufferSize) NextSceneBuffers();
+			vptr[0] = { 0, vec3(-1.0f, -1.0f, 0.0f), zero2, zero2, zero2, zero2, color };
+			vptr[1] = { 0, vec3(1.0f, -1.0f, 0.0f), zero2, zero2, zero2, zero2, color };
+			vptr[2] = { 0, vec3(1.0f,  1.0f, 0.0f), zero2, zero2, zero2, zero2, color };
+			vptr[3] = { 0, vec3(-1.0f,  1.0f, 0.0f), zero2, zero2, zero2, zero2, color };
 
-			SceneVertex* v = &SceneVertices[SceneVertexPos];
+			iptr[0] = vpos;
+			iptr[1] = vpos + 1;
+			iptr[2] = vpos + 2;
+			iptr[3] = vpos;
+			iptr[4] = vpos + 2;
+			iptr[5] = vpos + 3;
 
-			v[0] = { 0, vec3(-1.0f, -1.0f, 0.0f), zero2, zero2, zero2, zero2, color };
-			v[1] = { 0, vec3(1.0f, -1.0f, 0.0f), zero2, zero2, zero2, zero2, color };
-			v[2] = { 0, vec3(1.0f,  1.0f, 0.0f), zero2, zero2, zero2, zero2, color };
-			v[3] = { 0, vec3(-1.0f,  1.0f, 0.0f), zero2, zero2, zero2, zero2, color };
-
-			size_t vstart = SceneVertexPos;
-			size_t vcount = 4;
-			size_t istart = SceneIndexPos;
-			size_t icount = (vcount - 2) * 3;
-
-			uint32_t* iptr = SceneIndexes + istart;
-			for (uint32_t i = vstart + 2; i < vstart + vcount; i++)
-			{
-				*(iptr++) = vstart;
-				*(iptr++) = i - 1;
-				*(iptr++) = i;
-			}
-
-			SceneVertexPos += vcount;
-			SceneIndexPos += icount;
-
-			AddDrawBatch();
+			UseVertices(4, 6);
 		}
 
+		DrawBatches();
 		if (CurrentFrame)
 			SetSceneNode(CurrentFrame);
 	}

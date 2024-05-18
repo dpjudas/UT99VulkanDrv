@@ -2760,8 +2760,6 @@ void UD3D12RenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT X
 	float UMult = tex ? GetUMult(Info) : 0.0f;
 	float VMult = tex ? GetVMult(Info) : 0.0f;
 
-	SceneVertex* v = &SceneVertices[SceneVertexPos];
-
 	float r, g, b, a;
 	if (PolyFlags & PF_Modulated)
 	{

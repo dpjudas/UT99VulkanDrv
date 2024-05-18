@@ -266,13 +266,44 @@ private:
 	float ComputeBlurGaussian(float n, float theta);
 	void ComputeBlurSamples(int sampleCount, float blurAmount, float* sampleWeights);
 
+	void SetPipeline(ScenePipelineState* pipeline);
 	void SetPipeline(DWORD polyflags);
 	void SetDescriptorSet(DWORD polyflags, CachedTexture* tex = nullptr, CachedTexture* lightmap = nullptr, CachedTexture* macrotex = nullptr, CachedTexture* detailtex = nullptr, bool clamp = false);
 
 	void AddDrawBatch();
-	void NextSceneBuffers() { DrawBatches(true); }
 	void DrawBatches(bool nextBuffer = false);
 	void DrawEntry(const DrawBatchEntry& entry);
+
+	struct VertexReserveInfo
+	{
+		SceneVertex* vptr;
+		uint32_t* iptr;
+		uint32_t vpos;
+	};
+
+	VertexReserveInfo ReserveVertices(size_t vcount, size_t icount)
+	{
+		if (!SceneVertices || !SceneIndexes)
+			return { nullptr, nullptr, 0 };
+
+		// If buffers are full, flush and wait for room.
+		if (SceneVertexPos + vcount > (size_t)SceneVertexBufferSize || SceneIndexPos + icount > (size_t)SceneIndexBufferSize)
+		{
+			// If the request is larger than our buffers we can't draw this.
+			if (vcount > (size_t)SceneVertexBufferSize || icount > (size_t)SceneIndexBufferSize)
+				return { nullptr, nullptr, 0 };
+
+			DrawBatches(true);
+		}
+
+		return { SceneVertices + SceneVertexPos, SceneIndexes + SceneIndexPos, (uint32_t)SceneVertexPos };
+	}
+
+	void UseVertices(size_t vcount, size_t icount)
+	{
+		SceneVertexPos += vcount;
+		SceneIndexPos += icount;
+	}
 
 	int GetSettingsMultisample();
 
@@ -330,6 +361,15 @@ inline void ThrowIfFailed(HRESULT result, const char* msg) { if (FAILED(result))
 
 inline float GetUMult(const FTextureInfo& Info) { return 1.0f / (Info.UScale * Info.USize); }
 inline float GetVMult(const FTextureInfo& Info) { return 1.0f / (Info.VScale * Info.VSize); }
+
+inline void UD3D11RenderDevice::SetPipeline(ScenePipelineState* pipeline)
+{
+	if (pipeline != Batch.Pipeline)
+	{
+		AddDrawBatch();
+		Batch.Pipeline = pipeline;
+	}
+}
 
 inline void UD3D11RenderDevice::SetPipeline(DWORD PolyFlags)
 {
