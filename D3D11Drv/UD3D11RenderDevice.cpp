@@ -354,11 +354,14 @@ UBOOL UD3D11RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 	}
 	else
 	{
-		result = SwapChain->SetFullscreenState(FALSE, nullptr);
-		if (FAILED(result))
+		if (LastFullscreen)
 		{
-			debugf(TEXT("SwapChain.SetFullscreenState failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
-			// Don't fail this as it can happen if the application isn't the foreground process
+			result = SwapChain->SetFullscreenState(FALSE, nullptr);
+			if (FAILED(result))
+			{
+				debugf(TEXT("SwapChain.SetFullscreenState failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
+				// Don't fail this as it can happen if the application isn't the foreground process
+			}
 		}
 
 		// If we exiting fullscreen, we want to resize/reposition the window *after* exiting fullscreen
@@ -367,13 +370,9 @@ UBOOL UD3D11RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 			debugf(TEXT("Viewport.ResizeViewport failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
 			return FALSE;
 		}
-
-		result = SwapChain->ResizeTarget(&modeDesc);
-		if (FAILED(result))
-		{
-			debugf(TEXT("SwapChain.ResizeTarget failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
-		}
 	}
+
+	LastFullscreen = Fullscreen;
 
 	result = SwapChain->ResizeBuffers(2, Viewport->SizeX, Viewport->SizeY, ActiveHdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
 	if (FAILED(result))

@@ -355,6 +355,7 @@ private:
 	} DesktopResolution;
 
 	bool InSetResCall = false;
+	UBOOL LastFullscreen = 0;
 };
 
 inline void ThrowIfFailed(HRESULT result, const char* msg) { if (FAILED(result)) throw std::runtime_error(msg); }
