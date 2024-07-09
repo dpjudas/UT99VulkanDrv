@@ -1,26 +1,10 @@
 #pragma once
 
-struct ID3D11Texture2D;
-
 class CachedTexture
 {
 public:
-	~CachedTexture()
-	{
-		if (View)
-		{
-			View->Release();
-			View = nullptr;
-		}
-		if (Texture)
-		{
-			Texture->Release();
-			Texture = nullptr;
-		}
-	}
-
-	ID3D11Texture2D* Texture = nullptr;
-	ID3D11ShaderResourceView* View = nullptr;
+	ComPtr<ID3D11Texture2D> Texture;
+	ComPtr<ID3D11ShaderResourceView> View;
 	int RealtimeChangeCount = 0;
 	int DummyMipmapCount = 0;
 };

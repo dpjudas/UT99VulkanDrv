@@ -2,6 +2,7 @@
 
 #include "vec.h"
 #include "mat.h"
+#include "ComPtr.h"
 
 #include "TextureManager.h"
 #include "UploadManager.h"
@@ -93,41 +94,41 @@ public:
 	int InterfacePadding[64]; // For allowing URenderDeviceOldUnreal469 interface to add things
 
 	HWND WindowHandle = 0;
-	ID3D11Device* Device = nullptr;
+	ComPtr<ID3D11Device> Device;
 	D3D_FEATURE_LEVEL FeatureLevel = {};
-	ID3D11DeviceContext* Context = nullptr;
-	IDXGISwapChain* SwapChain = nullptr;
-	IDXGISwapChain1* SwapChain1 = nullptr;
-	ID3D11Texture2D* BackBuffer = nullptr;
-	ID3D11RenderTargetView* BackBufferView = nullptr;
+	ComPtr<ID3D11DeviceContext> Context;
+	ComPtr<IDXGISwapChain> SwapChain;
+	ComPtr<IDXGISwapChain1> SwapChain1;
+	ComPtr<ID3D11Texture2D> BackBuffer;
+	ComPtr<ID3D11RenderTargetView> BackBufferView;
 
 	struct PPBlurLevel
 	{
-		ID3D11Texture2D* VTexture = nullptr;
-		ID3D11RenderTargetView* VTextureRTV = nullptr;
-		ID3D11ShaderResourceView* VTextureSRV = nullptr;
-		ID3D11Texture2D* HTexture = nullptr;
-		ID3D11RenderTargetView* HTextureRTV = nullptr;
-		ID3D11ShaderResourceView* HTextureSRV = nullptr;
+		ComPtr<ID3D11Texture2D> VTexture;
+		ComPtr<ID3D11RenderTargetView> VTextureRTV;
+		ComPtr<ID3D11ShaderResourceView> VTextureSRV;
+		ComPtr<ID3D11Texture2D> HTexture;
+		ComPtr<ID3D11RenderTargetView> HTextureRTV;
+		ComPtr<ID3D11ShaderResourceView> HTextureSRV;
 		int Width = 0;
 		int Height = 0;
 	};
 
 	struct
 	{
-		ID3D11Texture2D* ColorBuffer = nullptr;
-		ID3D11Texture2D* HitBuffer = nullptr;
-		ID3D11Texture2D* DepthBuffer = nullptr;
-		ID3D11Texture2D* PPImage[2] = {};
-		ID3D11Texture2D* PPHitBuffer = nullptr;
-		ID3D11Texture2D* StagingHitBuffer = nullptr;
-		ID3D11RenderTargetView* ColorBufferView = nullptr;
-		ID3D11RenderTargetView* HitBufferView = nullptr;
-		ID3D11DepthStencilView* DepthBufferView = nullptr;
-		ID3D11RenderTargetView* PPHitBufferView = nullptr;
-		ID3D11RenderTargetView* PPImageView[2] = {};
-		ID3D11ShaderResourceView* HitBufferShaderView = nullptr;
-		ID3D11ShaderResourceView* PPImageShaderView[2] = {};
+		ComPtr<ID3D11Texture2D> ColorBuffer;
+		ComPtr<ID3D11Texture2D> HitBuffer;
+		ComPtr<ID3D11Texture2D> DepthBuffer;
+		ComPtr<ID3D11Texture2D> PPImage[2];
+		ComPtr<ID3D11Texture2D> PPHitBuffer;
+		ComPtr<ID3D11Texture2D> StagingHitBuffer;
+		ComPtr<ID3D11RenderTargetView> ColorBufferView;
+		ComPtr<ID3D11RenderTargetView> HitBufferView;
+		ComPtr<ID3D11DepthStencilView> DepthBufferView;
+		ComPtr<ID3D11RenderTargetView> PPHitBufferView;
+		ComPtr<ID3D11RenderTargetView> PPImageView[2];
+		ComPtr<ID3D11ShaderResourceView> HitBufferShaderView;
+		ComPtr<ID3D11ShaderResourceView> PPImageShaderView[2];
 		enum { NumBloomLevels = 4 };
 		PPBlurLevel BlurLevels[NumBloomLevels];
 		int Width = 0;
@@ -138,22 +139,22 @@ public:
 	struct ScenePipelineState
 	{
 		D3D11_PRIMITIVE_TOPOLOGY PrimitiveTopology = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-		ID3D11PixelShader* PixelShader = nullptr;
-		ID3D11BlendState* BlendState = nullptr;
-		ID3D11DepthStencilState* DepthStencilState = nullptr;
+		ComPtr<ID3D11PixelShader> PixelShader;
+		ComPtr<ID3D11BlendState> BlendState;
+		ComPtr<ID3D11DepthStencilState> DepthStencilState;
 	};
 
 	struct
 	{
-		ID3D11VertexShader* VertexShader = nullptr;
-		ID3D11InputLayout* InputLayout = nullptr;
-		ID3D11Buffer* VertexBuffer = nullptr;
-		ID3D11Buffer* IndexBuffer = nullptr;
-		ID3D11Buffer* ConstantBuffer = nullptr;
-		ID3D11RasterizerState* RasterizerState[2] = {};
-		ID3D11PixelShader* PixelShader = {};
-		ID3D11PixelShader* PixelShaderAlphaTest = {};
-		ID3D11SamplerState* Samplers[16] = {};
+		ComPtr<ID3D11VertexShader> VertexShader;
+		ComPtr<ID3D11InputLayout> InputLayout;
+		ComPtr<ID3D11Buffer> VertexBuffer;
+		ComPtr<ID3D11Buffer> IndexBuffer;
+		ComPtr<ID3D11Buffer> ConstantBuffer;
+		ComPtr<ID3D11RasterizerState> RasterizerState[2];
+		ComPtr<ID3D11PixelShader> PixelShader;
+		ComPtr<ID3D11PixelShader> PixelShaderAlphaTest;
+		ComPtr<ID3D11SamplerState> Samplers[16];
 		ScenePipelineState Pipelines[32];
 		ScenePipelineState LinePipeline[2];
 		ScenePipelineState PointPipeline;
@@ -186,27 +187,27 @@ public:
 
 	struct
 	{
-		ID3D11VertexShader* PPStep = nullptr;
-		ID3D11InputLayout* PPStepLayout = nullptr;
-		ID3D11Buffer* PPStepVertexBuffer = nullptr;
-		ID3D11PixelShader* HitResolve = nullptr;
-		ID3D11PixelShader* Present[16] = {};
-		ID3D11Buffer* PresentConstantBuffer = nullptr;
-		ID3D11Texture2D* DitherTexture = nullptr;
-		ID3D11ShaderResourceView* DitherTextureView = nullptr;
-		ID3D11BlendState* BlendState = nullptr;
-		ID3D11DepthStencilState* DepthStencilState = nullptr;
-		ID3D11RasterizerState* RasterizerState = nullptr;
+		ComPtr<ID3D11VertexShader> PPStep;
+		ComPtr<ID3D11InputLayout> PPStepLayout;
+		ComPtr<ID3D11Buffer> PPStepVertexBuffer;
+		ComPtr<ID3D11PixelShader> HitResolve;
+		ComPtr<ID3D11PixelShader> Present[16];
+		ComPtr<ID3D11Buffer> PresentConstantBuffer;
+		ComPtr<ID3D11Texture2D> DitherTexture;
+		ComPtr<ID3D11ShaderResourceView> DitherTextureView;
+		ComPtr<ID3D11BlendState> BlendState;
+		ComPtr<ID3D11DepthStencilState> DepthStencilState;
+		ComPtr<ID3D11RasterizerState> RasterizerState;
 	} PresentPass;
 
 	struct
 	{
-		ID3D11PixelShader* Extract = nullptr;
-		ID3D11PixelShader* Combine = nullptr;
-		ID3D11PixelShader* BlurVertical = nullptr;
-		ID3D11PixelShader* BlurHorizontal = nullptr;
-		ID3D11Buffer* ConstantBuffer = nullptr;
-		ID3D11BlendState* AdditiveBlendState = nullptr;
+		ComPtr<ID3D11PixelShader> Extract;
+		ComPtr<ID3D11PixelShader> Combine;
+		ComPtr<ID3D11PixelShader> BlurVertical;
+		ComPtr<ID3D11PixelShader> BlurHorizontal;
+		ComPtr<ID3D11Buffer> ConstantBuffer;
+		ComPtr<ID3D11BlendState> AdditiveBlendState;
 	} BloomPass;
 
 	std::unique_ptr<TextureManager> Textures;
@@ -309,16 +310,13 @@ private:
 
 	ScenePipelineState* GetPipeline(DWORD PolyFlags);
 
-	void CreateVertexShader(ID3D11VertexShader*& outShader, const std::string& shaderName, ID3D11InputLayout*& outInputLayout, const std::string& inputLayoutName, const std::vector<D3D11_INPUT_ELEMENT_DESC>& elements, const std::string& filename, const std::vector<std::string> defines = {});
-	void CreatePixelShader(ID3D11PixelShader*& outShader, const std::string& shaderName, const std::string& filename, const std::vector<std::string> defines = {});
+	void CreateVertexShader(ComPtr<ID3D11VertexShader>& outShader, const std::string& shaderName, ComPtr<ID3D11InputLayout>& outInputLayout, const std::string& inputLayoutName, const std::vector<D3D11_INPUT_ELEMENT_DESC>& elements, const std::string& filename, const std::vector<std::string> defines = {});
+	void CreatePixelShader(ComPtr<ID3D11PixelShader>& outShader, const std::string& shaderName, const std::string& filename, const std::vector<std::string> defines = {});
 	std::vector<uint8_t> CompileHlsl(const std::string& filename, const std::string& shadertype, const std::vector<std::string> defines = {});
 
 	vec4 ApplyInverseGamma(vec4 color);
 
 	PresentPushConstants GetPresentPushConstants();
-
-	template<typename T>
-	void ReleaseObject(T*& obj) { if (obj) { obj->Release(); obj = nullptr; } }
 
 	UBOOL UsePrecache;
 	FPlane FlashScale;

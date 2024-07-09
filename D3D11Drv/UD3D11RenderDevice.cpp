@@ -150,20 +150,20 @@ UBOOL UD3D11RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 			D3D11_CREATE_DEVICE_SINGLETHREADED | D3D11_CREATE_DEVICE_BGRA_SUPPORT,
 			featurelevels.data(), (UINT)featurelevels.size(),
 			D3D11_SDK_VERSION,
-			&Device,
+			Device.TypedInitPtr(),
 			&FeatureLevel,
-			&Context);
+			Context.TypedInitPtr());
 
 		// Wonderful API you got here, Microsoft. Good job.
-		IDXGIDevice2* dxgiDevice = nullptr;
-		IDXGIAdapter* dxgiAdapter = nullptr;
-		IDXGIFactory2* dxgiFactory = nullptr;
+		ComPtr<IDXGIDevice2> dxgiDevice;
+		ComPtr<IDXGIAdapter> dxgiAdapter;
+		ComPtr<IDXGIFactory2> dxgiFactory;
 		if (SUCCEEDED(result))
-			result = Device->QueryInterface(__uuidof(IDXGIDevice2), (void**)&dxgiDevice);
+			result = Device->QueryInterface(dxgiDevice.GetIID(), dxgiDevice.InitPtr());
 		if (SUCCEEDED(result))
-			result = dxgiDevice->GetParent(__uuidof(IDXGIAdapter), (void**)&dxgiAdapter);
+			result = dxgiDevice->GetParent(dxgiAdapter.GetIID(), dxgiAdapter.InitPtr());
 		if (SUCCEEDED(result))
-			result = dxgiAdapter->GetParent(__uuidof(IDXGIFactory2), (void**)&dxgiFactory);
+			result = dxgiAdapter->GetParent(dxgiFactory.GetIID(), dxgiFactory.InitPtr());
 		if (SUCCEEDED(result))
 		{
 			DXGI_SWAP_CHAIN_DESC1 swapDesc = {};
@@ -177,22 +177,24 @@ UBOOL UD3D11RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 			swapDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
 			swapDesc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
 			swapDesc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
-			result = dxgiFactory->CreateSwapChainForHwnd(Device, (HWND)Viewport->GetWindow(), &swapDesc, nullptr, nullptr, &SwapChain1);
+			result = dxgiFactory->CreateSwapChainForHwnd(Device, (HWND)Viewport->GetWindow(), &swapDesc, nullptr, nullptr, SwapChain1.TypedInitPtr());
 			if (SUCCEEDED(result))
 				dxgiFactory->MakeWindowAssociation((HWND)Viewport->GetWindow(), DXGI_MWA_NO_ALT_ENTER);
 		}
 		if (SUCCEEDED(result))
 		{
-			SwapChain = SwapChain1;
+			result = SwapChain1->QueryInterface(SwapChain.GetIID(), SwapChain.InitPtr());
+			if (FAILED(result))
+				SwapChain1.reset();
 		}
 		else
 		{
-			ReleaseObject(Context);
-			ReleaseObject(Device);
+			Context.reset();
+			Device.reset();
 		}
-		ReleaseObject(dxgiFactory);
-		ReleaseObject(dxgiAdapter);
-		ReleaseObject(dxgiDevice);
+		dxgiFactory.reset();
+		dxgiAdapter.reset();
+		dxgiDevice.reset();
 
 		// We still don't have a swap chain. Let's try the older Windows 7 API
 		if (!SwapChain)
@@ -227,10 +229,10 @@ UBOOL UD3D11RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 					featurelevels.data(), (UINT)featurelevels.size(),
 					D3D11_SDK_VERSION,
 					&swapDesc,
-					&SwapChain,
-					&Device,
+					SwapChain.TypedInitPtr(),
+					Device.TypedInitPtr(),
 					&FeatureLevel,
-					&Context);
+					Context.TypedInitPtr());
 				if (SUCCEEDED(result))
 					break;
 			}
@@ -239,12 +241,11 @@ UBOOL UD3D11RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 
 		if (ActiveHdr)
 		{
-			IDXGISwapChain3* swapChain3 = nullptr;
-			HRESULT result = SwapChain->QueryInterface(__uuidof(IDXGISwapChain3), (void**)&swapChain3);
+			ComPtr<IDXGISwapChain3> swapChain3;
+			HRESULT result = SwapChain->QueryInterface(swapChain3.GetIID(), swapChain3.InitPtr());
 			if (SUCCEEDED(result))
 			{
 				result = swapChain3->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709);
-				ReleaseObject(swapChain3);
 			}
 		}
 
@@ -294,8 +295,8 @@ UBOOL UD3D11RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 		return TRUE;
 	SetResCallLock lock(InSetResCall);
 
-	ReleaseObject(BackBuffer);
-	ReleaseObject(BackBufferView);
+	BackBuffer.reset();
+	BackBufferView.reset();
 
 	HRESULT result;
 
@@ -383,12 +384,11 @@ UBOOL UD3D11RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 
 	if (ActiveHdr)
 	{
-		IDXGISwapChain3* swapChain3 = nullptr;
-		HRESULT result = SwapChain->QueryInterface(__uuidof(IDXGISwapChain3), (void**)&swapChain3);
+		ComPtr<IDXGISwapChain3> swapChain3;
+		HRESULT result = SwapChain->QueryInterface(swapChain3.GetIID(), swapChain3.InitPtr());
 		if (SUCCEEDED(result))
 		{
 			result = swapChain3->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709);
-			ReleaseObject(swapChain3);
 		}
 	}
 
@@ -409,7 +409,7 @@ UBOOL UD3D11RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 	if (FAILED(result))
 		return FALSE;
 
-	result = Device->CreateRenderTargetView(BackBuffer, nullptr, &BackBufferView);
+	result = Device->CreateRenderTargetView(BackBuffer, nullptr, BackBufferView.TypedInitPtr());
 	if (FAILED(result))
 		return FALSE;
 
@@ -447,11 +447,11 @@ void UD3D11RenderDevice::Exit()
 	ReleaseBloomPass();
 	ReleaseScenePass();
 	ReleaseSceneBuffers();
-	ReleaseObject(BackBufferView);
-	ReleaseObject(BackBuffer);
-	ReleaseObject(SwapChain);
-	ReleaseObject(Context);
-	ReleaseObject(Device);
+	BackBufferView.reset();
+	BackBuffer.reset();
+	SwapChain.reset();
+	Context.reset();
+	Device.reset();
 
 	unguard;
 }
@@ -463,31 +463,31 @@ void UD3D11RenderDevice::ResizeSceneBuffers(int width, int height, int multisamp
 	if (SceneBuffers.Width == width && SceneBuffers.Height == height && multisample == SceneBuffers.Multisample && SceneBuffers.ColorBuffer && SceneBuffers.HitBuffer && SceneBuffers.PPHitBuffer && SceneBuffers.StagingHitBuffer && SceneBuffers.DepthBuffer && SceneBuffers.PPImage[0] && SceneBuffers.PPImage[1])
 		return;
 
-	ReleaseObject(SceneBuffers.ColorBufferView);
-	ReleaseObject(SceneBuffers.HitBufferView);
-	ReleaseObject(SceneBuffers.HitBufferShaderView);
-	ReleaseObject(SceneBuffers.PPHitBufferView);
-	ReleaseObject(SceneBuffers.DepthBufferView);
+	SceneBuffers.ColorBufferView.reset();
+	SceneBuffers.HitBufferView.reset();
+	SceneBuffers.HitBufferShaderView.reset();
+	SceneBuffers.PPHitBufferView.reset();
+	SceneBuffers.DepthBufferView.reset();
 	for (int i = 0; i < 2; i++)
 	{
-		ReleaseObject(SceneBuffers.PPImageShaderView[i]);
-		ReleaseObject(SceneBuffers.PPImageView[i]);
-		ReleaseObject(SceneBuffers.PPImage[i]);
+		SceneBuffers.PPImageShaderView[i].reset();
+		SceneBuffers.PPImageView[i].reset();
+		SceneBuffers.PPImage[i].reset();
 	}
-	ReleaseObject(SceneBuffers.ColorBuffer);
-	ReleaseObject(SceneBuffers.StagingHitBuffer);
-	ReleaseObject(SceneBuffers.PPHitBuffer);
-	ReleaseObject(SceneBuffers.HitBuffer);
-	ReleaseObject(SceneBuffers.DepthBuffer);
+	SceneBuffers.ColorBuffer.reset();
+	SceneBuffers.StagingHitBuffer.reset();
+	SceneBuffers.PPHitBuffer.reset();
+	SceneBuffers.HitBuffer.reset();
+	SceneBuffers.DepthBuffer.reset();
 
 	for (PPBlurLevel& level : SceneBuffers.BlurLevels)
 	{
-		ReleaseObject(level.VTexture);
-		ReleaseObject(level.VTextureRTV);
-		ReleaseObject(level.VTextureSRV);
-		ReleaseObject(level.HTexture);
-		ReleaseObject(level.HTextureRTV);
-		ReleaseObject(level.HTextureSRV);
+		level.VTexture.reset();
+		level.VTextureRTV.reset();
+		level.VTextureSRV.reset();
+		level.HTexture.reset();
+		level.HTextureRTV.reset();
+		level.HTextureSRV.reset();
 	}
 
 	SceneBuffers.Width = width;
@@ -504,7 +504,7 @@ void UD3D11RenderDevice::ResizeSceneBuffers(int width, int height, int multisamp
 	texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
 	texDesc.SampleDesc.Count = SceneBuffers.Multisample;
 	texDesc.SampleDesc.Quality = SceneBuffers.Multisample > 1 ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0;
-	HRESULT result = Device->CreateTexture2D(&texDesc, nullptr, &SceneBuffers.ColorBuffer);
+	HRESULT result = Device->CreateTexture2D(&texDesc, nullptr, SceneBuffers.ColorBuffer.TypedInitPtr());
 	ThrowIfFailed(result, "CreateTexture2D(ColorBuffer) failed");
 
 	texDesc = {};
@@ -517,7 +517,7 @@ void UD3D11RenderDevice::ResizeSceneBuffers(int width, int height, int multisamp
 	texDesc.Format = DXGI_FORMAT_R32_UINT;
 	texDesc.SampleDesc.Count = SceneBuffers.Multisample;
 	texDesc.SampleDesc.Quality = SceneBuffers.Multisample > 1 ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0;
-	result = Device->CreateTexture2D(&texDesc, nullptr, &SceneBuffers.HitBuffer);
+	result = Device->CreateTexture2D(&texDesc, nullptr, SceneBuffers.HitBuffer.TypedInitPtr());
 	ThrowIfFailed(result, "CreateTexture2D(HitBuffer) failed");
 
 	texDesc = {};
@@ -530,7 +530,7 @@ void UD3D11RenderDevice::ResizeSceneBuffers(int width, int height, int multisamp
 	texDesc.Format = DXGI_FORMAT_R32_UINT;
 	texDesc.SampleDesc.Count = 1;
 	texDesc.SampleDesc.Quality = 0;
-	result = Device->CreateTexture2D(&texDesc, nullptr, &SceneBuffers.PPHitBuffer);
+	result = Device->CreateTexture2D(&texDesc, nullptr, SceneBuffers.PPHitBuffer.TypedInitPtr());
 	ThrowIfFailed(result, "CreateTexture2D(PPHitBuffer) failed");
 
 	texDesc = {};
@@ -544,7 +544,7 @@ void UD3D11RenderDevice::ResizeSceneBuffers(int width, int height, int multisamp
 	texDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
 	texDesc.SampleDesc.Count = 1;
 	texDesc.SampleDesc.Quality = 0;
-	result = Device->CreateTexture2D(&texDesc, nullptr, &SceneBuffers.StagingHitBuffer);
+	result = Device->CreateTexture2D(&texDesc, nullptr, SceneBuffers.StagingHitBuffer.TypedInitPtr());
 	ThrowIfFailed(result, "CreateTexture2D(StagingHitBuffer) failed");
 
 	texDesc = {};
@@ -557,7 +557,7 @@ void UD3D11RenderDevice::ResizeSceneBuffers(int width, int height, int multisamp
 	texDesc.Format = DXGI_FORMAT_D32_FLOAT;
 	texDesc.SampleDesc.Count = SceneBuffers.Multisample;
 	texDesc.SampleDesc.Quality = SceneBuffers.Multisample > 1 ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0;
-	result = Device->CreateTexture2D(&texDesc, nullptr, &SceneBuffers.DepthBuffer);
+	result = Device->CreateTexture2D(&texDesc, nullptr, SceneBuffers.DepthBuffer.TypedInitPtr());
 	ThrowIfFailed(result, "CreateTexture2D(DepthBuffer) failed");
 
 	for (int i = 0; i < 2; i++)
@@ -572,31 +572,31 @@ void UD3D11RenderDevice::ResizeSceneBuffers(int width, int height, int multisamp
 		texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
 		texDesc.SampleDesc.Count = 1;
 		texDesc.SampleDesc.Quality = 0;
-		result = Device->CreateTexture2D(&texDesc, nullptr, &SceneBuffers.PPImage[i]);
+		result = Device->CreateTexture2D(&texDesc, nullptr, SceneBuffers.PPImage[i].TypedInitPtr());
 		ThrowIfFailed(result, "CreateTexture2D(PPImage) failed");
 	}
 
-	result = Device->CreateRenderTargetView(SceneBuffers.ColorBuffer, nullptr, &SceneBuffers.ColorBufferView);
+	result = Device->CreateRenderTargetView(SceneBuffers.ColorBuffer, nullptr, SceneBuffers.ColorBufferView.TypedInitPtr());
 	ThrowIfFailed(result, "CreateRenderTargetView(ColorBuffer) failed");
 
-	result = Device->CreateRenderTargetView(SceneBuffers.HitBuffer, nullptr, &SceneBuffers.HitBufferView);
+	result = Device->CreateRenderTargetView(SceneBuffers.HitBuffer, nullptr, SceneBuffers.HitBufferView.TypedInitPtr());
 	ThrowIfFailed(result, "CreateRenderTargetView(HitBuffer) failed");
 
-	result = Device->CreateShaderResourceView(SceneBuffers.HitBuffer, nullptr, &SceneBuffers.HitBufferShaderView);
+	result = Device->CreateShaderResourceView(SceneBuffers.HitBuffer, nullptr, SceneBuffers.HitBufferShaderView.TypedInitPtr());
 	ThrowIfFailed(result, "CreateShaderResourceView(HitBuffer) failed");
 
-	result = Device->CreateRenderTargetView(SceneBuffers.PPHitBuffer, nullptr, &SceneBuffers.PPHitBufferView);
+	result = Device->CreateRenderTargetView(SceneBuffers.PPHitBuffer, nullptr, SceneBuffers.PPHitBufferView.TypedInitPtr());
 	ThrowIfFailed(result, "CreateRenderTargetView(PPHitBuffer) failed");
 
-	result = Device->CreateDepthStencilView(SceneBuffers.DepthBuffer, nullptr, &SceneBuffers.DepthBufferView);
+	result = Device->CreateDepthStencilView(SceneBuffers.DepthBuffer, nullptr, SceneBuffers.DepthBufferView.TypedInitPtr());
 	ThrowIfFailed(result, "CreateDepthStencilView(DepthBuffer) failed");
 
 	for (int i = 0; i < 2; i++)
 	{
-		result = Device->CreateRenderTargetView(SceneBuffers.PPImage[i], nullptr, &SceneBuffers.PPImageView[i]);
+		result = Device->CreateRenderTargetView(SceneBuffers.PPImage[i], nullptr, SceneBuffers.PPImageView[i].TypedInitPtr());
 		ThrowIfFailed(result, "CreateRenderTargetView(PPImage) failed");
 
-		result = Device->CreateShaderResourceView(SceneBuffers.PPImage[i], nullptr, &SceneBuffers.PPImageShaderView[i]);
+		result = Device->CreateShaderResourceView(SceneBuffers.PPImage[i], nullptr, SceneBuffers.PPImageShaderView[i].TypedInitPtr());
 		ThrowIfFailed(result, "CreateShaderResourceView(PPImage) failed");
 	}
 
@@ -618,22 +618,22 @@ void UD3D11RenderDevice::ResizeSceneBuffers(int width, int height, int multisamp
 		texDesc.SampleDesc.Count = 1;
 		texDesc.SampleDesc.Quality = 0;
 
-		result = Device->CreateTexture2D(&texDesc, nullptr, &level.VTexture);
+		result = Device->CreateTexture2D(&texDesc, nullptr, level.VTexture.TypedInitPtr());
 		ThrowIfFailed(result, "CreateTexture2D(SceneBuffers.BlurLevels.VTexture) failed");
 
-		result = Device->CreateTexture2D(&texDesc, nullptr, &level.HTexture);
+		result = Device->CreateTexture2D(&texDesc, nullptr, level.HTexture.TypedInitPtr());
 		ThrowIfFailed(result, "CreateTexture2D(SceneBuffers.BlurLevels.HTexture) failed");
 
-		result = Device->CreateRenderTargetView(level.VTexture, nullptr, &level.VTextureRTV);
+		result = Device->CreateRenderTargetView(level.VTexture, nullptr, level.VTextureRTV.TypedInitPtr());
 		ThrowIfFailed(result, "CreateRenderTargetView(SceneBuffers.BlurLevels.VTextureRTV) failed");
 
-		result = Device->CreateRenderTargetView(level.HTexture, nullptr, &level.HTextureRTV);
+		result = Device->CreateRenderTargetView(level.HTexture, nullptr, level.HTextureRTV.TypedInitPtr());
 		ThrowIfFailed(result, "CreateRenderTargetView(SceneBuffers.BlurLevels.HTextureRTV) failed");
 
-		result = Device->CreateShaderResourceView(level.VTexture, nullptr, &level.VTextureSRV);
+		result = Device->CreateShaderResourceView(level.VTexture, nullptr, level.VTextureSRV.TypedInitPtr());
 		ThrowIfFailed(result, "CreateRenderTargetView(SceneBuffers.BlurLevels.VTextureSRV) failed");
 
-		result = Device->CreateShaderResourceView(level.HTexture, nullptr, &level.HTextureSRV);
+		result = Device->CreateShaderResourceView(level.HTexture, nullptr, level.HTextureSRV.TypedInitPtr());
 		ThrowIfFailed(result, "CreateRenderTargetView(SceneBuffers.BlurLevels.HTextureSRV) failed");
 
 		level.Width = bloomWidth;
@@ -668,7 +668,7 @@ void UD3D11RenderDevice::CreateScenePass()
 		rasterizerDesc.FrontCounterClockwise = FALSE;
 		rasterizerDesc.DepthClipEnable = FALSE; // Avoid clipping the weapon. The UE1 engine clips the geometry anyway.
 		rasterizerDesc.MultisampleEnable = i == 1 ? TRUE : FALSE;
-		HRESULT result = Device->CreateRasterizerState(&rasterizerDesc, &ScenePass.RasterizerState[i]);
+		HRESULT result = Device->CreateRasterizerState(&rasterizerDesc, ScenePass.RasterizerState[i].TypedInitPtr());
 		ThrowIfFailed(result, "CreateRasterizerState(ScenePass.Pipelines.RasterizerState) failed");
 	}
 
@@ -718,7 +718,7 @@ void UD3D11RenderDevice::CreateScenePass()
 			blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 		blendDesc.RenderTarget[1].BlendEnable = FALSE;
 		blendDesc.RenderTarget[1].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
-		HRESULT result = Device->CreateBlendState(&blendDesc, &ScenePass.Pipelines[i].BlendState);
+		HRESULT result = Device->CreateBlendState(&blendDesc, ScenePass.Pipelines[i].BlendState.TypedInitPtr());
 		ThrowIfFailed(result, "CreateBlendState(ScenePass.Pipelines.BlendState) failed");
 
 		D3D11_DEPTH_STENCIL_DESC depthStencilDesc = {};
@@ -728,7 +728,7 @@ void UD3D11RenderDevice::CreateScenePass()
 			depthStencilDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
 		else
 			depthStencilDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
-		result = Device->CreateDepthStencilState(&depthStencilDesc, &ScenePass.Pipelines[i].DepthStencilState);
+		result = Device->CreateDepthStencilState(&depthStencilDesc, ScenePass.Pipelines[i].DepthStencilState.TypedInitPtr());
 		ThrowIfFailed(result, "CreateDepthStencilState(ScenePass.Pipelines.DepthStencilState) failed");
 
 		if (i & 16) // PF_Masked
@@ -754,14 +754,14 @@ void UD3D11RenderDevice::CreateScenePass()
 		blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 		blendDesc.RenderTarget[1].BlendEnable = FALSE;
 		blendDesc.RenderTarget[1].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
-		HRESULT result = Device->CreateBlendState(&blendDesc, &ScenePass.LinePipeline[i].BlendState);
+		HRESULT result = Device->CreateBlendState(&blendDesc, ScenePass.LinePipeline[i].BlendState.TypedInitPtr());
 		ThrowIfFailed(result, "CreateBlendState(ScenePass.LinePipeline.BlendState) failed");
 
 		D3D11_DEPTH_STENCIL_DESC depthStencilDesc = {};
 		depthStencilDesc.DepthEnable = i ? TRUE : FALSE;
 		depthStencilDesc.DepthFunc = D3D11_COMPARISON_LESS_EQUAL;
 		depthStencilDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
-		result = Device->CreateDepthStencilState(&depthStencilDesc, &ScenePass.LinePipeline[i].DepthStencilState);
+		result = Device->CreateDepthStencilState(&depthStencilDesc, ScenePass.LinePipeline[i].DepthStencilState.TypedInitPtr());
 		ThrowIfFailed(result, "CreateDepthStencilState(ScenePass.LinePipeline.DepthStencilState) failed");
 
 		ScenePass.LinePipeline[i].PixelShader = ScenePass.PixelShader;
@@ -782,14 +782,14 @@ void UD3D11RenderDevice::CreateScenePass()
 		blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 		blendDesc.RenderTarget[1].BlendEnable = FALSE;
 		blendDesc.RenderTarget[1].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
-		HRESULT result = Device->CreateBlendState(&blendDesc, &ScenePass.PointPipeline.BlendState);
+		HRESULT result = Device->CreateBlendState(&blendDesc, ScenePass.PointPipeline.BlendState.TypedInitPtr());
 		ThrowIfFailed(result, "CreateBlendState(ScenePass.LinePipeline.BlendState) failed");
 
 		D3D11_DEPTH_STENCIL_DESC depthStencilDesc = {};
 		depthStencilDesc.DepthEnable = FALSE;
 		depthStencilDesc.DepthFunc = D3D11_COMPARISON_LESS_EQUAL;
 		depthStencilDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
-		result = Device->CreateDepthStencilState(&depthStencilDesc, &ScenePass.PointPipeline.DepthStencilState);
+		result = Device->CreateDepthStencilState(&depthStencilDesc, ScenePass.PointPipeline.DepthStencilState.TypedInitPtr());
 		ThrowIfFailed(result, "CreateDepthStencilState(ScenePass.PointPipeline.DepthStencilState) failed");
 
 		ScenePass.PointPipeline.PixelShader = ScenePass.PixelShader;
@@ -801,7 +801,7 @@ void UD3D11RenderDevice::CreateScenePass()
 	bufDesc.ByteWidth = SceneVertexBufferSize * sizeof(SceneVertex);
 	bufDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
 	bufDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-	HRESULT result = Device->CreateBuffer(&bufDesc, nullptr, &ScenePass.VertexBuffer);
+	HRESULT result = Device->CreateBuffer(&bufDesc, nullptr, ScenePass.VertexBuffer.TypedInitPtr());
 	ThrowIfFailed(result, "CreateBuffer(ScenePass.VertexBuffer) failed");
 
 	bufDesc = {};
@@ -809,14 +809,14 @@ void UD3D11RenderDevice::CreateScenePass()
 	bufDesc.ByteWidth = SceneIndexBufferSize * sizeof(uint32_t);
 	bufDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
 	bufDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-	result = Device->CreateBuffer(&bufDesc, nullptr, &ScenePass.IndexBuffer);
+	result = Device->CreateBuffer(&bufDesc, nullptr, ScenePass.IndexBuffer.TypedInitPtr());
 	ThrowIfFailed(result, "CreateBuffer(ScenePass.IndexBuffer) failed");
 
 	bufDesc = {};
 	bufDesc.Usage = D3D11_USAGE_DEFAULT;
 	bufDesc.ByteWidth = sizeof(ScenePushConstants);
 	bufDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-	result = Device->CreateBuffer(&bufDesc, nullptr, &ScenePass.ConstantBuffer);
+	result = Device->CreateBuffer(&bufDesc, nullptr, ScenePass.ConstantBuffer.TypedInitPtr());
 	ThrowIfFailed(result, "CreateBuffer(ScenePass.ConstantBuffer) failed");
 }
 
@@ -841,7 +841,7 @@ void UD3D11RenderDevice::CreateSceneSamplers()
 		samplerDesc.AddressU = addressmode;
 		samplerDesc.AddressV = addressmode;
 		samplerDesc.AddressW = addressmode;
-		HRESULT result = Device->CreateSamplerState(&samplerDesc, &ScenePass.Samplers[i]);
+		HRESULT result = Device->CreateSamplerState(&samplerDesc, ScenePass.Samplers[i].TypedInitPtr());
 		ThrowIfFailed(result, "CreateSamplerState(ScenePass.Samplers) failed");
 	}
 
@@ -852,7 +852,7 @@ void UD3D11RenderDevice::ReleaseSceneSamplers()
 {
 	for (auto& sampler : ScenePass.Samplers)
 	{
-		ReleaseObject(sampler);
+		sampler.reset();
 	}
 	ScenePass.LODBias = 0.0f;
 }
@@ -868,80 +868,80 @@ void UD3D11RenderDevice::UpdateLODBias()
 
 void UD3D11RenderDevice::ReleaseScenePass()
 {
-	ReleaseObject(ScenePass.VertexShader);
-	ReleaseObject(ScenePass.InputLayout);
-	ReleaseObject(ScenePass.VertexBuffer);
-	ReleaseObject(ScenePass.IndexBuffer);
-	ReleaseObject(ScenePass.ConstantBuffer);
-	ReleaseObject(ScenePass.RasterizerState[0]);
-	ReleaseObject(ScenePass.RasterizerState[1]);
-	ReleaseObject(ScenePass.PixelShader);
-	ReleaseObject(ScenePass.PixelShaderAlphaTest);
+	ScenePass.VertexShader.reset();
+	ScenePass.InputLayout.reset();
+	ScenePass.VertexBuffer.reset();
+	ScenePass.IndexBuffer.reset();
+	ScenePass.ConstantBuffer.reset();
+	ScenePass.RasterizerState[0].reset();
+	ScenePass.RasterizerState[1].reset();
+	ScenePass.PixelShader.reset();
+	ScenePass.PixelShaderAlphaTest.reset();
 	ReleaseSceneSamplers();
 	for (auto& pipeline : ScenePass.Pipelines)
 	{
-		ReleaseObject(pipeline.BlendState);
-		ReleaseObject(pipeline.DepthStencilState);
+		pipeline.BlendState.reset();
+		pipeline.DepthStencilState.reset();
 	}
 	for (int i = 0; i < 2; i++)
 	{
-		ReleaseObject(ScenePass.LinePipeline[i].BlendState);
-		ReleaseObject(ScenePass.LinePipeline[i].DepthStencilState);
+		ScenePass.LinePipeline[i].BlendState.reset();
+		ScenePass.LinePipeline[i].DepthStencilState.reset();
 	}
-	ReleaseObject(ScenePass.PointPipeline.BlendState);
-	ReleaseObject(ScenePass.PointPipeline.DepthStencilState);
+	ScenePass.PointPipeline.BlendState.reset();
+	ScenePass.PointPipeline.DepthStencilState.reset();
 }
 
 void UD3D11RenderDevice::ReleaseBloomPass()
 {
-	ReleaseObject(BloomPass.Extract);
-	ReleaseObject(BloomPass.Combine);
-	ReleaseObject(BloomPass.BlurVertical);
-	ReleaseObject(BloomPass.BlurHorizontal);
-	ReleaseObject(BloomPass.ConstantBuffer);
-	ReleaseObject(BloomPass.AdditiveBlendState);
+	BloomPass.Extract.reset();
+	BloomPass.Combine.reset();
+	BloomPass.BlurVertical.reset();
+	BloomPass.BlurHorizontal.reset();
+	BloomPass.ConstantBuffer.reset();
+	BloomPass.AdditiveBlendState.reset();
 }
 
 void UD3D11RenderDevice::ReleasePresentPass()
 {
-	ReleaseObject(PresentPass.PPStepLayout);
-	ReleaseObject(PresentPass.PPStep);
-	ReleaseObject(PresentPass.PPStepVertexBuffer);
-	ReleaseObject(PresentPass.HitResolve);
-	for (auto& shader : PresentPass.Present) ReleaseObject(shader);
-	ReleaseObject(PresentPass.PresentConstantBuffer);
-	ReleaseObject(PresentPass.DitherTextureView);
-	ReleaseObject(PresentPass.DitherTexture);
-	ReleaseObject(PresentPass.BlendState);
-	ReleaseObject(PresentPass.DepthStencilState);
+	PresentPass.PPStepLayout.reset();
+	PresentPass.PPStep.reset();
+	PresentPass.PPStepVertexBuffer.reset();
+	PresentPass.HitResolve.reset();
+	for (auto& shader : PresentPass.Present) shader.reset();
+	PresentPass.PresentConstantBuffer.reset();
+	PresentPass.DitherTextureView.reset();
+	PresentPass.DitherTexture.reset();
+	PresentPass.BlendState.reset();
+	PresentPass.DepthStencilState.reset();
 }
 
 void UD3D11RenderDevice::ReleaseSceneBuffers()
 {
-	ReleaseObject(SceneBuffers.ColorBufferView);
-	ReleaseObject(SceneBuffers.HitBufferView);
-	ReleaseObject(SceneBuffers.HitBufferShaderView);
-	ReleaseObject(SceneBuffers.PPHitBufferView);
-	ReleaseObject(SceneBuffers.DepthBufferView);
+	SceneBuffers.ColorBufferView.reset();
+	SceneBuffers.HitBufferView.reset();
+	SceneBuffers.HitBufferShaderView.reset();
+	SceneBuffers.PPHitBufferView.reset();
+	SceneBuffers.DepthBufferView.reset();
 	for (int i = 0; i < 2; i++)
 	{
-		ReleaseObject(SceneBuffers.PPImageShaderView[i]);
-		ReleaseObject(SceneBuffers.PPImageView[i]);
-		ReleaseObject(SceneBuffers.PPImage[i]);
+		SceneBuffers.PPImageShaderView[i].reset();
+		SceneBuffers.PPImageView[i].reset();
+		SceneBuffers.PPImage[i].reset();
 	}
-	ReleaseObject(SceneBuffers.ColorBuffer);
-	ReleaseObject(SceneBuffers.StagingHitBuffer);
-	ReleaseObject(SceneBuffers.PPHitBuffer);
-	ReleaseObject(SceneBuffers.HitBuffer);
-	ReleaseObject(SceneBuffers.DepthBuffer);
+	SceneBuffers.ColorBuffer.reset();
+	SceneBuffers.StagingHitBuffer.reset();
+	SceneBuffers.PPHitBuffer.reset();
+	SceneBuffers.HitBuffer.reset();
+	SceneBuffers.DepthBuffer.reset();
 	for (PPBlurLevel& level : SceneBuffers.BlurLevels)
 	{
-		ReleaseObject(level.VTexture);
-		ReleaseObject(level.VTextureRTV);
-		ReleaseObject(level.VTextureSRV);
-		ReleaseObject(level.HTexture);
-		ReleaseObject(level.HTextureRTV);
-		ReleaseObject(level.HTextureSRV);
+		level.VTexture.reset();
+		level.VTextureRTV.reset();
+		level.VTextureSRV.reset();
+		level.HTexture.reset();
+		level.HTextureRTV.reset();
+		level.HTextureSRV.reset();
 	}
 }
 
@@ -983,18 +983,23 @@ UD3D11RenderDevice::ScenePipelineState* UD3D11RenderDevice::GetPipeline(DWORD Po
 
 void UD3D11RenderDevice::RunBloomPass()
 {
+	ID3D11RenderTargetView* rtvs[1] = {};
+	ID3D11ShaderResourceView* srvs[1] = {};
+
 	float blurAmount = 0.6f + BloomAmount * (1.9f / 255.0f);
 	BloomPushConstants pushconstants;
 	ComputeBlurSamples(7, blurAmount, pushconstants.SampleWeights);
 
+	ID3D11Buffer* vertexBuffers[1] = { PresentPass.PPStepVertexBuffer.get() };
+	ID3D11Buffer* cbs[1] = { BloomPass.ConstantBuffer.get() };
 	UINT stride = sizeof(vec2);
 	UINT offset = 0;
-	Context->IASetVertexBuffers(0, 1, &PresentPass.PPStepVertexBuffer, &stride, &offset);
+	Context->IASetVertexBuffers(0, 1, vertexBuffers, &stride, &offset);
 	Context->IASetInputLayout(PresentPass.PPStepLayout);
 	Context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	Context->VSSetShader(PresentPass.PPStep, nullptr, 0);
 	Context->RSSetState(PresentPass.RasterizerState);
-	Context->PSSetConstantBuffers(0, 1, &BloomPass.ConstantBuffer);
+	Context->PSSetConstantBuffers(0, 1, cbs);
 	Context->OMSetDepthStencilState(PresentPass.DepthStencilState, 0);
 	Context->OMSetBlendState(PresentPass.BlendState, nullptr, 0xffffffff);
 	Context->UpdateSubresource(BloomPass.ConstantBuffer, 0, nullptr, &pushconstants, 0, 0);
@@ -1005,10 +1010,12 @@ void UD3D11RenderDevice::RunBloomPass()
 	// Extract overbright pixels that we want to bloom:
 	viewport.Width = SceneBuffers.BlurLevels[0].Width;
 	viewport.Height = SceneBuffers.BlurLevels[0].Height;
-	Context->OMSetRenderTargets(1, &SceneBuffers.BlurLevels[0].VTextureRTV, nullptr);
+	rtvs[0] = SceneBuffers.BlurLevels[0].VTextureRTV.get();
+	srvs[0] = SceneBuffers.PPImageShaderView[0].get();
+	Context->OMSetRenderTargets(1, rtvs, nullptr);
 	Context->RSSetViewports(1, &viewport);
 	Context->PSSetShader(BloomPass.Extract, nullptr, 0);
-	Context->PSSetShaderResources(0, 1, &SceneBuffers.PPImageShaderView[0]);
+	Context->PSSetShaderResources(0, 1, srvs);
 	Context->Draw(6, 0);
 
 	// Blur and downscale:
@@ -1026,10 +1033,12 @@ void UD3D11RenderDevice::RunBloomPass()
 		// Linear downscale:
 		viewport.Width = next.Width;
 		viewport.Height = next.Height;
-		Context->OMSetRenderTargets(1, &next.VTextureRTV, nullptr);
+		rtvs[0] = next.VTextureRTV.get();
+		srvs[0] = blevel.VTextureSRV.get();
+		Context->OMSetRenderTargets(1, rtvs, nullptr);
 		Context->RSSetViewports(1, &viewport);
 		Context->PSSetShader(BloomPass.Combine, nullptr, 0);
-		Context->PSSetShaderResources(0, 1, &blevel.VTextureSRV);
+		Context->PSSetShaderResources(0, 1, srvs);
 		Context->Draw(6, 0);
 	}
 
@@ -1048,10 +1057,12 @@ void UD3D11RenderDevice::RunBloomPass()
 		// Linear upscale:
 		viewport.Width = next.Width;
 		viewport.Height = next.Height;
-		Context->OMSetRenderTargets(1, &next.VTextureRTV, nullptr);
+		rtvs[0] = next.VTextureRTV.get();
+		srvs[0] = blevel.VTextureSRV.get();
+		Context->OMSetRenderTargets(1, rtvs, nullptr);
 		Context->RSSetViewports(1, &viewport);
 		Context->PSSetShader(BloomPass.Combine, nullptr, 0);
-		Context->PSSetShaderResources(0, 1, &blevel.VTextureSRV);
+		Context->PSSetShaderResources(0, 1, srvs);
 		Context->Draw(6, 0);
 	}
 
@@ -1064,11 +1075,13 @@ void UD3D11RenderDevice::RunBloomPass()
 	// Add bloom back to scene post process texture:
 	viewport.Width = SceneBuffers.Width;
 	viewport.Height = SceneBuffers.Height;
-	Context->OMSetRenderTargets(1, &SceneBuffers.PPImageView[0], nullptr);
+	rtvs[0] = SceneBuffers.PPImageView[0].get();
+	srvs[0] = SceneBuffers.BlurLevels[0].VTextureSRV.get();
+	Context->OMSetRenderTargets(1, rtvs, nullptr);
 	Context->OMSetBlendState(BloomPass.AdditiveBlendState, nullptr, 0xffffffff);
 	Context->RSSetViewports(1, &viewport);
 	Context->PSSetShader(BloomPass.Combine, nullptr, 0);
-	Context->PSSetShaderResources(0, 1, &SceneBuffers.BlurLevels[0].VTextureSRV);
+	Context->PSSetShaderResources(0, 1, srvs);
 	Context->Draw(6, 0);
 }
 
@@ -1118,7 +1131,7 @@ void UD3D11RenderDevice::CreateBloomPass()
 	bufDesc.Usage = D3D11_USAGE_DEFAULT;
 	bufDesc.ByteWidth = sizeof(BloomPushConstants);
 	bufDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-	HRESULT result = Device->CreateBuffer(&bufDesc, nullptr, &BloomPass.ConstantBuffer);
+	HRESULT result = Device->CreateBuffer(&bufDesc, nullptr, BloomPass.ConstantBuffer.TypedInitPtr());
 	ThrowIfFailed(result, "CreateBuffer(BloomPass.ConstantBuffer) failed");
 
 	D3D11_BLEND_DESC blendDesc = {};
@@ -1130,7 +1143,7 @@ void UD3D11RenderDevice::CreateBloomPass()
 	blendDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
 	blendDesc.RenderTarget[0].DestBlend = D3D11_BLEND_ONE;
 	blendDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ONE;
-	result = Device->CreateBlendState(&blendDesc, &BloomPass.AdditiveBlendState);
+	result = Device->CreateBlendState(&blendDesc, BloomPass.AdditiveBlendState.TypedInitPtr());
 	ThrowIfFailed(result, "CreateBlendState(BloomPass.AdditiveBlendState) failed");
 }
 
@@ -1154,14 +1167,14 @@ void UD3D11RenderDevice::CreatePresentPass()
 	D3D11_SUBRESOURCE_DATA initData = {};
 	initData.pSysMem = positions.data();
 
-	HRESULT result = Device->CreateBuffer(&bufDesc, &initData, &PresentPass.PPStepVertexBuffer);
+	HRESULT result = Device->CreateBuffer(&bufDesc, &initData, PresentPass.PPStepVertexBuffer.TypedInitPtr());
 	ThrowIfFailed(result, "CreateBuffer(PresentPass.PPStepVertexBuffer) failed");
 
 	bufDesc = {};
 	bufDesc.Usage = D3D11_USAGE_DEFAULT;
 	bufDesc.ByteWidth = sizeof(PresentPushConstants);
 	bufDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-	result = Device->CreateBuffer(&bufDesc, nullptr, &PresentPass.PresentConstantBuffer);
+	result = Device->CreateBuffer(&bufDesc, nullptr, PresentPass.PresentConstantBuffer.TypedInitPtr());
 	ThrowIfFailed(result, "CreateBuffer(PresentPass.PresentConstantBuffer) failed");
 
 	std::vector<D3D11_INPUT_ELEMENT_DESC> elements =
@@ -1211,26 +1224,26 @@ void UD3D11RenderDevice::CreatePresentPass()
 	texDesc.MipLevels = 1;
 	texDesc.ArraySize = 1;
 	texDesc.SampleDesc.Count = 1;
-	result = Device->CreateTexture2D(&texDesc, &initData, &PresentPass.DitherTexture);
+	result = Device->CreateTexture2D(&texDesc, &initData, PresentPass.DitherTexture.TypedInitPtr());
 	ThrowIfFailed(result, "CreateTexture2D(DitherTexture) failed");
 
-	result = Device->CreateShaderResourceView(PresentPass.DitherTexture, nullptr, &PresentPass.DitherTextureView);
+	result = Device->CreateShaderResourceView(PresentPass.DitherTexture, nullptr, PresentPass.DitherTextureView.TypedInitPtr());
 	ThrowIfFailed(result, "CreateShaderResourceView(DitherTexture) failed");
 
 	D3D11_BLEND_DESC blendDesc = {};
 	blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
-	result = Device->CreateBlendState(&blendDesc, &PresentPass.BlendState);
+	result = Device->CreateBlendState(&blendDesc, PresentPass.BlendState.TypedInitPtr());
 	ThrowIfFailed(result, "CreateBlendState(PresentPass.BlendState) failed");
 
 	D3D11_DEPTH_STENCIL_DESC depthStencilDesc = {};
 	depthStencilDesc.DepthFunc = D3D11_COMPARISON_ALWAYS;
-	result = Device->CreateDepthStencilState(&depthStencilDesc, &PresentPass.DepthStencilState);
+	result = Device->CreateDepthStencilState(&depthStencilDesc, PresentPass.DepthStencilState.TypedInitPtr());
 	ThrowIfFailed(result, "CreateDepthStencilState(PresentPass.DepthStencilState) failed");
 
 	D3D11_RASTERIZER_DESC rasterizerDesc = {};
 	rasterizerDesc.FillMode = D3D11_FILL_SOLID;
 	rasterizerDesc.CullMode = D3D11_CULL_NONE;
-	result = Device->CreateRasterizerState(&rasterizerDesc, &PresentPass.RasterizerState);
+	result = Device->CreateRasterizerState(&rasterizerDesc, PresentPass.RasterizerState.TypedInitPtr());
 	ThrowIfFailed(result, "CreateRasterizerState(PresentPass.RasterizerState) failed");
 }
 
@@ -1376,11 +1389,13 @@ void UD3D11RenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane Scr
 
 	UINT stride = sizeof(SceneVertex);
 	UINT offset = 0;
-	Context->IASetVertexBuffers(0, 1, &ScenePass.VertexBuffer, &stride, &offset);
+	ID3D11Buffer* vertexBuffers[1] = { ScenePass.VertexBuffer.get() };
+	ID3D11Buffer* cbs[1] = { ScenePass.ConstantBuffer.get() };
+	Context->IASetVertexBuffers(0, 1, vertexBuffers, &stride, &offset);
 	Context->IASetIndexBuffer(ScenePass.IndexBuffer, DXGI_FORMAT_R32_UINT, 0);
 	Context->IASetInputLayout(ScenePass.InputLayout);
 	Context->VSSetShader(ScenePass.VertexShader, nullptr, 0);
-	Context->VSSetConstantBuffers(0, 1, &ScenePass.ConstantBuffer);
+	Context->VSSetConstantBuffers(0, 1, cbs);
 	Context->RSSetState(ScenePass.RasterizerState[SceneBuffers.Multisample > 1]);
 
 	D3D11_RECT box = {};
@@ -1511,7 +1526,8 @@ void UD3D11RenderDevice::Unlock(UBOOL Blit)
 			RunBloomPass();
 		}
 
-		Context->OMSetRenderTargets(1, &BackBufferView, nullptr);
+		ID3D11RenderTargetView* rtvs[1] = { BackBufferView.get() };
+		Context->OMSetRenderTargets(1, rtvs, nullptr);
 
 		D3D11_VIEWPORT viewport = {};
 		viewport.Width = Viewport->SizeX;
@@ -1529,14 +1545,16 @@ void UD3D11RenderDevice::Unlock(UBOOL Blit)
 
 		UINT stride = sizeof(vec2);
 		UINT offset = 0;
+		ID3D11Buffer* vertexBuffers[1] = { PresentPass.PPStepVertexBuffer.get()};
 		ID3D11ShaderResourceView* psResources[] = { SceneBuffers.PPImageShaderView[0], PresentPass.DitherTextureView};
-		Context->IASetVertexBuffers(0, 1, &PresentPass.PPStepVertexBuffer, &stride, &offset);
+		ID3D11Buffer* cbs[1] = { PresentPass.PresentConstantBuffer.get() };
+		Context->IASetVertexBuffers(0, 1, vertexBuffers, &stride, &offset);
 		Context->IASetInputLayout(PresentPass.PPStepLayout);
 		Context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 		Context->VSSetShader(PresentPass.PPStep, nullptr, 0);
 		Context->RSSetState(PresentPass.RasterizerState);
 		Context->PSSetShader(PresentPass.Present[presentShader], nullptr, 0);
-		Context->PSSetConstantBuffers(0, 1, &PresentPass.PresentConstantBuffer);
+		Context->PSSetConstantBuffers(0, 1, cbs);
 		Context->PSSetShaderResources(0, 2, psResources);
 		Context->OMSetDepthStencilState(PresentPass.DepthStencilState, 0);
 		Context->OMSetBlendState(PresentPass.BlendState, nullptr, 0xffffffff);
@@ -1591,7 +1609,8 @@ void UD3D11RenderDevice::Unlock(UBOOL Blit)
 		// Resolve multisampling
 		if (SceneBuffers.Multisample > 1)
 		{
-			Context->OMSetRenderTargets(1, &SceneBuffers.PPHitBufferView, nullptr);
+			ID3D11RenderTargetView* rtvs[1] = { SceneBuffers.PPHitBufferView.get() };
+			Context->OMSetRenderTargets(1, rtvs, nullptr);
 
 			D3D11_VIEWPORT viewport = {};
 			viewport.TopLeftX = box.left;
@@ -1603,13 +1622,15 @@ void UD3D11RenderDevice::Unlock(UBOOL Blit)
 
 			UINT stride = sizeof(vec2);
 			UINT offset = 0;
-			Context->IASetVertexBuffers(0, 1, &PresentPass.PPStepVertexBuffer, &stride, &offset);
+			ID3D11Buffer* vertexBuffers[1] = { PresentPass.PPStepVertexBuffer.get() };
+			ID3D11ShaderResourceView* srvs[1] = { SceneBuffers.HitBufferShaderView.get() };
+			Context->IASetVertexBuffers(0, 1, vertexBuffers, &stride, &offset);
 			Context->IASetInputLayout(PresentPass.PPStepLayout);
 			Context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 			Context->VSSetShader(PresentPass.PPStep, nullptr, 0);
 			Context->RSSetState(PresentPass.RasterizerState);
 			Context->PSSetShader(PresentPass.HitResolve, nullptr, 0);
-			Context->PSSetShaderResources(0, 1, &SceneBuffers.HitBufferShaderView);
+			Context->PSSetShaderResources(0, 1, srvs);
 			Context->OMSetDepthStencilState(PresentPass.DepthStencilState, 0);
 			Context->OMSetBlendState(PresentPass.BlendState, nullptr, 0xffffffff);
 
@@ -2410,7 +2431,8 @@ void UD3D11RenderDevice::ReadPixels(FColor* Pixels)
 
 	if (GammaCorrectScreenshots)
 	{
-		Context->OMSetRenderTargets(1, &SceneBuffers.PPImageView[1], nullptr);
+		ID3D11RenderTargetView* rtvs[1] = { SceneBuffers.PPImageView[1].get() };
+		Context->OMSetRenderTargets(1, rtvs, nullptr);
 
 		D3D11_VIEWPORT viewport = {};
 		viewport.Width = Viewport->SizeX;
@@ -2428,14 +2450,16 @@ void UD3D11RenderDevice::ReadPixels(FColor* Pixels)
 
 		UINT stride = sizeof(vec2);
 		UINT offset = 0;
+		ID3D11Buffer* vertexBuffers[1] = { PresentPass.PPStepVertexBuffer.get() };
+		ID3D11Buffer* cbs[1] = { PresentPass.PresentConstantBuffer.get() };
 		ID3D11ShaderResourceView* psResources[] = { SceneBuffers.PPImageShaderView[0], PresentPass.DitherTextureView };
-		Context->IASetVertexBuffers(0, 1, &PresentPass.PPStepVertexBuffer, &stride, &offset);
+		Context->IASetVertexBuffers(0, 1, vertexBuffers, &stride, &offset);
 		Context->IASetInputLayout(PresentPass.PPStepLayout);
 		Context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 		Context->VSSetShader(PresentPass.PPStep, nullptr, 0);
 		Context->RSSetState(PresentPass.RasterizerState);
 		Context->PSSetShader(PresentPass.Present[presentShader], nullptr, 0);
-		Context->PSSetConstantBuffers(0, 1, &PresentPass.PresentConstantBuffer);
+		Context->PSSetConstantBuffers(0, 1, cbs);
 		Context->PSSetShaderResources(0, 2, psResources);
 		Context->OMSetDepthStencilState(PresentPass.DepthStencilState, 0);
 		Context->OMSetBlendState(PresentPass.BlendState, nullptr, 0xffffffff);
@@ -2652,20 +2676,20 @@ void UD3D11RenderDevice::DrawEntry(const DrawBatchEntry& entry)
 	Stats.DrawCalls++;
 }
 
-void UD3D11RenderDevice::CreateVertexShader(ID3D11VertexShader*& outShader, const std::string& shaderName, ID3D11InputLayout*& outInputLayout, const std::string& inputLayoutName, const std::vector<D3D11_INPUT_ELEMENT_DESC>& elements, const std::string& filename, const std::vector<std::string> defines)
+void UD3D11RenderDevice::CreateVertexShader(ComPtr<ID3D11VertexShader>& outShader, const std::string& shaderName, ComPtr<ID3D11InputLayout>& outInputLayout, const std::string& inputLayoutName, const std::vector<D3D11_INPUT_ELEMENT_DESC>& elements, const std::string& filename, const std::vector<std::string> defines)
 {
 	std::vector<uint8_t> bytecode = CompileHlsl(filename, "vs", defines);
-	HRESULT result = Device->CreateVertexShader(bytecode.data(), bytecode.size(), nullptr, &outShader);
+	HRESULT result = Device->CreateVertexShader(bytecode.data(), bytecode.size(), nullptr, outShader.TypedInitPtr());
 	ThrowIfFailed(result, ("CreateVertexShader(" + shaderName + ") failed").c_str());
 
-	result = Device->CreateInputLayout(elements.data(), (UINT)elements.size(), bytecode.data(), bytecode.size(), &outInputLayout);
+	result = Device->CreateInputLayout(elements.data(), (UINT)elements.size(), bytecode.data(), bytecode.size(), outInputLayout.TypedInitPtr());
 	ThrowIfFailed(result, ("CreateInputLayout(" + inputLayoutName + ") failed").c_str());
 }
 
-void UD3D11RenderDevice::CreatePixelShader(ID3D11PixelShader*& outShader, const std::string& shaderName, const std::string& filename, const std::vector<std::string> defines)
+void UD3D11RenderDevice::CreatePixelShader(ComPtr<ID3D11PixelShader>& outShader, const std::string& shaderName, const std::string& filename, const std::vector<std::string> defines)
 {
 	std::vector<uint8_t> bytecode = CompileHlsl(filename, "ps", defines);
-	HRESULT result = Device->CreatePixelShader(bytecode.data(), bytecode.size(), nullptr, &outShader);
+	HRESULT result = Device->CreatePixelShader(bytecode.data(), bytecode.size(), nullptr, outShader.TypedInitPtr());
 	ThrowIfFailed(result, ("CreatePixelShader(" + shaderName + ") failed").c_str());
 }
 
@@ -2693,22 +2717,19 @@ std::vector<uint8_t> UD3D11RenderDevice::CompileHlsl(const std::string& filename
 	}
 	macros.push_back({});
 
-	ID3DBlob* blob = nullptr;
-	ID3DBlob* errors = nullptr;
-	HRESULT result = D3DCompile(code.data(), code.size(), filename.c_str(), macros.data(), nullptr, "main", target.c_str(), D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, &blob, &errors);
+	ComPtr<ID3DBlob> blob;
+	ComPtr<ID3DBlob> errors;
+	HRESULT result = D3DCompile(code.data(), code.size(), filename.c_str(), macros.data(), nullptr, "main", target.c_str(), D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, blob.TypedInitPtr(), errors.TypedInitPtr());
 	if (FAILED(result))
 	{
 		std::string msg((const char*)errors->GetBufferPointer(), errors->GetBufferSize());
 		if (!msg.empty() && msg.back() == 0) msg.pop_back();
-		ReleaseObject(errors);
 		throw std::runtime_error("Could not compile shader '" + filename + "':" + msg);
 	}
-	ReleaseObject(errors);
 	ThrowIfFailed(result, "D3DCompile failed");
 
 	std::vector<uint8_t> bytecode;
 	bytecode.resize(blob->GetBufferSize());
 	memcpy(bytecode.data(), blob->GetBufferPointer(), bytecode.size());
-	ReleaseObject(blob);
 	return bytecode;
 }

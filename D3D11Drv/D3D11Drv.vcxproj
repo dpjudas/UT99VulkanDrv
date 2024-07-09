@@ -266,6 +266,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="CachedTexture.h" />
+    <ClInclude Include="ComPtr.h" />
     <ClInclude Include="FileResource.h" />
     <ClInclude Include="halffloat.h" />
     <ClInclude Include="mat.h" />

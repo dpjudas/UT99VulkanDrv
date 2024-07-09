@@ -78,7 +78,7 @@ void UploadManager::UploadTexture(CachedTexture* tex, const FTextureInfo& Info, 
 		texDesc.SampleDesc.Count = 1;
 		texDesc.SampleDesc.Quality = 0;
 		//texDesc.MiscFlags = tex->DummyMipmapCount > 0 ? D3D11_RESOURCE_MISC_RESOURCE_CLAMP : 0;
-		HRESULT result = renderer->Device->CreateTexture2D(&texDesc, nullptr, &tex->Texture);
+		HRESULT result = renderer->Device->CreateTexture2D(&texDesc, nullptr, tex->Texture.TypedInitPtr());
 		ThrowIfFailed(result, "CreateTexture2D(GameTexture) failed");
 
 		//if (tex->DummyMipmapCount > 0)
@@ -89,7 +89,7 @@ void UploadManager::UploadTexture(CachedTexture* tex, const FTextureInfo& Info, 
 		//viewDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
 		//viewDesc.Texture2D.MostDetailedMip = tex->DummyMipmapCount;
 		//viewDesc.Texture2D.MipLevels = -1;
-		result = renderer->Device->CreateShaderResourceView(tex->Texture, nullptr/*&viewDesc*/, &tex->View);
+		result = renderer->Device->CreateShaderResourceView(tex->Texture, nullptr/*&viewDesc*/, tex->View.TypedInitPtr());
 		ThrowIfFailed(result, "CreateShaderResourceView(GameTexture) failed");
 	}
 

@@ -80,10 +80,10 @@ CachedTexture* TextureManager::GetNullTexture()
 	texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 	texDesc.SampleDesc.Count = 1;
 	texDesc.SampleDesc.Quality = 0;
-	HRESULT result = renderer->Device->CreateTexture2D(&texDesc, nullptr, &NullTexture->Texture);
+	HRESULT result = renderer->Device->CreateTexture2D(&texDesc, nullptr, NullTexture->Texture.TypedInitPtr());
 	ThrowIfFailed(result, "CreateTexture2D(NullTexture) failed");
 
-	result = renderer->Device->CreateShaderResourceView(NullTexture->Texture, nullptr, &NullTexture->View);
+	result = renderer->Device->CreateShaderResourceView(NullTexture->Texture, nullptr, NullTexture->View.TypedInitPtr());
 	ThrowIfFailed(result, "CreateShaderResourceView(NullTexture) failed");
 
 	renderer->Uploads->UploadWhite(NullTexture->Texture);
