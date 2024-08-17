@@ -3110,7 +3110,7 @@ void UD3D12RenderDevice::EndFlash()
 		SceneConstants.NearClip = vec4(0.0f, 0.0f, 0.0f, 1.0f);
 		Commands.Draw->SetGraphicsRoot32BitConstants(2, sizeof(ScenePushConstants) / sizeof(uint32_t), &SceneConstants, 0);
 
-		SetPipeline(ScenePass.Pipelines[2].get(), D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+		SetPipeline(PF_Highlighted);
 		SetDescriptorSet(0);
 
 		auto alloc = ReserveVertices(4, 6);

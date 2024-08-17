@@ -2524,7 +2524,7 @@ void UD3D11RenderDevice::EndFlash()
 		SceneConstants.NearClip = vec4(0.0f, 0.0f, 0.0f, 1.0f);
 		Context->UpdateSubresource(ScenePass.ConstantBuffer, 0, nullptr, &SceneConstants, 0, 0);
 
-		SetPipeline(&ScenePass.Pipelines[2]);
+		SetPipeline(PF_Highlighted);
 		SetDescriptorSet(0);
 
 		auto alloc = ReserveVertices(4, 6);
