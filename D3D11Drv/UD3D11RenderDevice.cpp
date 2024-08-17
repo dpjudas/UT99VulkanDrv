@@ -9,6 +9,12 @@
 #include <emmintrin.h>
 #include <functional>
 
+#define USE_SSE2
+
+#ifdef USE_SSE2
+#include <immintrin.h>
+#endif
+
 IMPLEMENT_CLASS(UD3D11RenderDevice);
 
 UD3D11RenderDevice::UD3D11RenderDevice()
@@ -1360,6 +1366,8 @@ void UD3D11RenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane Scr
 {
 	guard(UD3D11RenderDevice::Lock);
 
+	nulltex = Textures->GetNullTexture();
+
 	if (Viewport->SizeX && Viewport->SizeY)
 	{
 		try
@@ -1764,108 +1772,29 @@ void UD3D11RenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Sur
 
 	DWORD PolyFlags = ApplyPrecedenceRules(Surface.PolyFlags);
 
-	CachedTexture* tex = Textures->GetTexture(Surface.Texture, !!(PolyFlags & PF_Masked));
-	CachedTexture* lightmap = Textures->GetTexture(Surface.LightMap, false);
-	CachedTexture* macrotex = Textures->GetTexture(Surface.MacroTexture, false);
-	CachedTexture* detailtex = Textures->GetTexture(Surface.DetailTexture, false);
-	CachedTexture* fogmap = (Surface.FogMap && Surface.FogMap->Mips[0] && Surface.FogMap->Mips[0]->DataPtr) ? 
-		Textures->GetTexture(Surface.FogMap, false) : nullptr;
+	ComplexSurfaceInfo info;
+	info.facet = &Facet;
+	info.tex = Textures->GetTexture(Surface.Texture, !!(PolyFlags & PF_Masked));
+	info.lightmap = Textures->GetTexture(Surface.LightMap, false);
+	info.macrotex = Textures->GetTexture(Surface.MacroTexture, false);
+	info.detailtex = Textures->GetTexture(Surface.DetailTexture, false);
+	info.fogmap = (Surface.FogMap && Surface.FogMap->Mips[0] && Surface.FogMap->Mips[0]->DataPtr) ?
+		Textures->GetTexture(Surface.FogMap, false) : nulltex;
+	info.editorcolor = nullptr;
 
 #if defined(UNREALGOLD)
-	if (Surface.DetailTexture && Surface.FogMap) detailtex = nullptr;
+	if (Surface.DetailTexture && Surface.FogMap) info.detailtex = nulltex;
 #else
-	if ((Surface.DetailTexture && Surface.FogMap) || (!DetailTextures)) detailtex = nullptr;
+	if ((Surface.DetailTexture && Surface.FogMap) || (!DetailTextures)) info.detailtex = nulltex;
 #endif
 
-	float UDot = Facet.MapCoords.XAxis | Facet.MapCoords.Origin;
-	float VDot = Facet.MapCoords.YAxis | Facet.MapCoords.Origin;
-
-	float UPan = tex ? UDot + Surface.Texture->Pan.X : 0.0f;
-	float VPan = tex ? VDot + Surface.Texture->Pan.Y : 0.0f;
-	float UMult = tex ? GetUMult(*Surface.Texture) : 0.0f;
-	float VMult = tex ? GetVMult(*Surface.Texture) : 0.0f;
-	float LMUPan = lightmap ? UDot + Surface.LightMap->Pan.X - 0.5f * Surface.LightMap->UScale : 0.0f;
-	float LMVPan = lightmap ? VDot + Surface.LightMap->Pan.Y - 0.5f * Surface.LightMap->VScale : 0.0f;
-	float LMUMult = lightmap ? GetUMult(*Surface.LightMap) : 0.0f;
-	float LMVMult = lightmap ? GetVMult(*Surface.LightMap) : 0.0f;
-	float MacroUPan = macrotex ? UDot + Surface.MacroTexture->Pan.X : 0.0f;
-	float MacroVPan = macrotex ? VDot + Surface.MacroTexture->Pan.Y : 0.0f;
-	float MacroUMult = macrotex ? GetUMult(*Surface.MacroTexture) : 0.0f;
-	float MacroVMult = macrotex ? GetVMult(*Surface.MacroTexture) : 0.0f;
-	float DetailUPan = detailtex ? UDot + Surface.DetailTexture->Pan.X : 0.0f;
-	float DetailVPan = detailtex ? VDot + Surface.DetailTexture->Pan.Y : 0.0f;
-	float DetailUMult = detailtex ? GetUMult(*Surface.DetailTexture) : 0.0f;
-	float DetailVMult = detailtex ? GetVMult(*Surface.DetailTexture) : 0.0f;
-
-	uint32_t flags = 0;
-	if (lightmap) flags |= 1;
-	if (macrotex) flags |= 2;
-	if (detailtex && !fogmap) flags |= 4;
-	if (fogmap) flags |= 8;
-
-	if (LightMode == 1) flags |= 64;
-
-	if (fogmap) // if Surface.FogMap exists, use instead of detail texture
-	{
-		detailtex = fogmap;
-		DetailUPan = UDot + Surface.FogMap->Pan.X - 0.5f * Surface.FogMap->UScale;
-		DetailVPan = VDot + Surface.FogMap->Pan.Y - 0.5f * Surface.FogMap->VScale;
-		DetailUMult = GetUMult(*Surface.FogMap);
-		DetailVMult = GetVMult(*Surface.FogMap);
-	}
+	if (info.fogmap != nulltex)
+		info.detailtex = info.fogmap;
 
 	SetPipeline(PolyFlags);
-	SetDescriptorSet(PolyFlags, tex, lightmap, macrotex, detailtex);
+	SetDescriptorSet(PolyFlags, info);
 
-	vec4 color(1.0f);
-
-	for (FSavedPoly* Poly = Facet.Polys; Poly; Poly = Poly->Next)
-	{
-		auto pts = Poly->Pts;
-		uint32_t vcount = Poly->NumPts;
-		if (vcount < 3) continue;
-
-		uint32_t icount = (vcount - 2) * 3;
-		auto alloc = ReserveVertices(vcount, icount);
-		if (alloc.vptr)
-		{
-			SceneVertex* vptr = alloc.vptr;
-			uint32_t* iptr = alloc.iptr;
-			uint32_t vpos = alloc.vpos;
-
-			for (uint32_t i = 0; i < vcount; i++)
-			{
-				FVector point = pts[i]->Point;
-				FLOAT u = Facet.MapCoords.XAxis | point;
-				FLOAT v = Facet.MapCoords.YAxis | point;
-
-				vptr->Flags = flags;
-				vptr->Position.x = point.X;
-				vptr->Position.y = point.Y;
-				vptr->Position.z = point.Z;
-				vptr->TexCoord.s = (u - UPan) * UMult;
-				vptr->TexCoord.t = (v - VPan) * VMult;
-				vptr->TexCoord2.s = (u - LMUPan) * LMUMult;
-				vptr->TexCoord2.t = (v - LMVPan) * LMVMult;
-				vptr->TexCoord3.s = (u - MacroUPan) * MacroUMult;
-				vptr->TexCoord3.t = (v - MacroVPan) * MacroVMult;
-				vptr->TexCoord4.s = (u - DetailUPan) * DetailUMult;
-				vptr->TexCoord4.t = (v - DetailVPan) * DetailVMult;
-				vptr->Color = color;
-				vptr++;
-			}
-
-			for (uint32_t i = vpos + 2; i < vpos + vcount; i++)
-			{
-				*(iptr++) = vpos;
-				*(iptr++) = i - 1;
-				*(iptr++) = i;
-			}
-
-			UseVertices(vcount, icount);
-		}
-	}
-
+	DrawComplexSurfaceFaces(info);
 	Stats.ComplexSurfaces++;
 
 	if (!GIsEditor || (PolyFlags & (PF_Selected | PF_FlatShaded)) == 0)
@@ -1876,26 +1805,175 @@ void UD3D11RenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Sur
 	SetPipeline(PF_Highlighted);
 	SetDescriptorSet(PF_Highlighted);
 
+	vec4 editorcolor;
 	if (PolyFlags & PF_FlatShaded)
 	{
-		color.x = Surface.FlatColor.R / 255.0f;
-		color.y = Surface.FlatColor.G / 255.0f;
-		color.z = Surface.FlatColor.B / 255.0f;
-		color.w = 0.85f;
+		editorcolor.x = Surface.FlatColor.R / 255.0f;
+		editorcolor.y = Surface.FlatColor.G / 255.0f;
+		editorcolor.z = Surface.FlatColor.B / 255.0f;
+		editorcolor.w = 0.85f;
 		if (PolyFlags & PF_Selected)
 		{
-			color.x *= 1.5f;
-			color.y *= 1.5f;
-			color.z *= 1.5f;
-			color.w = 1.0f;
+			editorcolor.x *= 1.5f;
+			editorcolor.y *= 1.5f;
+			editorcolor.z *= 1.5f;
+			editorcolor.w = 1.0f;
 		}
 	}
 	else
 	{
-		color = vec4(0.0f, 0.0f, 0.05f, 0.20f);
+		editorcolor = vec4(0.0f, 0.0f, 0.05f, 0.20f);
 	}
+	info.editorcolor = &editorcolor;
 
-	for (FSavedPoly* Poly = Facet.Polys; Poly; Poly = Poly->Next)
+	DrawComplexSurfaceFaces(info);
+
+	unguardSlow;
+}
+
+#ifdef USE_SSE2
+
+// Calculates dot(vec4, vec4). All elements will hold the result.
+inline __m128 sse_dot4(__m128 v0, __m128 v1)
+{
+	v0 = _mm_mul_ps(v0, v1);
+
+	v1 = _mm_shuffle_ps(v0, v0, _MM_SHUFFLE(2, 3, 0, 1));
+	v0 = _mm_add_ps(v0, v1);
+	v1 = _mm_shuffle_ps(v0, v0, _MM_SHUFFLE(0, 1, 2, 3));
+	v0 = _mm_add_ps(v0, v1);
+
+	return v0;
+}
+
+void UD3D11RenderDevice::DrawComplexSurfaceFaces(const ComplexSurfaceInfo& info)
+{
+	uint32_t flags = 0;
+	if (info.lightmap != nulltex) flags |= 1;
+	if (info.macrotex != nulltex) flags |= 2;
+	if (info.detailtex != nulltex && info.fogmap == nulltex) flags |= 4;
+	if (info.fogmap != nulltex) flags |= 8;
+	if (LightMode == 1) flags |= 64;
+
+	__m128 mflags = _mm_castsi128_ps(_mm_cvtsi32_si128(flags));
+	__m128 maskClearW = _mm_castsi128_ps(_mm_setr_epi32(0xffffffff, 0xffffffff, 0xffffffff, 0));
+	__m128 xaxis = _mm_and_ps(_mm_loadu_ps((float*)&info.facet->MapCoords.XAxis), maskClearW);
+	__m128 yaxis = _mm_and_ps(_mm_loadu_ps((float*)&info.facet->MapCoords.YAxis), maskClearW);
+	__m128 origin = _mm_and_ps(_mm_loadu_ps((float*)&info.facet->MapCoords.Origin), maskClearW);
+
+	__m128 UDot = sse_dot4(xaxis, origin);
+	__m128 VDot = sse_dot4(yaxis, origin);
+	__m128 UVDot = _mm_shuffle_ps(UDot, VDot, _MM_SHUFFLE(0, 0, 0, 0));
+	UVDot = _mm_shuffle_ps(UVDot, UVDot, _MM_SHUFFLE(2, 0, 2, 0));
+
+	float UPan = info.tex->PanX;
+	float VPan = info.tex->PanY;
+	float LMUPan = info.lightmap->PanX - 0.5f * info.lightmap->UScale;
+	float LMVPan = info.lightmap->PanY - 0.5f * info.lightmap->VScale;
+	__m128 pan0 = _mm_add_ps(UVDot, _mm_setr_ps(UPan, VPan, LMUPan, LMVPan));
+
+	float MacroUPan = info.macrotex->PanX;
+	float MacroVPan = info.macrotex->PanY;
+	float DetailUPan = info.fogmap == nulltex ? info.detailtex->PanX : info.fogmap->PanX - 0.5f * info.fogmap->UScale;
+	float DetailVPan = info.fogmap == nulltex ? info.detailtex->PanY : info.fogmap->PanY - 0.5f * info.fogmap->VScale;
+	__m128 pan1 = _mm_add_ps(UVDot, _mm_setr_ps(MacroUPan, MacroVPan, DetailUPan, DetailVPan));
+
+	float UMult = info.tex->UMult;
+	float VMult = info.tex->VMult;
+	float LMUMult = info.lightmap->UMult;
+	float LMVMult = info.lightmap->VMult;
+	__m128 mult0 = _mm_setr_ps(UMult, VMult, LMUMult, LMVMult);
+
+	float MacroUMult = info.macrotex->UMult;
+	float MacroVMult = info.macrotex->VMult;
+	float DetailUMult = info.fogmap == nulltex ? info.detailtex->UMult : info.fogmap->UMult;
+	float DetailVMult = info.fogmap == nulltex ? info.detailtex->VMult : info.fogmap->VMult;
+	__m128 mult1 = _mm_setr_ps(MacroUMult, MacroVMult, DetailUMult, DetailVMult);
+
+	__m128 color = info.editorcolor ? _mm_loadu_ps(&info.editorcolor->x) : _mm_set_ps1(1.0f);
+
+	for (FSavedPoly* Poly = info.facet->Polys; Poly; Poly = Poly->Next)
+	{
+		auto pts = Poly->Pts;
+		uint32_t vcount = Poly->NumPts;
+		if (vcount < 3) continue;
+
+		uint32_t icount = (vcount - 2) * 3;
+		auto alloc = ReserveVertices(vcount, icount);
+		if (alloc.vptr)
+		{
+			SceneVertex* vptr = alloc.vptr;
+			uint32_t* iptr = alloc.iptr;
+			uint32_t vpos = alloc.vpos;
+
+			for (uint32_t i = 0; i < vcount; i++)
+			{
+				__m128 point = _mm_and_ps(_mm_loadu_ps((float*)&pts[i]->Point), maskClearW);
+				__m128 u = sse_dot4(xaxis, point);
+				__m128 v = sse_dot4(yaxis, point);
+				__m128 uv = _mm_shuffle_ps(u, v, _MM_SHUFFLE(0, 0, 0, 0));
+				uv = _mm_shuffle_ps(uv, uv, _MM_SHUFFLE(2, 0, 2, 0));
+
+				__m128 pos = _mm_or_ps(_mm_shuffle_ps(point, point, _MM_SHUFFLE(2, 1, 0, 3)), mflags);
+				__m128 uv0 = _mm_mul_ps(_mm_sub_ps(uv, pan0), mult0);
+				__m128 uv1 = _mm_mul_ps(_mm_sub_ps(uv, pan1), mult1);
+
+				_mm_store_ps((float*)vptr, pos);
+				_mm_store_ps((float*)vptr + 4, uv0);
+				_mm_store_ps((float*)vptr + 8, uv1);
+				_mm_store_ps((float*)vptr + 12, color);
+				vptr++;
+			}
+
+			for (uint32_t i = vpos + 2; i < vpos + vcount; i++)
+			{
+				*(iptr++) = vpos;
+				*(iptr++) = i - 1;
+				*(iptr++) = i;
+			}
+
+			UseVertices(vcount, icount);
+		}
+	}
+}
+
+#else
+
+void UD3D11RenderDevice::DrawComplexSurfaceFaces(const ComplexSurfaceInfo& info)
+{
+	uint32_t flags = 0;
+	if (info.lightmap != nulltex) flags |= 1;
+	if (info.macrotex != nulltex) flags |= 2;
+	if (info.detailtex != nulltex && info.fogmap == nulltex) flags |= 4;
+	if (info.fogmap != nulltex) flags |= 8;
+	if (LightMode == 1) flags |= 64;
+
+	FVector xaxis = info.facet->MapCoords.XAxis;
+	FVector yaxis = info.facet->MapCoords.YAxis;
+	float UDot = xaxis | info.facet->MapCoords.Origin;
+	float VDot = yaxis | info.facet->MapCoords.Origin;
+
+	float UPan = UDot + info.tex->PanX;
+	float VPan = VDot + info.tex->PanY;
+	float LMUPan = UDot + info.lightmap->PanX - 0.5f * info.lightmap->UScale;
+	float LMVPan = VDot + info.lightmap->PanY - 0.5f * info.lightmap->VScale;
+	float MacroUPan = UDot + info.macrotex->PanX;
+	float MacroVPan = VDot + info.macrotex->PanY;
+	float DetailUPan = UDot + (info.fogmap == nulltex ? info.detailtex->PanX : info.fogmap->PanX - 0.5f * info.fogmap->UScale);
+	float DetailVPan = VDot + (info.fogmap == nulltex ? info.detailtex->PanY : info.fogmap->PanY - 0.5f * info.fogmap->VScale);
+
+	float UMult = info.tex->UMult;
+	float VMult = info.tex->VMult;
+	float LMUMult = info.lightmap->UMult;
+	float LMVMult = info.lightmap->VMult;
+	float MacroUMult = info.macrotex->UMult;
+	float MacroVMult = info.macrotex->VMult;
+	float DetailUMult = info.fogmap == nulltex ? info.detailtex->UMult : info.fogmap->UMult;
+	float DetailVMult = info.fogmap == nulltex ? info.detailtex->VMult : info.fogmap->VMult;
+
+	vec4 color = info.editorcolor ? *info.editorcolor : vec4(1.0f);
+
+	for (FSavedPoly* Poly = info.facet->Polys; Poly; Poly = Poly->Next)
 	{
 		auto pts = Poly->Pts;
 		uint32_t vcount = Poly->NumPts;
@@ -1912,8 +1990,8 @@ void UD3D11RenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Sur
 			for (uint32_t i = 0; i < vcount; i++)
 			{
 				FVector point = pts[i]->Point;
-				FLOAT u = Facet.MapCoords.XAxis | point;
-				FLOAT v = Facet.MapCoords.YAxis | point;
+				FLOAT u = xaxis | point;
+				FLOAT v = yaxis | point;
 
 				vptr->Flags = flags;
 				vptr->Position.x = point.X;
@@ -1941,9 +2019,9 @@ void UD3D11RenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Sur
 			UseVertices(vcount, icount);
 		}
 	}
-
-	unguardSlow;
 }
+
+#endif
 
 void UD3D11RenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& Info, FTransTexture** Pts, int NumPts, DWORD PolyFlags, FSpanBuffer* Span)
 {
@@ -1958,11 +2036,16 @@ void UD3D11RenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& Inf
 	SetPipeline(PolyFlags);
 	SetDescriptorSet(PolyFlags, tex);
 
-	float UMult = GetUMult(Info);
-	float VMult = GetVMult(Info);
-	int flags = (PolyFlags & (PF_RenderFog | PF_Translucent | PF_Modulated)) == PF_RenderFog ? 16 : 0;
+	float UMult = tex->UMult;
+	float VMult = tex->VMult;
 
+	int flags = (PolyFlags & (PF_RenderFog | PF_Translucent | PF_Modulated)) == PF_RenderFog ? 16 : 0;
 	if ((PolyFlags & (PF_Translucent | PF_Modulated)) == 0 && LightMode == 2) flags |= 32;
+
+#ifdef USE_SSE2
+	__m128 mflags = _mm_castsi128_ps(_mm_cvtsi32_si128(flags));
+	__m128 maskClearW = _mm_castsi128_ps(_mm_setr_epi32(0xffffffff, 0xffffffff, 0xffffffff, 0));
+#endif
 
 	auto alloc = ReserveVertices(NumPts, (NumPts - 2) * 3);
 	if (alloc.vptr)
@@ -1971,9 +2054,57 @@ void UD3D11RenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& Inf
 		uint32_t* iptr = alloc.iptr;
 		uint32_t vpos = alloc.vpos;
 
+#ifdef USE_SSE2
 		if (PolyFlags & PF_Modulated)
 		{
 			SceneVertex* vertex = vptr;
+			__m128 color = _mm_set_ps1(1.0f);
+			for (INT i = 0; i < NumPts; i++)
+			{
+				FTransTexture* P = Pts[i];
+
+				__m128 point = _mm_and_ps(_mm_loadu_ps((float*)&P->Point), maskClearW);
+				__m128 fog = _mm_loadu_ps((float*)&P->Fog);
+				__m128 pos = _mm_or_ps(_mm_shuffle_ps(point, point, _MM_SHUFFLE(2, 1, 0, 3)), mflags);
+				__m128 uvzero = _mm_setr_ps(P->U * UMult, P->V * VMult, 0.0f, 0.0f);
+				__m128 uv0 = _mm_shuffle_ps(uvzero, fog, _MM_SHUFFLE(1, 0, 1, 0));
+				__m128 uv1 = _mm_shuffle_ps(fog, uvzero, _MM_SHUFFLE(1, 0, 1, 0));
+
+				_mm_store_ps((float*)vertex, pos);
+				_mm_store_ps((float*)vertex + 4, uv0);
+				_mm_store_ps((float*)vertex + 8, uv1);
+				_mm_store_ps((float*)vertex + 12, color);
+				vertex++;
+			}
+		}
+		else
+		{
+			SceneVertex* vertex = vptr;
+			for (INT i = 0; i < NumPts; i++)
+			{
+				FTransTexture* P = Pts[i];
+
+				__m128 point = _mm_and_ps(_mm_loadu_ps((float*)&P->Point), maskClearW);
+				__m128 fog = _mm_loadu_ps((float*)&P->Fog);
+				__m128 pos = _mm_or_ps(_mm_shuffle_ps(point, point, _MM_SHUFFLE(2, 1, 0, 3)), mflags);
+				__m128 uvzero = _mm_setr_ps(P->U * UMult, P->V * VMult, 0.0f, 0.0f);
+				__m128 uv0 = _mm_shuffle_ps(uvzero, fog, _MM_SHUFFLE(1, 0, 1, 0));
+				__m128 uv1 = _mm_shuffle_ps(fog, uvzero, _MM_SHUFFLE(1, 0, 1, 0));
+				__m128 color = _mm_and_ps(_mm_loadu_ps((float*)&P->Light), maskClearW);
+				color = _mm_or_ps(color, _mm_setr_ps(0.0f, 0.0f, 0.0f, 1.0f));
+
+				_mm_store_ps((float*)vertex, pos);
+				_mm_store_ps((float*)vertex + 4, uv0);
+				_mm_store_ps((float*)vertex + 8, uv1);
+				_mm_store_ps((float*)vertex + 12, color);
+				vertex++;
+			}
+		}
+#else
+		if (PolyFlags & PF_Modulated)
+		{
+			SceneVertex* vertex = vptr;
+
 			for (INT i = 0; i < NumPts; i++)
 			{
 				FTransTexture* P = Pts[i];
@@ -2021,6 +2152,7 @@ void UD3D11RenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& Inf
 				vertex++;
 			}
 		}
+#endif
 
 		uint32_t vstart = vpos;
 		uint32_t vcount = NumPts;
@@ -2056,17 +2188,6 @@ void UD3D11RenderDevice::DrawGouraudTriangles(const FSceneNode* Frame, const FTe
 
 	PolyFlags = ApplyPrecedenceRules(PolyFlags);
 
-	CachedTexture* tex = Textures->GetTexture(const_cast<FTextureInfo*>(&Info), !!(PolyFlags & PF_Masked));
-
-	SetPipeline(PolyFlags);
-	SetDescriptorSet(PolyFlags, tex);
-
-	float UMult = GetUMult(Info);
-	float VMult = GetVMult(Info);
-	int flags = (PolyFlags & (PF_RenderFog | PF_Translucent | PF_Modulated)) == PF_RenderFog ? 16 : 0;
-
-	if ((PolyFlags & (PF_Translucent | PF_Modulated)) == 0 && LightMode == 2) flags |= 32;
-
 	if (PolyFlags & PF_Environment)
 	{
 		FLOAT UScale = Info.UScale * Info.USize * (1.0f / 256.0f);
@@ -2076,6 +2197,21 @@ void UD3D11RenderDevice::DrawGouraudTriangles(const FSceneNode* Frame, const FTe
 			::EnviroMap(Frame, Pts[i], UScale, VScale);
 	}
 
+	CachedTexture* tex = Textures->GetTexture(const_cast<FTextureInfo*>(&Info), !!(PolyFlags & PF_Masked));
+
+	SetPipeline(PolyFlags);
+	SetDescriptorSet(PolyFlags, tex);
+
+	float UMult = tex->UMult;
+	float VMult = tex->VMult;
+	int flags = (PolyFlags & (PF_RenderFog | PF_Translucent | PF_Modulated)) == PF_RenderFog ? 16 : 0;
+	if ((PolyFlags & (PF_Translucent | PF_Modulated)) == 0 && LightMode == 2) flags |= 32;
+
+#ifdef USE_SSE2
+	__m128 mflags = _mm_castsi128_ps(_mm_cvtsi32_si128(flags));
+	__m128 maskClearW = _mm_castsi128_ps(_mm_setr_epi32(0xffffffff, 0xffffffff, 0xffffffff, 0));
+#endif
+
 	auto alloc = ReserveVertices(NumPts, (NumPts - 2) * 3);
 	if (alloc.vptr)
 	{
@@ -2083,6 +2219,53 @@ void UD3D11RenderDevice::DrawGouraudTriangles(const FSceneNode* Frame, const FTe
 		uint32_t* iptr = alloc.iptr;
 		uint32_t vpos = alloc.vpos;
 
+#ifdef USE_SSE2
+		if (PolyFlags & PF_Modulated)
+		{
+			SceneVertex* vertex = vptr;
+			__m128 color = _mm_set_ps1(1.0f);
+			for (INT i = 0; i < NumPts; i++)
+			{
+				FTransTexture* P = &Pts[i];
+
+				__m128 point = _mm_and_ps(_mm_loadu_ps((float*)&P->Point), maskClearW);
+				__m128 fog = _mm_loadu_ps((float*)&P->Fog);
+				__m128 pos = _mm_or_ps(_mm_shuffle_ps(point, point, _MM_SHUFFLE(2, 1, 0, 3)), mflags);
+				__m128 uvzero = _mm_setr_ps(P->U * UMult, P->V * VMult, 0.0f, 0.0f);
+				__m128 uv0 = _mm_shuffle_ps(uvzero, fog, _MM_SHUFFLE(1, 0, 1, 0));
+				__m128 uv1 = _mm_shuffle_ps(fog, uvzero, _MM_SHUFFLE(1, 0, 1, 0));
+
+				_mm_store_ps((float*)vertex, pos);
+				_mm_store_ps((float*)vertex + 4, uv0);
+				_mm_store_ps((float*)vertex + 8, uv1);
+				_mm_store_ps((float*)vertex + 12, color);
+				vertex++;
+			}
+		}
+		else
+		{
+			SceneVertex* vertex = vptr;
+			for (INT i = 0; i < NumPts; i++)
+			{
+				FTransTexture* P = &Pts[i];
+
+				__m128 point = _mm_and_ps(_mm_loadu_ps((float*)&P->Point), maskClearW);
+				__m128 fog = _mm_loadu_ps((float*)&P->Fog);
+				__m128 pos = _mm_or_ps(_mm_shuffle_ps(point, point, _MM_SHUFFLE(2, 1, 0, 3)), mflags);
+				__m128 uvzero = _mm_setr_ps(P->U * UMult, P->V * VMult, 0.0f, 0.0f);
+				__m128 uv0 = _mm_shuffle_ps(uvzero, fog, _MM_SHUFFLE(1, 0, 1, 0));
+				__m128 uv1 = _mm_shuffle_ps(fog, uvzero, _MM_SHUFFLE(1, 0, 1, 0));
+				__m128 color = _mm_and_ps(_mm_loadu_ps((float*)&P->Light), maskClearW);
+				color = _mm_or_ps(color, _mm_setr_ps(0.0f, 0.0f, 0.0f, 1.0f));
+
+				_mm_store_ps((float*)vertex, pos);
+				_mm_store_ps((float*)vertex + 4, uv0);
+				_mm_store_ps((float*)vertex + 8, uv1);
+				_mm_store_ps((float*)vertex + 12, color);
+				vertex++;
+			}
+		}
+#else
 		if (PolyFlags & PF_Modulated)
 		{
 			SceneVertex* vertex = vptr;
@@ -2133,6 +2316,7 @@ void UD3D11RenderDevice::DrawGouraudTriangles(const FSceneNode* Frame, const FTe
 				vertex++;
 			}
 		}
+#endif
 
 		bool mirror = (Frame->Mirror == -1.0);
 
@@ -2196,8 +2380,8 @@ void UD3D11RenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT X
 	PolyFlags = ApplyPrecedenceRules(PolyFlags);
 
 	CachedTexture* tex = Textures->GetTexture(&Info, !!(PolyFlags & PF_Masked));
-	float UMult = tex ? GetUMult(Info) : 0.0f;
-	float VMult = tex ? GetVMult(Info) : 0.0f;
+	float UMult = tex->UMult;
+	float VMult = tex->VMult;
 	float u0 = U * UMult;
 	float v0 = V * VMult;
 	float u1 = (U + UL) * UMult;
@@ -2205,22 +2389,7 @@ void UD3D11RenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT X
 	bool clamp = (u0 >= 0.0f && u1 <= 1.00001f && v0 >= 0.0f && v1 <= 1.00001f);
 
 	SetPipeline(PolyFlags);
-	SetDescriptorSet(PolyFlags, tex, nullptr, nullptr, nullptr, clamp);
-
-	float r, g, b, a;
-	if (PolyFlags & PF_Modulated)
-	{
-		r = 1.0f;
-		g = 1.0f;
-		b = 1.0f;
-	}
-	else
-	{
-		r = Color.X;
-		g = Color.Y;
-		b = Color.Z;
-	}
-	a = 1.0f;
+	SetDescriptorSet(PolyFlags, tex, clamp);
 
 	if (SceneBuffers.Multisample > 1)
 	{
@@ -2239,10 +2408,76 @@ void UD3D11RenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT X
 		uint32_t* iptr = alloc.iptr;
 		uint32_t vpos = alloc.vpos;
 
+#ifdef USE_SSE2
+
+		float scaleX = RFX2 * Z;
+		float scaleY = RFY2 * Z;
+		X = (X - Frame->FX2) * scaleX;
+		Y = (Y - Frame->FY2) * scaleY;
+
+		U *= UMult;
+		V *= VMult;
+		UL *= UMult;
+		VL *= VMult;
+
+		XL *= scaleX;
+		YL *= scaleY;
+
+		__m128 pos, uv0, uv1, color;
+
+		uv1 = _mm_setzero_ps();
+		color = (PolyFlags & PF_Modulated) ? _mm_set1_ps(1.0f) : _mm_setr_ps(Color.X, Color.Y, Color.Z, 1.0f);
+
+		pos = _mm_setr_ps(0.0f, X, Y, Z);
+		uv0 = _mm_setr_ps(U, V, 0.0f, 0.0f);
+		_mm_store_ps((float*)vptr, pos);
+		_mm_store_ps((float*)vptr + 4, uv0);
+		_mm_store_ps((float*)vptr + 8, uv1);
+		_mm_store_ps((float*)vptr + 12, color);
+
+		pos = _mm_setr_ps(0.0f, X + XL, Y, Z);
+		uv0 = _mm_setr_ps(U + UL, V, 0.0f, 0.0f);
+		_mm_store_ps((float*)vptr + 16, pos);
+		_mm_store_ps((float*)vptr + 20, uv0);
+		_mm_store_ps((float*)vptr + 24, uv1);
+		_mm_store_ps((float*)vptr + 28, color);
+
+		pos = _mm_setr_ps(0.0f, X + XL, Y + YL, Z);
+		uv0 = _mm_setr_ps(U + UL, V + VL, 0.0f, 0.0f);
+		_mm_store_ps((float*)vptr + 32, pos);
+		_mm_store_ps((float*)vptr + 36, uv0);
+		_mm_store_ps((float*)vptr + 40, uv1);
+		_mm_store_ps((float*)vptr + 44, color);
+
+		pos = _mm_setr_ps(0.0f, X, Y + YL, Z);
+		uv0 = _mm_setr_ps(U, V + VL, 0.0f, 0.0f);
+		_mm_store_ps((float*)vptr + 48, pos);
+		_mm_store_ps((float*)vptr + 52, uv0);
+		_mm_store_ps((float*)vptr + 56, uv1);
+		_mm_store_ps((float*)vptr + 60, color);
+
+
+#else
+		float r, g, b, a;
+		if (PolyFlags & PF_Modulated)
+		{
+			r = 1.0f;
+			g = 1.0f;
+			b = 1.0f;
+		}
+		else
+		{
+			r = Color.X;
+			g = Color.Y;
+			b = Color.Z;
+		}
+		a = 1.0f;
+
 		vptr[0] = { 0, vec3(RFX2 * Z * (X - Frame->FX2),      RFY2 * Z * (Y - Frame->FY2),      Z), vec2(U * UMult,        V * VMult),        vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec4(r, g, b, a), };
 		vptr[1] = { 0, vec3(RFX2 * Z * (X + XL - Frame->FX2), RFY2 * Z * (Y - Frame->FY2),      Z), vec2((U + UL) * UMult, V * VMult),        vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec4(r, g, b, a), };
 		vptr[2] = { 0, vec3(RFX2 * Z * (X + XL - Frame->FX2), RFY2 * Z * (Y + YL - Frame->FY2), Z), vec2((U + UL) * UMult, (V + VL) * VMult), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec4(r, g, b, a), };
 		vptr[3] = { 0, vec3(RFX2 * Z * (X - Frame->FX2),      RFY2 * Z * (Y + YL - Frame->FY2), Z), vec2(U * UMult,        (V + VL) * VMult), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec4(r, g, b, a), };
+#endif
 
 		iptr[0] = vpos;
 		iptr[1] = vpos + 1;
@@ -2649,10 +2884,10 @@ void UD3D11RenderDevice::DrawEntry(const DrawBatchEntry& entry)
 
 	ID3D11ShaderResourceView* views[4] =
 	{
-		entry.Tex ? entry.Tex->View : Textures->GetNullTexture()->View,
-		entry.Lightmap ? entry.Lightmap->View : Textures->GetNullTexture()->View,
-		entry.Macrotex ? entry.Macrotex->View : Textures->GetNullTexture()->View,
-		entry.Detailtex ? entry.Detailtex->View : Textures->GetNullTexture()->View
+		entry.Tex->View,
+		entry.Lightmap->View,
+		entry.Macrotex->View,
+		entry.Detailtex->View
 	};
 
 	ID3D11SamplerState* samplers[4] =

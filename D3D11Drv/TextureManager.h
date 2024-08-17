@@ -18,9 +18,17 @@ public:
 	void ClearCache();
 	int GetTexturesInCache() { return TextureCache[0].size() + TextureCache[1].size(); }
 
-	CachedTexture* GetNullTexture();
+	CachedTexture* GetNullTexture()
+	{
+		if (NullTexture)
+			return NullTexture.get();
+		return CreateNullTexture();
+	}
 
 private:
+	void UploadTexture(FTextureInfo* info, bool masked, std::unique_ptr<CachedTexture>& tex);
+	CachedTexture* CreateNullTexture();
+
 	UD3D11RenderDevice* renderer = nullptr;
 	std::unordered_map<QWORD, std::unique_ptr<CachedTexture>> TextureCache[2];
 	std::unique_ptr<CachedTexture> NullTexture;

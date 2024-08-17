@@ -178,6 +178,7 @@ public:
 		uint32_t MacrotexSamplerMode = 0;
 	} Batch;
 	std::vector<DrawBatchEntry> QueuedBatches;
+	CachedTexture* nulltex = nullptr;
 
 	SceneVertex* SceneVertices = nullptr;
 	size_t SceneVertexPos = 0;
@@ -246,6 +247,18 @@ public:
 	} Stats;
 
 private:
+	struct ComplexSurfaceInfo
+	{
+		FSurfaceFacet* facet;
+		CachedTexture* tex;
+		CachedTexture* lightmap;
+		CachedTexture* macrotex;
+		CachedTexture* detailtex;
+		CachedTexture* fogmap;
+		vec4* editorcolor;
+	};
+	void DrawComplexSurfaceFaces(const ComplexSurfaceInfo& info);
+
 	void ResizeSceneBuffers(int width, int height, int multisample);
 	void ClearTextureCache();
 
@@ -269,7 +282,8 @@ private:
 
 	void SetPipeline(ScenePipelineState* pipeline);
 	void SetPipeline(DWORD polyflags);
-	void SetDescriptorSet(DWORD polyflags, CachedTexture* tex = nullptr, CachedTexture* lightmap = nullptr, CachedTexture* macrotex = nullptr, CachedTexture* detailtex = nullptr, bool clamp = false);
+	void SetDescriptorSet(DWORD polyflags, CachedTexture* tex = nullptr, bool clamp = false);
+	void SetDescriptorSet(DWORD polyflags, const ComplexSurfaceInfo& info);
 
 	void AddDrawBatch();
 	void DrawBatches(bool nextBuffer = false);
@@ -380,22 +394,44 @@ inline void UD3D11RenderDevice::SetPipeline(DWORD PolyFlags)
 	}
 }
 
-inline void UD3D11RenderDevice::SetDescriptorSet(DWORD PolyFlags, CachedTexture* tex, CachedTexture* lightmap, CachedTexture* macrotex, CachedTexture* detailtex, bool clamp)
+inline void UD3D11RenderDevice::SetDescriptorSet(DWORD PolyFlags, CachedTexture* tex, bool clamp)
 {
+	if (!tex) tex = nulltex;
+
 	uint32_t samplermode = 0;
 	if (PolyFlags & PF_NoSmooth) samplermode |= 1;
 	if (clamp) samplermode |= 2;
-	if (tex) samplermode |= (tex->DummyMipmapCount << 2);
-	int detailsamplermode = detailtex ? (detailtex->DummyMipmapCount << 2) : 0;
-	int macrosamplermode = macrotex ? (macrotex->DummyMipmapCount << 2) : 0;
+	samplermode |= (tex->DummyMipmapCount << 2);
 
-	if (Batch.Tex != tex || Batch.TexSamplerMode != samplermode || Batch.Lightmap != lightmap || Batch.Detailtex != detailtex || Batch.DetailtexSamplerMode != detailsamplermode || Batch.Macrotex != macrotex || Batch.MacrotexSamplerMode != macrosamplermode)
+	if (Batch.Tex != tex || Batch.TexSamplerMode != samplermode || Batch.Lightmap != nulltex || Batch.Detailtex != nulltex || Batch.DetailtexSamplerMode != 0 || Batch.Macrotex != nulltex || Batch.MacrotexSamplerMode != 0)
 	{
 		AddDrawBatch();
 		Batch.Tex = tex;
-		Batch.Lightmap = lightmap;
-		Batch.Detailtex = detailtex;
-		Batch.Macrotex = macrotex;
+		Batch.Lightmap = nulltex;
+		Batch.Detailtex = nulltex;
+		Batch.Macrotex = nulltex;
+		Batch.TexSamplerMode = samplermode;
+		Batch.DetailtexSamplerMode = 0;
+		Batch.MacrotexSamplerMode = 0;
+	}
+}
+
+inline void UD3D11RenderDevice::SetDescriptorSet(DWORD PolyFlags, const ComplexSurfaceInfo& info)
+{
+	uint32_t samplermode = 0;
+	if (PolyFlags & PF_NoSmooth) samplermode |= 1;
+	samplermode |= (info.tex->DummyMipmapCount << 2);
+
+	int detailsamplermode = info.detailtex->DummyMipmapCount << 2;
+	int macrosamplermode = info.macrotex->DummyMipmapCount << 2;
+
+	if (Batch.Tex != info.tex || Batch.TexSamplerMode != samplermode || Batch.Lightmap != info.lightmap || Batch.Detailtex != info.detailtex || Batch.DetailtexSamplerMode != detailsamplermode || Batch.Macrotex != info.macrotex || Batch.MacrotexSamplerMode != macrosamplermode)
+	{
+		AddDrawBatch();
+		Batch.Tex = info.tex;
+		Batch.Lightmap = info.lightmap;
+		Batch.Detailtex = info.detailtex;
+		Batch.Macrotex = info.macrotex;
 		Batch.TexSamplerMode = samplermode;
 		Batch.DetailtexSamplerMode = detailsamplermode;
 		Batch.MacrotexSamplerMode = macrosamplermode;

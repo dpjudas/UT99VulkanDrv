@@ -26,12 +26,35 @@ void TextureManager::UpdateTextureRect(FTextureInfo* info, int x, int y, int w, 
 CachedTexture* TextureManager::GetTexture(FTextureInfo* info, bool masked)
 {
 	if (!info)
-		return nullptr;
+		return GetNullTexture();
 
 	if (info->Format != TEXF_P8)
 		masked = false;
 
 	std::unique_ptr<CachedTexture>& tex = TextureCache[(int)masked][info->CacheID];
+
+#if defined(OLDUNREAL469SDK)
+	if (!tex || (info->bRealtimeChanged && (!info->Texture || info->Texture->RealtimeChangeCount != tex->RealtimeChangeCount)))
+		UploadTexture(info, masked, tex);
+#else
+	if (!tex || info->bRealtimeChanged)
+		UploadTexture(info, masked, tex);
+#endif
+
+	float uscale = info->UScale;
+	float vscale = info->VScale;
+	tex->UScale = uscale;
+	tex->VScale = vscale;
+	tex->PanX = info->Pan.X;
+	tex->PanY = info->Pan.Y;
+	tex->UMult = 1.0f / (uscale * info->USize);
+	tex->VMult = 1.0f / (vscale * info->VSize);
+
+	return tex.get();
+}
+
+void TextureManager::UploadTexture(FTextureInfo* info, bool masked, std::unique_ptr<CachedTexture>& tex)
+{
 	if (!tex)
 	{
 		tex.reset(new CachedTexture());
@@ -52,7 +75,6 @@ CachedTexture* TextureManager::GetTexture(FTextureInfo* info, bool masked)
 		renderer->Uploads->UploadTexture(tex.get(), *info, masked);
 	}
 #endif
-	return tex.get();
 }
 
 void TextureManager::ClearCache()
@@ -63,11 +85,8 @@ void TextureManager::ClearCache()
 	}
 }
 
-CachedTexture* TextureManager::GetNullTexture()
+CachedTexture* TextureManager::CreateNullTexture()
 {
-	if (NullTexture)
-		return NullTexture.get();
-
 	NullTexture.reset(new CachedTexture());
 
 	D3D11_TEXTURE2D_DESC texDesc = {};
