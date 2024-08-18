@@ -138,6 +138,7 @@ public:
 	HANDLE FenceEvent = INVALID_HANDLE_VALUE;
 	ComPtr<ID3D12Fence> Fence;
 	ComPtr<IDXGISwapChain3> SwapChain3;
+	bool DxgiSwapChainAllowTearing = false;
 	int BufferCount = 2;
 	std::vector<ComPtr<ID3D12Resource>> FrameBuffers;
 	DescriptorSet FrameBufferRTVs;
@@ -318,6 +319,8 @@ public:
 	void UploadTexture(ID3D12Resource* resource, D3D12_RESOURCE_STATES stateBefore, D3D12_RESOURCE_STATES stateAfter, int x, int y, int width, int height, int firstSubresource, int numSubresources, const std::function<void(uint8_t* dest, int subresource, const D3D12_SUBRESOURCE_FOOTPRINT& footprint)>& onWriteSubresource);
 
 private:
+	void ReleaseSwapChainResources();
+	bool UpdateSwapChain();
 	void ResizeSceneBuffers(int width, int height, int multisample);
 	void ClearTextureCache();
 

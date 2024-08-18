@@ -8,6 +8,7 @@
 #include <set>
 #include <emmintrin.h>
 #include <functional>
+#include <dxgi1_5.h>
 
 IMPLEMENT_CLASS(UD3D12RenderDevice);
 
@@ -190,6 +191,22 @@ UBOOL UD3D12RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 		result = D3D12MA::CreateAllocator(&allocatorDesc, &MemAllocator);
 		ThrowIfFailed(result, "D3D12MA::CreateAllocator failed");
 
+		ComPtr<IDXGIFactory5> dxgiFactory5;
+		result = factory->QueryInterface(dxgiFactory5.GetIID(), dxgiFactory5.InitPtr());
+		if (SUCCEEDED(result))
+		{
+			INT support = 0;
+			result = dxgiFactory5->CheckFeatureSupport(DXGI_FEATURE_PRESENT_ALLOW_TEARING, &support, sizeof(INT));
+			if (SUCCEEDED(result))
+			{
+				DxgiSwapChainAllowTearing = support != 0;
+			}
+		}
+
+		UINT flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
+		if (DxgiSwapChainAllowTearing)
+			flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
+
 		DXGI_SWAP_CHAIN_DESC1 swapDesc = {};
 		swapDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 		swapDesc.Width = NewX;
@@ -199,7 +216,7 @@ UBOOL UD3D12RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 		swapDesc.SampleDesc.Count = 1;
 		swapDesc.Scaling = DXGI_SCALING_STRETCH;
 		swapDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-		swapDesc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
+		swapDesc.Flags = flags;
 		swapDesc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
 
 		ComPtr<IDXGISwapChain1> swapChain1;
@@ -290,10 +307,11 @@ UBOOL UD3D12RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 	if (NewX == 0 || NewY == 0)
 		return 1;
 
-	FrameBuffers.clear();
-	FrameBufferRTVs.reset();
+	ReleaseSwapChainResources();
 
 	HRESULT result;
+
+	BufferCount = UseVSync ? 2 : 3;
 
 	if (!Fullscreen && FullscreenState.Enabled) // Leaving fullscreen
 	{
@@ -346,18 +364,9 @@ UBOOL UD3D12RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 			debugf(TEXT("SwapChain.ResizeTarget failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
 		}
 
-		BufferCount = UseVSync ? 2 : 3;
-
-		result = SwapChain3->ResizeBuffers(BufferCount, screenWidth, screenHeight, ActiveHdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
-		if (FAILED(result))
-		{
-			debugf(TEXT("SwapChain.ResizeBuffers failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
-			return FALSE;
-		}
-
 		FullscreenState.Enabled = true;
 	}
-	
+
 	if (!Fullscreen)
 	{
 		DXGI_MODE_DESC modeDesc = {};
@@ -369,16 +378,49 @@ UBOOL UD3D12RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 		{
 			debugf(TEXT("SwapChain.ResizeTarget failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
 		}
-
-		BufferCount = UseVSync ? 2 : 3;
-
-		result = SwapChain3->ResizeBuffers(BufferCount, Viewport->SizeX, Viewport->SizeY, ActiveHdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
-		if (FAILED(result))
-		{
-			debugf(TEXT("SwapChain.ResizeBuffers failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
-			return FALSE;
-		}
 	}
+
+
+	if (!UpdateSwapChain())
+		return FALSE;
+
+	SaveConfig();
+
+#if defined(UNREALGOLD)
+	Flush();
+#else
+	Flush(1);
+#endif
+
+	return 1;
+	unguard;
+}
+
+void UD3D12RenderDevice::ReleaseSwapChainResources()
+{
+	FrameBuffers.clear();
+	FrameBufferRTVs.reset();
+}
+
+bool UD3D12RenderDevice::UpdateSwapChain()
+{
+	int width = Viewport->SizeX;
+	int height = Viewport->SizeY;
+	if (FullscreenState.Enabled)
+	{
+		HDC screenDC = GetDC(0);
+		width = GetDeviceCaps(screenDC, HORZRES);
+		height = GetDeviceCaps(screenDC, VERTRES);
+		ReleaseDC(0, screenDC);
+	}
+
+	UINT flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
+	if (DxgiSwapChainAllowTearing)
+		flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
+
+	HRESULT result = SwapChain3->ResizeBuffers(BufferCount, width, height, ActiveHdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM, flags);
+	if (FAILED(result))
+		return false;
 
 	if (ActiveHdr)
 	{
@@ -394,7 +436,7 @@ UBOOL UD3D12RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 		catch (const std::exception& e)
 		{
 			debugf(TEXT("Could not resize scene buffers: %s"), to_utf16(e.what()).c_str());
-			return FALSE;
+			return false;
 		}
 	}
 
@@ -405,7 +447,7 @@ UBOOL UD3D12RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 		if (FAILED(result))
 		{
 			debugf(TEXT("SwapChain3.GetBuffer failed"));
-			return FALSE;
+			return false;
 		}
 		FrameBuffers.push_back(std::move(buffer));
 	}
@@ -416,16 +458,7 @@ UBOOL UD3D12RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 		Device->CreateRenderTargetView(FrameBuffers[i], nullptr, FrameBufferRTVs.CPUHandle(i));
 	}
 
-	SaveConfig();
-
-#if defined(UNREALGOLD)
-	Flush();
-#else
-	Flush(1);
-#endif
-
-	return 1;
-	unguard;
+	return true;
 }
 
 void UD3D12RenderDevice::SetSceneDrawState()
@@ -455,8 +488,12 @@ void UD3D12RenderDevice::WaitForCommands(bool present)
 
 	if (present)
 	{
+		UINT flags = 0;
+		if (!UseVSync && DxgiSwapChainAllowTearing)
+			flags |= DXGI_PRESENT_ALLOW_TEARING;
+
 		DXGI_PRESENT_PARAMETERS presentParams = {};
-		SwapChain3->Present1(UseVSync ? 1 : 0, 0, &presentParams);
+		SwapChain3->Present1(UseVSync ? 1 : 0, flags, &presentParams);
 	}
 
 	WaitDeviceIdle();
@@ -1861,6 +1898,14 @@ UBOOL UD3D12RenderDevice::Exec(const TCHAR* Cmd, FOutputDevice& Ar)
 void UD3D12RenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane ScreenClear, DWORD RenderLockFlags, BYTE* InHitData, INT* InHitSize)
 {
 	guard(UD3D12RenderDevice::Lock);
+
+	int wantedBufferCount = UseVSync ? 2 : 3;
+	if (BufferCount != wantedBufferCount)
+	{
+		BufferCount = wantedBufferCount;
+		ReleaseSwapChainResources();
+		UpdateSwapChain();
+	}
 
 	if (Viewport->SizeX && Viewport->SizeY)
 	{

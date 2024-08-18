@@ -101,6 +101,8 @@ public:
 	ComPtr<IDXGISwapChain1> SwapChain1;
 	ComPtr<ID3D11Texture2D> BackBuffer;
 	ComPtr<ID3D11RenderTargetView> BackBufferView;
+	bool DxgiSwapChainAllowTearing = false;
+	int BufferCount = 2;
 
 	struct PPBlurLevel
 	{
@@ -259,6 +261,8 @@ private:
 	};
 	void DrawComplexSurfaceFaces(const ComplexSurfaceInfo& info);
 
+	void ReleaseSwapChainResources();
+	bool UpdateSwapChain();
 	void ResizeSceneBuffers(int width, int height, int multisample);
 	void ClearTextureCache();
 
@@ -367,7 +371,7 @@ private:
 	} DesktopResolution;
 
 	bool InSetResCall = false;
-	UBOOL LastFullscreen = 0;
+	UBOOL CurrentFullscreen = 0;
 };
 
 inline void ThrowIfFailed(HRESULT result, const char* msg) { if (FAILED(result)) throw std::runtime_error(msg); }
