@@ -456,6 +456,7 @@ bool UD3D11RenderDevice::UpdateSwapChain()
 		}
 		catch (const std::exception& e)
 		{
+			debugf(TEXT("Could not resize scene buffers: %s"), to_utf16(e.what()).c_str());
 			return false;
 		}
 	}
