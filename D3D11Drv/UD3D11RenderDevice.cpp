@@ -10,7 +10,8 @@
 #include <functional>
 #include <dxgi1_5.h>
 
-#define USE_SSE2
+// Unfortunately this code is slower than what the compiler generates on its own ;(
+// #define USE_SSE2
 
 #ifdef USE_SSE2
 #include <immintrin.h>
