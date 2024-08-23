@@ -48,6 +48,7 @@ void UD3D11RenderDevice::StaticConstructor()
 #if defined(OLDUNREAL469SDK)
 	UseLightmapAtlas = 0; // Note: do not turn this on. It does not work and generates broken fogmaps.
 	SupportsUpdateTextureRect = 1;
+	SupportsDrawTileList = 1;
 	MaxTextureSize = 4096;
 	NeedsMaskedFonts = 0;
 	DescFlags |= RDDESCF_Certified;
@@ -2466,6 +2467,187 @@ void UD3D11RenderDevice::DrawGouraudTriangles(const FSceneNode* Frame, const FTe
 
 #endif
 
+#if defined(OLDUNREAL469SDK)
+
+void UD3D11RenderDevice::DrawTileList(const FSceneNode* Frame, const FTextureInfo& Info, const FTileRect* Tiles, INT NumTiles, FSpanBuffer* Span, FLOAT Z, FPlane Color, FPlane Fog, DWORD PolyFlags)
+{
+	guardSlow(UD3D11RenderDevice::DrawTileList);
+
+	Timers.DrawTile.Clock();
+	ActiveTimer = &Timers.DrawTile;
+
+	// stijn: fix for invisible actor icons in ortho viewports
+	if (GIsEditor && Frame->Viewport->Actor && (Frame->Viewport->IsOrtho() || Abs(Z) <= SMALL_NUMBER))
+	{
+		Z = 1.f;
+	}
+
+	PolyFlags = ApplyPrecedenceRules(PolyFlags);
+
+	CachedTexture* tex = Textures->GetTexture(const_cast<FTextureInfo*>(&Info), !!(PolyFlags & PF_Masked));
+	float UMult = tex->UMult;
+	float VMult = tex->VMult;
+	bool clamp = true;
+
+	SetPipeline(PolyFlags);
+	SetDescriptorSet(PolyFlags, tex, clamp);
+
+	auto alloc = ReserveVertices(4 * NumTiles, 6 * NumTiles);
+	if (alloc.vptr)
+	{
+		SceneVertex* vptr = alloc.vptr;
+		uint32_t* iptr = alloc.iptr;
+		uint32_t vpos = alloc.vpos;
+
+		float r, g, b, a;
+		if (PolyFlags & PF_Modulated)
+		{
+			r = 1.0f;
+			g = 1.0f;
+			b = 1.0f;
+		}
+		else
+		{
+			r = Color.X;
+			g = Color.Y;
+			b = Color.Z;
+		}
+		a = 1.0f;
+
+		float rfx2z = RFX2 * Z;
+		float rfy2z = RFY2 * Z;
+
+		for (INT i = 0; i < NumTiles; i++)
+		{
+			FLOAT X = Tiles[i].X;
+			FLOAT Y = Tiles[i].Y;
+			FLOAT XL = Tiles[i].XL;
+			FLOAT YL = Tiles[i].YL;
+			FLOAT U = Tiles[i].U;
+			FLOAT V = Tiles[i].V;
+			FLOAT UL = Tiles[i].UL;
+			FLOAT VL = Tiles[i].VL;
+
+			/*
+			float u0 = U * UMult;
+			float v0 = V * VMult;
+			float u1 = (U + UL) * UMult;
+			float v1 = (V + VL) * VMult;
+			clamp = (u0 >= 0.0f && u1 <= 1.00001f && v0 >= 0.0f && v1 <= 1.00001f);
+			SetDescriptorSet(PolyFlags, tex, clamp);
+			*/
+
+			if (SceneBuffers.Multisample > 1)
+			{
+				XL = std::floor(X + XL + 0.5f);
+				YL = std::floor(Y + YL + 0.5f);
+				X = std::floor(X + 0.5f);
+				Y = std::floor(Y + 0.5f);
+				XL = XL - X;
+				YL = YL - Y;
+			}
+
+			X -= Frame->FX2;
+			Y -= Frame->FY2;
+			XL += X;
+			YL += Y;
+			U *= UMult;
+			UL = U + UL * UMult;
+			V *= VMult;
+			VL = V + VL * VMult;
+
+			vptr[0].Flags = 0;
+			vptr[0].Position.x = rfx2z * X;
+			vptr[0].Position.y = rfy2z * Y;
+			vptr[0].Position.z = Z;
+			vptr[0].TexCoord.s = U;
+			vptr[0].TexCoord.t = V;
+			vptr[0].TexCoord2.s = 0.0f;
+			vptr[0].TexCoord2.t = 0.0f;
+			vptr[0].TexCoord3.s = 0.0f;
+			vptr[0].TexCoord3.t = 0.0f;
+			vptr[0].TexCoord4.s = 0.0f;
+			vptr[0].TexCoord4.t = 0.0f;
+			vptr[0].Color.r = r;
+			vptr[0].Color.g = g;
+			vptr[0].Color.b = b;
+			vptr[0].Color.a = a;
+
+			vptr[1].Flags = 0;
+			vptr[1].Position.x = rfx2z * XL;
+			vptr[1].Position.y = rfy2z * Y;
+			vptr[1].Position.z = Z;
+			vptr[1].TexCoord.s = UL;
+			vptr[1].TexCoord.t = V;
+			vptr[1].TexCoord2.s = 0.0f;
+			vptr[1].TexCoord2.t = 0.0f;
+			vptr[1].TexCoord3.s = 0.0f;
+			vptr[1].TexCoord3.t = 0.0f;
+			vptr[1].TexCoord4.s = 0.0f;
+			vptr[1].TexCoord4.t = 0.0f;
+			vptr[1].Color.r = r;
+			vptr[1].Color.g = g;
+			vptr[1].Color.b = b;
+			vptr[1].Color.a = a;
+
+			vptr[2].Flags = 0;
+			vptr[2].Position.x = rfx2z * XL;
+			vptr[2].Position.y = rfy2z * YL;
+			vptr[2].Position.z = Z;
+			vptr[2].TexCoord.s = UL;
+			vptr[2].TexCoord.t = VL;
+			vptr[2].TexCoord2.s = 0.0f;
+			vptr[2].TexCoord2.t = 0.0f;
+			vptr[2].TexCoord3.s = 0.0f;
+			vptr[2].TexCoord3.t = 0.0f;
+			vptr[2].TexCoord4.s = 0.0f;
+			vptr[2].TexCoord4.t = 0.0f;
+			vptr[2].Color.r = r;
+			vptr[2].Color.g = g;
+			vptr[2].Color.b = b;
+			vptr[2].Color.a = a;
+
+			vptr[3].Flags = 0;
+			vptr[3].Position.x = rfx2z * X;
+			vptr[3].Position.y = rfy2z * YL;
+			vptr[3].Position.z = Z;
+			vptr[3].TexCoord.s = U;
+			vptr[3].TexCoord.t = VL;
+			vptr[3].TexCoord2.s = 0.0f;
+			vptr[3].TexCoord2.t = 0.0f;
+			vptr[3].TexCoord3.s = 0.0f;
+			vptr[3].TexCoord3.t = 0.0f;
+			vptr[3].TexCoord4.s = 0.0f;
+			vptr[3].TexCoord4.t = 0.0f;
+			vptr[3].Color.r = r;
+			vptr[3].Color.g = g;
+			vptr[3].Color.b = b;
+			vptr[3].Color.a = a;
+
+			iptr[0] = vpos;
+			iptr[1] = vpos + 1;
+			iptr[2] = vpos + 2;
+			iptr[3] = vpos;
+			iptr[4] = vpos + 2;
+			iptr[5] = vpos + 3;
+
+			vptr += 4;
+			iptr += 6;
+			vpos += 4;
+		}
+
+		UseVertices(4 * NumTiles, 6 * NumTiles);
+	}
+
+	Stats.Tiles++;
+	Timers.DrawTile.Unclock();
+	ActiveTimer = nullptr;
+
+	unguardSlow;
+}
+
+#endif
+
 void UD3D11RenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT X, FLOAT Y, FLOAT XL, FLOAT YL, FLOAT U, FLOAT V, FLOAT UL, FLOAT VL, class FSpanBuffer* Span, FLOAT Z, FPlane Color, FPlane Fog, DWORD PolyFlags)
 {
 	guardSlow(UD3D11RenderDevice::DrawTile);
@@ -2510,56 +2692,6 @@ void UD3D11RenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT X
 		uint32_t* iptr = alloc.iptr;
 		uint32_t vpos = alloc.vpos;
 
-#ifdef USE_SSE2
-
-		float scaleX = RFX2 * Z;
-		float scaleY = RFY2 * Z;
-		X = (X - Frame->FX2) * scaleX;
-		Y = (Y - Frame->FY2) * scaleY;
-
-		U *= UMult;
-		V *= VMult;
-		UL *= UMult;
-		VL *= VMult;
-
-		XL *= scaleX;
-		YL *= scaleY;
-
-		__m128 pos, uv0, uv1, color;
-
-		uv1 = _mm_setzero_ps();
-		color = (PolyFlags & PF_Modulated) ? _mm_set1_ps(1.0f) : _mm_setr_ps(Color.X, Color.Y, Color.Z, 1.0f);
-
-		pos = _mm_setr_ps(0.0f, X, Y, Z);
-		uv0 = _mm_setr_ps(U, V, 0.0f, 0.0f);
-		_mm_store_ps((float*)vptr, pos);
-		_mm_store_ps((float*)vptr + 4, uv0);
-		_mm_store_ps((float*)vptr + 8, uv1);
-		_mm_store_ps((float*)vptr + 12, color);
-
-		pos = _mm_setr_ps(0.0f, X + XL, Y, Z);
-		uv0 = _mm_setr_ps(U + UL, V, 0.0f, 0.0f);
-		_mm_store_ps((float*)vptr + 16, pos);
-		_mm_store_ps((float*)vptr + 20, uv0);
-		_mm_store_ps((float*)vptr + 24, uv1);
-		_mm_store_ps((float*)vptr + 28, color);
-
-		pos = _mm_setr_ps(0.0f, X + XL, Y + YL, Z);
-		uv0 = _mm_setr_ps(U + UL, V + VL, 0.0f, 0.0f);
-		_mm_store_ps((float*)vptr + 32, pos);
-		_mm_store_ps((float*)vptr + 36, uv0);
-		_mm_store_ps((float*)vptr + 40, uv1);
-		_mm_store_ps((float*)vptr + 44, color);
-
-		pos = _mm_setr_ps(0.0f, X, Y + YL, Z);
-		uv0 = _mm_setr_ps(U, V + VL, 0.0f, 0.0f);
-		_mm_store_ps((float*)vptr + 48, pos);
-		_mm_store_ps((float*)vptr + 52, uv0);
-		_mm_store_ps((float*)vptr + 56, uv1);
-		_mm_store_ps((float*)vptr + 60, color);
-
-
-#else
 		float r, g, b, a;
 		if (PolyFlags & PF_Modulated)
 		{
@@ -2575,11 +2707,84 @@ void UD3D11RenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT X
 		}
 		a = 1.0f;
 
-		vptr[0] = { 0, vec3(RFX2 * Z * (X - Frame->FX2),      RFY2 * Z * (Y - Frame->FY2),      Z), vec2(U * UMult,        V * VMult),        vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec4(r, g, b, a), };
-		vptr[1] = { 0, vec3(RFX2 * Z * (X + XL - Frame->FX2), RFY2 * Z * (Y - Frame->FY2),      Z), vec2((U + UL) * UMult, V * VMult),        vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec4(r, g, b, a), };
-		vptr[2] = { 0, vec3(RFX2 * Z * (X + XL - Frame->FX2), RFY2 * Z * (Y + YL - Frame->FY2), Z), vec2((U + UL) * UMult, (V + VL) * VMult), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec4(r, g, b, a), };
-		vptr[3] = { 0, vec3(RFX2 * Z * (X - Frame->FX2),      RFY2 * Z * (Y + YL - Frame->FY2), Z), vec2(U * UMult,        (V + VL) * VMult), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec2(0.0f, 0.0f), vec4(r, g, b, a), };
-#endif
+		float rfx2z = RFX2 * Z;
+		float rfy2z = RFY2 * Z;
+		X -= Frame->FX2;
+		Y -= Frame->FY2;
+		XL += X;
+		YL += Y;
+		U *= UMult;
+		UL = U + UL * UMult;
+		V *= VMult;
+		VL = V + VL * VMult;
+
+		vptr[0].Flags = 0;
+		vptr[0].Position.x = rfx2z * X;
+		vptr[0].Position.y = rfy2z * Y;
+		vptr[0].Position.z = Z;
+		vptr[0].TexCoord.s = U;
+		vptr[0].TexCoord.t = V;
+		vptr[0].TexCoord2.s = 0.0f;
+		vptr[0].TexCoord2.t = 0.0f;
+		vptr[0].TexCoord3.s = 0.0f;
+		vptr[0].TexCoord3.t = 0.0f;
+		vptr[0].TexCoord4.s = 0.0f;
+		vptr[0].TexCoord4.t = 0.0f;
+		vptr[0].Color.r = r;
+		vptr[0].Color.g = g;
+		vptr[0].Color.b = b;
+		vptr[0].Color.a = a;
+
+		vptr[1].Flags = 0;
+		vptr[1].Position.x = rfx2z * XL;
+		vptr[1].Position.y = rfy2z * Y;
+		vptr[1].Position.z = Z;
+		vptr[1].TexCoord.s = UL;
+		vptr[1].TexCoord.t = V;
+		vptr[1].TexCoord2.s = 0.0f;
+		vptr[1].TexCoord2.t = 0.0f;
+		vptr[1].TexCoord3.s = 0.0f;
+		vptr[1].TexCoord3.t = 0.0f;
+		vptr[1].TexCoord4.s = 0.0f;
+		vptr[1].TexCoord4.t = 0.0f;
+		vptr[1].Color.r = r;
+		vptr[1].Color.g = g;
+		vptr[1].Color.b = b;
+		vptr[1].Color.a = a;
+
+		vptr[2].Flags = 0;
+		vptr[2].Position.x = rfx2z * XL;
+		vptr[2].Position.y = rfy2z * YL;
+		vptr[2].Position.z = Z;
+		vptr[2].TexCoord.s = UL;
+		vptr[2].TexCoord.t = VL;
+		vptr[2].TexCoord2.s = 0.0f;
+		vptr[2].TexCoord2.t = 0.0f;
+		vptr[2].TexCoord3.s = 0.0f;
+		vptr[2].TexCoord3.t = 0.0f;
+		vptr[2].TexCoord4.s = 0.0f;
+		vptr[2].TexCoord4.t = 0.0f;
+		vptr[2].Color.r = r;
+		vptr[2].Color.g = g;
+		vptr[2].Color.b = b;
+		vptr[2].Color.a = a;
+
+		vptr[3].Flags = 0;
+		vptr[3].Position.x = rfx2z * X;
+		vptr[3].Position.y = rfy2z * YL;
+		vptr[3].Position.z = Z;
+		vptr[3].TexCoord.s = U;
+		vptr[3].TexCoord.t = VL;
+		vptr[3].TexCoord2.s = 0.0f;
+		vptr[3].TexCoord2.t = 0.0f;
+		vptr[3].TexCoord3.s = 0.0f;
+		vptr[3].TexCoord3.t = 0.0f;
+		vptr[3].TexCoord4.s = 0.0f;
+		vptr[3].TexCoord4.t = 0.0f;
+		vptr[3].Color.r = r;
+		vptr[3].Color.g = g;
+		vptr[3].Color.b = b;
+		vptr[3].Color.a = a;
 
 		iptr[0] = vpos;
 		iptr[1] = vpos + 1;
