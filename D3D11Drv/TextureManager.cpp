@@ -15,12 +15,14 @@ TextureManager::~TextureManager()
 
 void TextureManager::UpdateTextureRect(FTextureInfo* info, int x, int y, int w, int h)
 {
+	renderer->Timers.UpdateTextureRect.Clock();
 	std::unique_ptr<CachedTexture>& tex = TextureCache[0][info->CacheID];
 	if (tex)
 	{
 		renderer->Uploads->UploadTextureRect(tex.get(), *info, x, y, w, h);
 		info->bRealtimeChanged = 0;
 	}
+	renderer->Timers.UpdateTextureRect.Unclock();
 }
 
 CachedTexture* TextureManager::GetTexture(FTextureInfo* info, bool masked)
@@ -30,6 +32,8 @@ CachedTexture* TextureManager::GetTexture(FTextureInfo* info, bool masked)
 
 	if (info->Format != TEXF_P8)
 		masked = false;
+
+	renderer->Timers.GetTexture.Clock();
 
 	std::unique_ptr<CachedTexture>& tex = TextureCache[(int)masked][info->CacheID];
 
@@ -49,6 +53,8 @@ CachedTexture* TextureManager::GetTexture(FTextureInfo* info, bool masked)
 	tex->PanY = info->Pan.Y;
 	tex->UMult = 1.0f / (uscale * info->USize);
 	tex->VMult = 1.0f / (vscale * info->VSize);
+
+	renderer->Timers.GetTexture.Unclock();
 
 	return tex.get();
 }

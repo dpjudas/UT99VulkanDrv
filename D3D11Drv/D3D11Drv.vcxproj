@@ -267,6 +267,7 @@
   <ItemGroup>
     <ClInclude Include="CachedTexture.h" />
     <ClInclude Include="ComPtr.h" />
+    <ClInclude Include="CycleTimer.h" />
     <ClInclude Include="FileResource.h" />
     <ClInclude Include="halffloat.h" />
     <ClInclude Include="mat.h" />
@@ -279,6 +280,7 @@
     <ClInclude Include="vec.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="CycleTimer.cpp" />
     <ClCompile Include="D3D11Drv.cpp" />
     <ClCompile Include="FileResource.cpp" />
     <ClCompile Include="halffloat.cpp" />

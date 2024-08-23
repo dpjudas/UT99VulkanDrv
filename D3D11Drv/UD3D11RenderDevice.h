@@ -3,6 +3,7 @@
 #include "vec.h"
 #include "mat.h"
 #include "ComPtr.h"
+#include "CycleTimer.h"
 
 #include "TextureManager.h"
 #include "UploadManager.h"
@@ -247,6 +248,17 @@ public:
 		int RectUploads = 0;
 		int BuffersUsed = 0;
 	} Stats;
+
+	struct
+	{
+		CycleTimer LockTime;
+		CycleTimer DrawComplexSurface;
+		CycleTimer DrawGouraudPolygon;
+		CycleTimer DrawTile;
+		CycleTimer DrawGouraudTriangles;
+		CycleTimer UpdateTextureRect;
+		CycleTimer GetTexture;
+	} Timers;
 
 private:
 	struct ComplexSurfaceInfo
