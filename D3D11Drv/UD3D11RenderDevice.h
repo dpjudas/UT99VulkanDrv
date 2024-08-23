@@ -251,14 +251,16 @@ public:
 
 	struct
 	{
-		CycleTimer LockTime;
+		CycleTimer DrawBatches;
 		CycleTimer DrawComplexSurface;
 		CycleTimer DrawGouraudPolygon;
 		CycleTimer DrawTile;
 		CycleTimer DrawGouraudTriangles;
-		CycleTimer UpdateTextureRect;
-		CycleTimer GetTexture;
+		CycleTimer TextureUpload;
+		CycleTimer TextureCache;
 	} Timers;
+
+	CycleTimer* ActiveTimer = nullptr;
 
 private:
 	struct ComplexSurfaceInfo

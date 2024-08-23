@@ -1408,13 +1408,13 @@ void UD3D11RenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane Scr
 {
 	guard(UD3D11RenderDevice::Lock);
 
-	Timers.LockTime.Reset();
+	Timers.DrawBatches.Reset();
 	Timers.DrawComplexSurface.Reset();
 	Timers.DrawGouraudPolygon.Reset();
 	Timers.DrawTile.Reset();
 	Timers.DrawGouraudTriangles.Reset();
-	Timers.UpdateTextureRect.Reset();
-	Timers.GetTexture.Reset();
+	Timers.TextureCache.Reset();
+	Timers.TextureUpload.Reset();
 
 	nulltex = Textures->GetNullTexture();
 
@@ -1517,13 +1517,13 @@ void UD3D11RenderDevice::DrawStats(FSceneNode* Frame)
 
 	GRender->ShowStat(
 		CurrentFrame,
-		TEXT("D3D11: Complex surfaces: %f ms, Polygons: %f ms, Triangles: %f ms; Tiles: %f ms, GetTexture %f ms, UpdateAtlas %f ms\r\n"),
+		TEXT("D3D11: DrawBatches: %f ms, Complex surfaces: %f ms, Polygons: %f ms, Tiles: %f ms, Cache %f ms, Upload %f ms\r\n"),
+		Timers.DrawBatches.TimeMS(),
 		Timers.DrawComplexSurface.TimeMS(),
-		Timers.DrawGouraudPolygon.TimeMS(),
-		Timers.DrawGouraudTriangles.TimeMS(),
+		Timers.DrawGouraudPolygon.TimeMS() + Timers.DrawGouraudTriangles.TimeMS(),
 		Timers.DrawTile.TimeMS(),
-		Timers.GetTexture.TimeMS(),
-		Timers.UpdateTextureRect.TimeMS());
+		Timers.TextureCache.TimeMS(),
+		Timers.TextureUpload.TimeMS());
 #endif
 
 	Stats.DrawCalls = 0;
@@ -1854,6 +1854,7 @@ void UD3D11RenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Sur
 	guardSlow(UD3D11RenderDevice::DrawComplexSurface);
 
 	Timers.DrawComplexSurface.Clock();
+	ActiveTimer = &Timers.DrawComplexSurface;
 
 	DWORD PolyFlags = ApplyPrecedenceRules(Surface.PolyFlags);
 
@@ -1883,6 +1884,7 @@ void UD3D11RenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Sur
 
 	Stats.ComplexSurfaces++;
 	Timers.DrawComplexSurface.Unclock();
+	ActiveTimer = nullptr;
 
 	if (!GIsEditor || (PolyFlags & (PF_Selected | PF_FlatShaded)) == 0)
 		return;
@@ -2117,6 +2119,7 @@ void UD3D11RenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& Inf
 	if (NumPts < 3) return; // This can apparently happen!!
 
 	Timers.DrawGouraudPolygon.Clock();
+	ActiveTimer = &Timers.DrawGouraudPolygon;
 
 	PolyFlags = ApplyPrecedenceRules(PolyFlags);
 
@@ -2257,6 +2260,7 @@ void UD3D11RenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& Inf
 
 	Stats.GouraudPolygons++;
 	Timers.DrawGouraudPolygon.Unclock();
+	ActiveTimer = nullptr;
 
 	unguardSlow;
 }
@@ -2277,6 +2281,7 @@ void UD3D11RenderDevice::DrawGouraudTriangles(const FSceneNode* Frame, const FTe
 	if (NumPts < 3) return; // This can apparently happen!!
 
 	Timers.DrawGouraudTriangles.Clock();
+	ActiveTimer = &Timers.DrawGouraudTriangles;
 
 	PolyFlags = ApplyPrecedenceRules(PolyFlags);
 
@@ -2454,6 +2459,7 @@ void UD3D11RenderDevice::DrawGouraudTriangles(const FSceneNode* Frame, const FTe
 
 	Stats.GouraudPolygons++;
 	Timers.DrawGouraudTriangles.Unclock();
+	ActiveTimer = nullptr;
 
 	unguardSlow;
 }
@@ -2465,6 +2471,7 @@ void UD3D11RenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT X
 	guardSlow(UD3D11RenderDevice::DrawTile);
 
 	Timers.DrawTile.Clock();
+	ActiveTimer = &Timers.DrawTile;
 
 	// stijn: fix for invisible actor icons in ortho viewports
 	if (GIsEditor && Frame->Viewport->Actor && (Frame->Viewport->IsOrtho() || Abs(Z) <= SMALL_NUMBER))
@@ -2586,6 +2593,7 @@ void UD3D11RenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT X
 
 	Stats.Tiles++;
 	Timers.DrawTile.Unclock();
+	ActiveTimer = nullptr;
 
 	unguardSlow;
 }
@@ -2943,6 +2951,10 @@ void UD3D11RenderDevice::DrawBatches(bool nextBuffer)
 {
 	AddDrawBatch();
 
+	if (ActiveTimer)
+		ActiveTimer->Unclock();
+	Timers.DrawBatches.Clock();
+
 	Context->Unmap(ScenePass.VertexBuffer, 0); SceneVertices = nullptr;
 	Context->Unmap(ScenePass.IndexBuffer, 0); SceneIndexes = nullptr;
 
@@ -2972,6 +2984,10 @@ void UD3D11RenderDevice::DrawBatches(bool nextBuffer)
 	}
 
 	Batch.SceneIndexStart = SceneIndexPos;
+
+	Timers.DrawBatches.Unclock();
+	if (ActiveTimer)
+		ActiveTimer->Clock();
 }
 
 void UD3D11RenderDevice::DrawEntry(const DrawBatchEntry& entry)

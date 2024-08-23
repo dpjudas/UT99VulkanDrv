@@ -13,16 +13,29 @@ TextureManager::~TextureManager()
 	ClearCache();
 }
 
+CachedTexture* TextureManager::GetFromCache(int masked, QWORD cacheID)
+{
+	if (LastTextureResult[masked].first == cacheID && LastTextureResult[masked].second)
+		return LastTextureResult[masked].second;
+
+	renderer->Timers.TextureCache.Clock();
+	LastTextureResult[masked].first = cacheID;
+	LastTextureResult[masked].second = TextureCache[masked][cacheID].get();
+	renderer->Timers.TextureCache.Unclock();
+
+	return LastTextureResult[masked].second;
+}
+
 void TextureManager::UpdateTextureRect(FTextureInfo* info, int x, int y, int w, int h)
 {
-	renderer->Timers.UpdateTextureRect.Clock();
-	std::unique_ptr<CachedTexture>& tex = TextureCache[0][info->CacheID];
+	CachedTexture* tex = GetFromCache(0, info->CacheID);
 	if (tex)
 	{
-		renderer->Uploads->UploadTextureRect(tex.get(), *info, x, y, w, h);
+		renderer->Timers.TextureUpload.Clock();
+		renderer->Uploads->UploadTextureRect(tex, *info, x, y, w, h);
 		info->bRealtimeChanged = 0;
+		renderer->Timers.TextureUpload.Unclock();
 	}
-	renderer->Timers.UpdateTextureRect.Unclock();
 }
 
 CachedTexture* TextureManager::GetTexture(FTextureInfo* info, bool masked)
@@ -33,17 +46,27 @@ CachedTexture* TextureManager::GetTexture(FTextureInfo* info, bool masked)
 	if (info->Format != TEXF_P8)
 		masked = false;
 
-	renderer->Timers.GetTexture.Clock();
+	CachedTexture* tex = GetFromCache((int)masked, info->CacheID);
+	if (!tex)
+	{
+		std::unique_ptr<CachedTexture>& tex2 = TextureCache[(int)masked][info->CacheID];
+		tex2.reset(new CachedTexture());
+		tex = tex2.get();
 
-	std::unique_ptr<CachedTexture>& tex = TextureCache[(int)masked][info->CacheID];
-
+		renderer->Timers.TextureUpload.Clock();
+		renderer->Uploads->UploadTexture(tex, *info, masked);
+		renderer->Timers.TextureUpload.Unclock();
+	}
+	else
+	{
 #if defined(OLDUNREAL469SDK)
-	if (!tex || (info->bRealtimeChanged && (!info->Texture || info->Texture->RealtimeChangeCount != tex->RealtimeChangeCount)))
-		UploadTexture(info, masked, tex);
+		if (info->bRealtimeChanged && (!info->Texture || info->Texture->RealtimeChangeCount != tex->RealtimeChangeCount))
+			UploadTexture(info, masked, tex);
 #else
-	if (!tex || info->bRealtimeChanged)
-		UploadTexture(info, masked, tex);
+		if (info->bRealtimeChanged)
+			UploadTexture(info, masked, tex);
 #endif
+	}
 
 	float uscale = info->UScale;
 	float vscale = info->VScale;
@@ -54,31 +77,32 @@ CachedTexture* TextureManager::GetTexture(FTextureInfo* info, bool masked)
 	tex->UMult = 1.0f / (uscale * info->USize);
 	tex->VMult = 1.0f / (vscale * info->VSize);
 
-	renderer->Timers.GetTexture.Unclock();
-
-	return tex.get();
+	return tex;
 }
 
-void TextureManager::UploadTexture(FTextureInfo* info, bool masked, std::unique_ptr<CachedTexture>& tex)
+void TextureManager::UploadTexture(FTextureInfo* info, bool masked, CachedTexture* tex)
 {
-	if (!tex)
-	{
-		tex.reset(new CachedTexture());
-		renderer->Uploads->UploadTexture(tex.get(), *info, masked);
-	}
 #if defined(OLDUNREAL469SDK)
-	else if (info->bRealtimeChanged && (!info->Texture || info->Texture->RealtimeChangeCount != tex->RealtimeChangeCount))
+	if (info->bRealtimeChanged && (!info->Texture || info->Texture->RealtimeChangeCount != tex->RealtimeChangeCount))
 	{
+		renderer->Timers.TextureUpload.Clock();
+
 		if (info->Texture)
 			info->Texture->RealtimeChangeCount = tex->RealtimeChangeCount;
 		info->bRealtimeChanged = 0;
-		renderer->Uploads->UploadTexture(tex.get(), *info, masked);
+		renderer->Uploads->UploadTexture(tex, *info, masked);
+
+		renderer->Timers.TextureUpload.Unclock();
 	}
 #else
 	else if (info->bRealtimeChanged)
 	{
+		renderer->Timers.TextureUpload.Clock();
+
 		info->bRealtimeChanged = 0;
-		renderer->Uploads->UploadTexture(tex.get(), *info, masked);
+		renderer->Uploads->UploadTexture(tex, *info, masked);
+
+		renderer->Timers.TextureUpload.Unclock();
 	}
 #endif
 }
@@ -89,6 +113,8 @@ void TextureManager::ClearCache()
 	{
 		cache.clear();
 	}
+	for (auto& texture : LastTextureResult)
+		texture = {};
 }
 
 CachedTexture* TextureManager::CreateNullTexture()

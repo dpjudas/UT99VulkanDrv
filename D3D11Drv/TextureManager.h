@@ -26,10 +26,14 @@ public:
 	}
 
 private:
-	void UploadTexture(FTextureInfo* info, bool masked, std::unique_ptr<CachedTexture>& tex);
+	void UploadTexture(FTextureInfo* info, bool masked, CachedTexture* tex);
 	CachedTexture* CreateNullTexture();
+
+	CachedTexture* GetFromCache(int masked, QWORD cacheID);
 
 	UD3D11RenderDevice* renderer = nullptr;
 	std::unordered_map<QWORD, std::unique_ptr<CachedTexture>> TextureCache[2];
 	std::unique_ptr<CachedTexture> NullTexture;
+
+	std::pair<QWORD, CachedTexture*> LastTextureResult[2];
 };
