@@ -4,6 +4,10 @@
 #include "CachedTexture.h"
 #include "UTF16.h"
 
+#if !defined(WIN32)
+#include <SDL2/SDL_vulkan.h>
+#endif
+
 IMPLEMENT_CLASS(UVulkanRenderDevice);
 
 UVulkanRenderDevice::UVulkanRenderDevice()
@@ -133,16 +137,39 @@ UBOOL UVulkanRenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT N
 			.DebugLayer(VkDebug)
 			.Create();
 
+		auto deviceBuilder = VulkanDeviceBuilder();
+
+#ifdef WIN32
 		auto surface = VulkanSurfaceBuilder()
 			.Win32Window((HWND)Viewport->GetWindow())
 			.Create(instance);
+		deviceBuilder.Surface(surface);
+#else
+		auto window = (SDL_Window*)Viewport->GetWindow();
 
-		Device = VulkanDeviceBuilder()
-			.Surface(surface)
-			.OptionalDescriptorIndexing()
-			.RequireExtension(VK_KHR_SAMPLER_MIRROR_CLAMP_TO_EDGE_EXTENSION_NAME)
-			.SelectDevice(VkDeviceIndex)
-			.Create(instance);
+		VkSurfaceKHR surfaceHandle = {};
+		if (SDL_Vulkan_CreateSurface(window, instance, &surfaceHandle) == SDL_FALSE)
+			return 0;
+
+		auto surface = std::make_shared<VulkanSurface>(instance, surfacehandle);
+		deviceBuilder.Surface(surface);
+
+		unsigned int extCount = 0;
+		SDL_Vulkan_GetInstanceExtensions(window, &extCount, nullptr);
+		std::vector<const char*> extNames(extCount);
+		SDL_Vulkan_GetInstanceExtensions(window, &extCount, extNames.data());
+
+		for (const char* name : extNames)
+		{
+			deviceBuilder.RequireExtension(name);
+		}
+#endif
+
+		deviceBuilder.OptionalDescriptorIndexing();
+		deviceBuilder.RequireExtension(VK_KHR_SAMPLER_MIRROR_CLAMP_TO_EDGE_EXTENSION_NAME);
+		deviceBuilder.SelectDevice(VkDeviceIndex);
+
+		Device = deviceBuilder.Create(instance);
 
 		SupportsBindless =
 			Device->EnabledFeatures.DescriptorIndexing.descriptorBindingPartiallyBound &&
@@ -241,6 +268,8 @@ UBOOL UVulkanRenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL F
 {
 	guard(UVulkanRenderDevice::SetRes);
 
+#ifdef WIN32
+
 	if (InSetResCall)
 		return TRUE;
 	SetResCallLock lock(InSetResCall);
@@ -288,6 +317,13 @@ UBOOL UVulkanRenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL F
 
 		FullscreenState.Enabled = true;
 	}
+
+#else
+
+	if (!Viewport->ResizeViewport(Fullscreen ? (BLIT_Fullscreen | BLIT_Vulkan) : (BLIT_HardwarePaint | BLIT_Vulkan), NewX, NewY, NewColorBytes))
+		return 0;
+
+#endif
 
 	SaveConfig();
 
@@ -612,9 +648,17 @@ void UVulkanRenderDevice::Unlock(UBOOL Blit)
 			RunBloomPass();
 		}
 
+#ifdef WIN32
 		RECT box = {};
 		GetClientRect((HWND)Viewport->GetWindow(), &box);
-		SubmitAndWait(Blit ? true : false, box.right, box.bottom, Viewport->IsFullscreen());
+		int windowWidth = box.right;
+		int windowHeight = box.bottom;
+#else
+		auto window = (SDL_Window*)Viewport->GetWindow();
+		SDL_GL_GetDrawableSize(window, &windowWidth, &windowHeight);
+#endif
+
+		SubmitAndWait(Blit ? true : false, windowWidth, windowHeight, Viewport->IsFullscreen());
 
 		Batch.Pipeline = nullptr;
 		Batch.DescriptorSet = nullptr;

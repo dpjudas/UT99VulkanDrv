@@ -228,6 +228,7 @@ private:
 	int ForceHitIndex = -1;
 	HitQuery ForceHit;
 
+#ifdef WIN32
 	struct
 	{
 		RECT WindowPos = {};
@@ -237,6 +238,7 @@ private:
 	} FullscreenState;
 
 	bool InSetResCall = false;
+#endif
 };
 
 inline void UVulkanRenderDevice::SetPipeline(VulkanPipeline* pipeline)
