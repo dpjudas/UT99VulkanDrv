@@ -3,6 +3,7 @@
 #include "UVulkanRenderDevice.h"
 #include "CachedTexture.h"
 #include "UTF16.h"
+#include <cmath>
 
 #if !defined(WIN32)
 #include <SDL2/SDL_vulkan.h>
@@ -148,10 +149,10 @@ UBOOL UVulkanRenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT N
 		auto window = (SDL_Window*)Viewport->GetWindow();
 
 		VkSurfaceKHR surfaceHandle = {};
-		if (SDL_Vulkan_CreateSurface(window, instance, &surfaceHandle) == SDL_FALSE)
+		if (SDL_Vulkan_CreateSurface(window, instance->Instance, &surfaceHandle) == SDL_FALSE)
 			return 0;
 
-		auto surface = std::make_shared<VulkanSurface>(instance, surfacehandle);
+		auto surface = std::make_shared<VulkanSurface>(instance, surfaceHandle);
 		deviceBuilder.Surface(surface);
 
 		unsigned int extCount = 0;
@@ -528,6 +529,7 @@ UBOOL UVulkanRenderDevice::Exec(const TCHAR* Cmd, FOutputDevice& Ar)
 		Ar.Log(*Str.LeftChop(1));
 		return 1;
 	}
+#if WIN32 // To do: what does the Unix build use for the TEXT() template?
 	else if (ParseCommand(&Cmd, TEXT("GetVkDevices")))
 	{
 		std::vector<VulkanCompatibleDevice> supportedDevices = VulkanDeviceBuilder()
@@ -537,10 +539,11 @@ UBOOL UVulkanRenderDevice::Exec(const TCHAR* Cmd, FOutputDevice& Ar)
 
 		for (size_t i = 0; i < supportedDevices.size(); i++)
 		{
-			Ar.Log(FString::Printf(TEXT("#%d - %s\r\n"), (int)i, to_utf16(supportedDevices[i].Device->Properties.Properties.deviceName)));
+			Ar.Log(FString::Printf(TEXT("#%d - %s\r\n"), (int)i, to_utf16(supportedDevices[i].Device->Properties.Properties.deviceName).c_str()));
 		}
 		return 1;
 	}
+#endif
 	else
 	{
 #if !defined(UNREALGOLD)
@@ -609,8 +612,10 @@ void UVulkanRenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane Sc
 	}
 	catch (const std::exception& e)
 	{
+#ifdef WIN32
 		// To do: can we report this back to unreal in a better way?
 		MessageBoxA(0, e.what(), "Vulkan Error", MB_OK);
+#endif
 		exit(0);
 	}
 
@@ -655,6 +660,8 @@ void UVulkanRenderDevice::Unlock(UBOOL Blit)
 		int windowHeight = box.bottom;
 #else
 		auto window = (SDL_Window*)Viewport->GetWindow();
+		int windowWidth = 0;
+		int windowHeight = 0;
 		SDL_GL_GetDrawableSize(window, &windowWidth, &windowHeight);
 #endif
 
@@ -1910,7 +1917,7 @@ void UVulkanRenderDevice::BloomStep(VulkanCommandBuffer* cmdbuffer, VulkanPipeli
 
 float UVulkanRenderDevice::ComputeBlurGaussian(float n, float theta) // theta = Blur Amount
 {
-	return (float)((1.0f / std::sqrtf(2 * 3.14159265359f * theta)) * std::expf(-(n * n) / (2.0f * theta * theta)));
+	return (float)((1.0f / sqrt(2 * 3.14159265359f * theta)) * expf(-(n * n) / (2.0f * theta * theta)));
 }
 
 void UVulkanRenderDevice::ComputeBlurSamples(int sampleCount, float blurAmount, float* sampleWeights)

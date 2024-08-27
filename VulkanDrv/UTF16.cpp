@@ -2,6 +2,8 @@
 #include "Precomp.h"
 #include "UTF16.h"
 
+#ifdef WIN32
+
 std::wstring to_utf16(const std::string& str)
 {
 	if (str.empty()) return {};
@@ -29,3 +31,6 @@ std::string from_utf16(const std::wstring& str)
 		throw std::runtime_error("WideCharToMultiByte failed");
 	return result;
 }
+
+#endif
+

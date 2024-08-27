@@ -1,5 +1,7 @@
 #pragma once
 
+#ifdef WIN32
+
 #define _CRT_SECURE_NO_WARNINGS
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -10,7 +12,11 @@
 #endif
 
 #pragma pack(push, 8)
+
 #include <Windows.h>
+
+#endif
+
 #include <zvulkan/vulkandevice.h>
 #include <zvulkan/vulkaninstance.h>
 #include <zvulkan/vulkansurface.h>
@@ -23,10 +29,15 @@
 #include <memory>
 #include <map>
 #include <unordered_map>
+
+#ifdef WIN32
+
 #pragma pack(pop)
 
 #define UTGLR_NO_APP_MALLOC
 #include <stdlib.h>
+
+#endif
 
 #include "Engine.h"
 #include "UnRender.h"

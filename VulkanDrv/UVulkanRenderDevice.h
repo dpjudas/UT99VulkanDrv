@@ -37,14 +37,14 @@ public:
 #else
 	void Flush(UBOOL AllowPrecache) override;
 #endif
-	UBOOL Exec(const TCHAR* Cmd, FOutputDevice& Ar);
+	UBOOL Exec(const TCHAR* Cmd, FOutputDevice& Ar) override;
 	void Lock(FPlane FlashScale, FPlane FlashFog, FPlane ScreenClear, DWORD RenderLockFlags, BYTE* HitData, INT* HitSize) override;
 	void Unlock(UBOOL Blit) override;
 	void DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Surface, FSurfaceFacet& Facet) override;
 	void DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& Info, FTransTexture** Pts, int NumPts, DWORD PolyFlags, FSpanBuffer* Span) override;
 	void DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT X, FLOAT Y, FLOAT XL, FLOAT YL, FLOAT U, FLOAT V, FLOAT UL, FLOAT VL, class FSpanBuffer* Span, FLOAT Z, FPlane Color, FPlane Fog, DWORD PolyFlags) override;
-	void Draw3DLine(FSceneNode* Frame, FPlane Color, DWORD LineFlags, FVector OrigP, FVector OrigQ);
-	void Draw2DClippedLine(FSceneNode* Frame, FPlane Color, DWORD LineFlags, FVector P1, FVector P2);
+	void Draw3DLine(FSceneNode* Frame, FPlane Color, DWORD LineFlags, FVector OrigP, FVector OrigQ) override;
+	void Draw2DClippedLine(FSceneNode* Frame, FPlane Color, DWORD LineFlags, FVector P1, FVector P2) override;
 	void Draw2DLine(FSceneNode* Frame, FPlane Color, DWORD LineFlags, FVector P1, FVector P2) override;
 	void Draw2DPoint(FSceneNode* Frame, FPlane Color, DWORD LineFlags, FLOAT X1, FLOAT Y1, FLOAT X2, FLOAT Y2, FLOAT Z) override;
 	void ClearZ(FSceneNode* Frame) override;
@@ -66,7 +66,10 @@ public:
 
 	int InterfacePadding[64]; // For allowing URenderDeviceOldUnreal469 interface to add things
 
+#ifdef WIN32
 	HWND WindowHandle = 0;
+#endif
+
 	std::shared_ptr<VulkanDevice> Device;
 
 	std::unique_ptr<CommandBufferManager> Commands;
