@@ -1791,8 +1791,6 @@ void UD3D11RenderDevice::PushHit(const BYTE* Data, INT Count)
 	if (Count <= 0) return;
 	HitQueryStack.insert(HitQueryStack.end(), Data, Data + Count);
 
-	DrawBatches();
-
 	SetHitLocation();
 
 	unguard;
@@ -1822,6 +1820,8 @@ void UD3D11RenderDevice::PopHit(INT Count, UBOOL bForce)
 
 void UD3D11RenderDevice::SetHitLocation()
 {
+	DrawBatches();
+
 	INT index = HitQueries.size();
 
 	HitQuery query;
