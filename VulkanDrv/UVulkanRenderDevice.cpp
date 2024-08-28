@@ -1428,18 +1428,7 @@ void UVulkanRenderDevice::PushHit(const BYTE* Data, INT Count)
 	if (Count <= 0) return;
 	HitQueryStack.insert(HitQueryStack.end(), Data, Data + Count);
 
-	DrawBatch(Commands->GetDrawCommands());
-
-	INT index = HitQueries.size();
-
-	HitQuery query;
-	query.Start = HitBuffer.size();
-	query.Count = HitQueryStack.size();
-	HitQueries.push_back(query);
-
-	HitBuffer.insert(HitBuffer.end(), HitQueryStack.begin(), HitQueryStack.end());
-
-	pushconstants.hitIndex = index + 1;
+	SetHitLocation();
 
 	unguard;
 }
@@ -1461,7 +1450,25 @@ void UVulkanRenderDevice::PopHit(INT Count, UBOOL bForce)
 
 	HitQueryStack.resize(HitQueryStack.size() - Count);
 
+	SetHitLocation();
+
 	unguard;
+}
+
+void UVulkanRenderDevice::SetHitLocation()
+{
+	DrawBatch(Commands->GetDrawCommands());
+
+	INT index = HitQueries.size();
+
+	HitQuery query;
+	query.Start = HitBuffer.size();
+	query.Count = HitQueryStack.size();
+	HitQueries.push_back(query);
+
+	HitBuffer.insert(HitBuffer.end(), HitQueryStack.begin(), HitQueryStack.end());
+
+	pushconstants.hitIndex = index + 1;
 }
 
 void UVulkanRenderDevice::GetStats(TCHAR* Result)

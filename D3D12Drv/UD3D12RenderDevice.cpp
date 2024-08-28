@@ -2300,19 +2300,7 @@ void UD3D12RenderDevice::PushHit(const BYTE* Data, INT Count)
 	if (Count <= 0) return;
 	HitQueryStack.insert(HitQueryStack.end(), Data, Data + Count);
 
-	DrawBatches();
-
-	INT index = HitQueries.size();
-
-	HitQuery query;
-	query.Start = HitBuffer.size();
-	query.Count = HitQueryStack.size();
-	HitQueries.push_back(query);
-
-	HitBuffer.insert(HitBuffer.end(), HitQueryStack.begin(), HitQueryStack.end());
-
-	SceneConstants.HitIndex = index + 1;
-	Commands.Draw->SetGraphicsRoot32BitConstants(2, sizeof(ScenePushConstants) / sizeof(uint32_t), &SceneConstants, 0);
+	SetHitLocation();
 
 	unguard;
 }
@@ -2334,7 +2322,26 @@ void UD3D12RenderDevice::PopHit(INT Count, UBOOL bForce)
 
 	HitQueryStack.resize(HitQueryStack.size() - Count);
 
+	SetHitLocation();
+
 	unguard;
+}
+
+void UD3D12RenderDevice::SetHitLocation()
+{
+	DrawBatches();
+
+	INT index = HitQueries.size();
+
+	HitQuery query;
+	query.Start = HitBuffer.size();
+	query.Count = HitQueryStack.size();
+	HitQueries.push_back(query);
+
+	HitBuffer.insert(HitBuffer.end(), HitQueryStack.begin(), HitQueryStack.end());
+
+	SceneConstants.HitIndex = index + 1;
+	Commands.Draw->SetGraphicsRoot32BitConstants(2, sizeof(ScenePushConstants) / sizeof(uint32_t), &SceneConstants, 0);
 }
 
 #if defined(OLDUNREAL469SDK)
