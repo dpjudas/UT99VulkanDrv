@@ -1793,17 +1793,7 @@ void UD3D11RenderDevice::PushHit(const BYTE* Data, INT Count)
 
 	DrawBatches();
 
-	INT index = HitQueries.size();
-
-	HitQuery query;
-	query.Start = HitBuffer.size();
-	query.Count = HitQueryStack.size();
-	HitQueries.push_back(query);
-
-	HitBuffer.insert(HitBuffer.end(), HitQueryStack.begin(), HitQueryStack.end());
-
-	SceneConstants.HitIndex = index + 1;
-	Context->UpdateSubresource(ScenePass.ConstantBuffer, 0, nullptr, &SceneConstants, 0, 0);
+	SetHitLocation();
 
 	unguard;
 }
@@ -1825,7 +1815,24 @@ void UD3D11RenderDevice::PopHit(INT Count, UBOOL bForce)
 
 	HitQueryStack.resize(HitQueryStack.size() - Count);
 
+	SetHitLocation();
+
 	unguard;
+}
+
+void UD3D11RenderDevice::SetHitLocation()
+{
+	INT index = HitQueries.size();
+
+	HitQuery query;
+	query.Start = HitBuffer.size();
+	query.Count = HitQueryStack.size();
+	HitQueries.push_back(query);
+
+	HitBuffer.insert(HitBuffer.end(), HitQueryStack.begin(), HitQueryStack.end());
+
+	SceneConstants.HitIndex = index + 1;
+	Context->UpdateSubresource(ScenePass.ConstantBuffer, 0, nullptr, &SceneConstants, 0, 0);
 }
 
 #if defined(OLDUNREAL469SDK)

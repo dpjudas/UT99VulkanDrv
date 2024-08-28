@@ -85,6 +85,8 @@ public:
 	void PrecacheTexture(FTextureInfo& Info, DWORD PolyFlags) override;
 	void DrawStats(FSceneNode* Frame) override;
 
+	void SetHitLocation();
+
 #if defined(OLDUNREAL469SDK)
 	// URenderDeviceOldUnreal469 extensions
 	void DrawGouraudTriangles(const FSceneNode* Frame, const FTextureInfo& Info, FTransTexture* const Pts, INT NumPts, DWORD PolyFlags, DWORD DataFlags, FSpanBuffer* Span) override;
