@@ -1868,7 +1868,7 @@ void UD3D11RenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Sur
 
 	ComplexSurfaceInfo info;
 	info.facet = &Facet;
-	info.tex = Textures->GetTexture(Surface.Texture, !!(PolyFlags & PF_Masked));
+	info.tex = Textures->GetTexture(Surface.Texture, !!(PolyFlags & (PF_Masked | PF_Translucent)));
 	info.lightmap = Textures->GetTexture(Surface.LightMap, false);
 	info.macrotex = Textures->GetTexture(Surface.MacroTexture, false);
 	info.detailtex = Textures->GetTexture(Surface.DetailTexture, false);
@@ -2131,7 +2131,7 @@ void UD3D11RenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& Inf
 
 	PolyFlags = ApplyPrecedenceRules(PolyFlags);
 
-	CachedTexture* tex = Textures->GetTexture(&Info, !!(PolyFlags & PF_Masked));
+	CachedTexture* tex = Textures->GetTexture(&Info, !!(PolyFlags & (PF_Masked | PF_Translucent)));
 
 	SetPipeline(PolyFlags);
 	SetDescriptorSet(PolyFlags, tex);
@@ -2302,7 +2302,7 @@ void UD3D11RenderDevice::DrawGouraudTriangles(const FSceneNode* Frame, const FTe
 			::EnviroMap(Frame, Pts[i], UScale, VScale);
 	}
 
-	CachedTexture* tex = Textures->GetTexture(const_cast<FTextureInfo*>(&Info), !!(PolyFlags & PF_Masked));
+	CachedTexture* tex = Textures->GetTexture(const_cast<FTextureInfo*>(&Info), !!(PolyFlags & (PF_Masked | PF_Translucent)));
 
 	SetPipeline(PolyFlags);
 	SetDescriptorSet(PolyFlags, tex);
@@ -2491,7 +2491,7 @@ void UD3D11RenderDevice::DrawTileList(const FSceneNode* Frame, const FTextureInf
 
 	PolyFlags = ApplyPrecedenceRules(PolyFlags);
 
-	CachedTexture* tex = Textures->GetTexture(const_cast<FTextureInfo*>(&Info), !!(PolyFlags & PF_Masked));
+	CachedTexture* tex = Textures->GetTexture(const_cast<FTextureInfo*>(&Info), !!(PolyFlags & (PF_Masked | PF_Translucent)));
 	float UMult = tex->UMult;
 	float VMult = tex->VMult;
 	bool clamp = true;
@@ -2670,7 +2670,7 @@ void UD3D11RenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT X
 
 	PolyFlags = ApplyPrecedenceRules(PolyFlags);
 
-	CachedTexture* tex = Textures->GetTexture(&Info, !!(PolyFlags & PF_Masked));
+	CachedTexture* tex = Textures->GetTexture(&Info, !!(PolyFlags & (PF_Masked | PF_Translucent)));
 	float UMult = tex->UMult;
 	float VMult = tex->VMult;
 	float u0 = U * UMult;
@@ -3140,7 +3140,7 @@ void UD3D11RenderDevice::PrecacheTexture(FTextureInfo& Info, DWORD PolyFlags)
 {
 	guard(UD3D11RenderDevice::PrecacheTexture);
 	PolyFlags = ApplyPrecedenceRules(PolyFlags);
-	Textures->GetTexture(&Info, !!(PolyFlags & PF_Masked));
+	Textures->GetTexture(&Info, !!(PolyFlags & (PF_Masked | PF_Translucent)));
 	unguard;
 }
 

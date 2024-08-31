@@ -2372,7 +2372,7 @@ void UD3D12RenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Sur
 
 	DWORD PolyFlags = ApplyPrecedenceRules(Surface.PolyFlags);
 
-	CachedTexture* tex = Textures->GetTexture(Surface.Texture, !!(PolyFlags & PF_Masked));
+	CachedTexture* tex = Textures->GetTexture(Surface.Texture, !!(PolyFlags & (PF_Masked | PF_Translucent)));
 	CachedTexture* lightmap = Textures->GetTexture(Surface.LightMap, false);
 	CachedTexture* macrotex = Textures->GetTexture(Surface.MacroTexture, false);
 	CachedTexture* detailtex = Textures->GetTexture(Surface.DetailTexture, false);
@@ -2560,7 +2560,7 @@ void UD3D12RenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& Inf
 
 	PolyFlags = ApplyPrecedenceRules(PolyFlags);
 
-	CachedTexture* tex = Textures->GetTexture(&Info, !!(PolyFlags & PF_Masked));
+	CachedTexture* tex = Textures->GetTexture(&Info, !!(PolyFlags & (PF_Masked | PF_Translucent)));
 
 	SetPipeline(PolyFlags);
 	SetDescriptorSet(PolyFlags, tex);
@@ -2663,7 +2663,7 @@ void UD3D12RenderDevice::DrawGouraudTriangles(const FSceneNode* Frame, const FTe
 
 	PolyFlags = ApplyPrecedenceRules(PolyFlags);
 
-	CachedTexture* tex = Textures->GetTexture(const_cast<FTextureInfo*>(&Info), !!(PolyFlags & PF_Masked));
+	CachedTexture* tex = Textures->GetTexture(const_cast<FTextureInfo*>(&Info), !!(PolyFlags & (PF_Masked | PF_Translucent)));
 
 	SetPipeline(PolyFlags);
 	SetDescriptorSet(PolyFlags, tex);
@@ -2804,7 +2804,7 @@ void UD3D12RenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT X
 
 	PolyFlags = ApplyPrecedenceRules(PolyFlags);
 
-	CachedTexture* tex = Textures->GetTexture(&Info, !!(PolyFlags & PF_Masked));
+	CachedTexture* tex = Textures->GetTexture(&Info, !!(PolyFlags & (PF_Masked | PF_Translucent)));
 
 	SetPipeline(PolyFlags);
 	SetDescriptorSet(PolyFlags, tex, nullptr, nullptr, nullptr, true);
@@ -3227,7 +3227,7 @@ void UD3D12RenderDevice::PrecacheTexture(FTextureInfo& Info, DWORD PolyFlags)
 {
 	guard(UD3D12RenderDevice::PrecacheTexture);
 	PolyFlags = ApplyPrecedenceRules(PolyFlags);
-	Textures->GetTexture(&Info, !!(PolyFlags & PF_Masked));
+	Textures->GetTexture(&Info, !!(PolyFlags & (PF_Masked | PF_Translucent)));
 	unguard;
 }
 
