@@ -1756,7 +1756,7 @@ void UD3D11RenderDevice::Unlock(UBOOL Blit)
 		}
 		hit--;
 
-		if (hit < ForceHitIndex)
+		if (hit == -1)
 			hit = ForceHitIndex;
 
 		if (hit >= 0 && hit < (int)HitQueries.size())
@@ -1800,20 +1800,12 @@ void UD3D11RenderDevice::PopHit(INT Count, UBOOL bForce)
 {
 	guard(UD3D11RenderDevice::PopHit);
 
-	if (bForce)
-	{
-		ForceHitIndex = HitQueries.size();
-
-		HitQuery query;
-		query.Start = HitBuffer.size();
-		query.Count = HitQueryStack.size();
-		HitQueries.push_back(query);
-		HitBuffer.insert(HitBuffer.end(), HitQueryStack.begin(), HitQueryStack.end());
-	}
-
 	HitQueryStack.resize(HitQueryStack.size() - Count);
 
 	SetHitLocation();
+
+	if (bForce)
+		ForceHitIndex = HitQueries.size() - 1;
 
 	unguard;
 }
