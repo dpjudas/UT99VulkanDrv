@@ -698,8 +698,7 @@ void UVulkanRenderDevice::Unlock(UBOOL Blit)
 			}
 			hit--;
 
-			if (hit == -1)
-				hit = ForceHitIndex;
+			hit = std::max(hit, ForceHitIndex);
 
 			if (hit >= 0 && hit < (int)HitQueries.size())
 			{
@@ -1437,12 +1436,12 @@ void UVulkanRenderDevice::PopHit(INT Count, UBOOL bForce)
 {
 	guard(UVulkanRenderDevice::PopHit);
 
+	if (bForce) // Force hit what we are popping
+		ForceHitIndex = HitQueries.size() - 1;
+
 	HitQueryStack.resize(HitQueryStack.size() - Count);
 
 	SetHitLocation();
-
-	if (bForce)
-		ForceHitIndex = HitQueries.size() - 1;
 
 	unguard;
 }
