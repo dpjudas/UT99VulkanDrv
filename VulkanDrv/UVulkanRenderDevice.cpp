@@ -1450,16 +1450,23 @@ void UVulkanRenderDevice::SetHitLocation()
 {
 	DrawBatch(Commands->GetDrawCommands());
 
-	INT index = HitQueries.size();
+	if (!HitQueryStack.empty())
+	{
+		INT index = HitQueries.size();
 
-	HitQuery query;
-	query.Start = HitBuffer.size();
-	query.Count = HitQueryStack.size();
-	HitQueries.push_back(query);
+		HitQuery query;
+		query.Start = HitBuffer.size();
+		query.Count = HitQueryStack.size();
+		HitQueries.push_back(query);
 
-	HitBuffer.insert(HitBuffer.end(), HitQueryStack.begin(), HitQueryStack.end());
+		HitBuffer.insert(HitBuffer.end(), HitQueryStack.begin(), HitQueryStack.end());
 
-	pushconstants.hitIndex = index + 1;
+		pushconstants.hitIndex = index + 1;
+	}
+	else
+	{
+		pushconstants.hitIndex = 0;
+	}
 }
 
 void UVulkanRenderDevice::GetStats(TCHAR* Result)

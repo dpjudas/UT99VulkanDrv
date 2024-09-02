@@ -1813,16 +1813,24 @@ void UD3D11RenderDevice::SetHitLocation()
 {
 	DrawBatches();
 
-	INT index = HitQueries.size();
+	if (!HitQueryStack.empty())
+	{
+		INT index = HitQueries.size();
 
-	HitQuery query;
-	query.Start = HitBuffer.size();
-	query.Count = HitQueryStack.size();
-	HitQueries.push_back(query);
+		HitQuery query;
+		query.Start = HitBuffer.size();
+		query.Count = HitQueryStack.size();
+		HitQueries.push_back(query);
 
-	HitBuffer.insert(HitBuffer.end(), HitQueryStack.begin(), HitQueryStack.end());
+		HitBuffer.insert(HitBuffer.end(), HitQueryStack.begin(), HitQueryStack.end());
 
-	SceneConstants.HitIndex = index + 1;
+		SceneConstants.HitIndex = index + 1;
+	}
+	else
+	{
+		SceneConstants.HitIndex = 0;
+	}
+
 	Context->UpdateSubresource(ScenePass.ConstantBuffer, 0, nullptr, &SceneConstants, 0, 0);
 }
 
