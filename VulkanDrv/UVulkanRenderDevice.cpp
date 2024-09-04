@@ -773,7 +773,7 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 
 	DWORD PolyFlags = ApplyPrecedenceRules(Surface.PolyFlags);
 
-	CachedTexture* tex = Textures->GetTexture(Surface.Texture, !!(PolyFlags & (PF_Masked | PF_Translucent)));
+	CachedTexture* tex = Textures->GetTexture(Surface.Texture, !!(PolyFlags & PF_Masked));
 	CachedTexture* lightmap = Textures->GetTexture(Surface.LightMap, false);
 	CachedTexture* macrotex = Textures->GetTexture(Surface.MacroTexture, false);
 	CachedTexture* detailtex = Textures->GetTexture(Surface.DetailTexture, false);
@@ -964,7 +964,7 @@ void UVulkanRenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& In
 
 	SetPipeline(RenderPasses->GetPipeline(PolyFlags, UsesBindless));
 
-	CachedTexture* tex = Textures->GetTexture(&Info, !!(PolyFlags & (PF_Masked | PF_Translucent)));
+	CachedTexture* tex = Textures->GetTexture(&Info, !!(PolyFlags & PF_Masked));
 	ivec4 textureBinds = SetDescriptorSet(PolyFlags, tex);
 
 	float UMult = GetUMult(Info);
@@ -1069,7 +1069,7 @@ void UVulkanRenderDevice::DrawGouraudTriangles(const FSceneNode* Frame, const FT
 
 	SetPipeline(RenderPasses->GetPipeline(PolyFlags, UsesBindless));
 
-	CachedTexture* tex = Textures->GetTexture(const_cast<FTextureInfo*>(&Info), !!(PolyFlags & (PF_Masked | PF_Translucent)));
+	CachedTexture* tex = Textures->GetTexture(const_cast<FTextureInfo*>(&Info), !!(PolyFlags & PF_Masked));
 	ivec4 textureBinds = SetDescriptorSet(PolyFlags, tex);
 
 	float UMult = GetUMult(Info);
@@ -1208,7 +1208,7 @@ void UVulkanRenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT 
 
 	PolyFlags = ApplyPrecedenceRules(PolyFlags);
 
-	CachedTexture* tex = Textures->GetTexture(&Info, !!(PolyFlags & (PF_Masked | PF_Translucent)));
+	CachedTexture* tex = Textures->GetTexture(&Info, !!(PolyFlags & PF_Masked));
 	float UMult = tex ? GetUMult(Info) : 0.0f;
 	float VMult = tex ? GetVMult(Info) : 0.0f;
 	float u0 = U * UMult;
@@ -1669,7 +1669,7 @@ void UVulkanRenderDevice::PrecacheTexture(FTextureInfo& Info, DWORD PolyFlags)
 {
 	guard(UVulkanRenderDevice::PrecacheTexture);
 	PolyFlags = ApplyPrecedenceRules(PolyFlags);
-	Textures->GetTexture(&Info, !!(PolyFlags & (PF_Masked | PF_Translucent)));
+	Textures->GetTexture(&Info, !!(PolyFlags & PF_Masked));
 	unguard;
 }
 

@@ -28,6 +28,9 @@ CachedTexture* TextureManager::GetTexture(FTextureInfo* info, bool masked)
 	if (!info)
 		return nullptr;
 
+	if (info->Texture && (info->Texture->PolyFlags & PF_Masked))
+		masked = true;
+
 	if (info->Format != TEXF_P8)
 		masked = false;
 
