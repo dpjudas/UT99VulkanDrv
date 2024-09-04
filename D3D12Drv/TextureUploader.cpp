@@ -202,8 +202,7 @@ void TextureUploader_P8::UploadRect(void* d, FMipmapBase* mip, int x, int y, int
 	FColor* Ptr = (FColor*)d;
 	if (masked)
 	{
-		FColor translucent = palette[0];
-		translucent.A = 0;
+		FColor translucent(0, 0, 0, 0);
 		for (int i = 0; i < h; i++)
 		{
 			for (int j = 0; j < w; j++)
