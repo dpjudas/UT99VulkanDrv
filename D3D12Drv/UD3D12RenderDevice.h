@@ -219,7 +219,7 @@ public:
 		ComPtr<ID3D12RootSignature> RootSignature;
 		ComPtr<ID3D12PipelineState> Pipelines[32];
 		ComPtr<ID3D12PipelineState> LinePipeline[2];
-		ComPtr<ID3D12PipelineState> PointPipeline;
+		ComPtr<ID3D12PipelineState> PointPipeline[2];
 		FLOAT LODBias = 0.0f;
 		int Multisample = 1;
 	} ScenePass;

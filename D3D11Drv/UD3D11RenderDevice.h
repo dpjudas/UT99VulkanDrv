@@ -163,7 +163,7 @@ public:
 		ComPtr<ID3D11SamplerState> Samplers[16];
 		ScenePipelineState Pipelines[32];
 		ScenePipelineState LinePipeline[2];
-		ScenePipelineState PointPipeline;
+		ScenePipelineState PointPipeline[2];
 		FLOAT LODBias = 0.0f;
 	} ScenePass;
 

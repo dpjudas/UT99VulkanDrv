@@ -1014,6 +1014,7 @@ void UD3D12RenderDevice::CreateScenePass()
 	}
 
 	// Point pipeline
+	for (int i = 0; i < 2; i++)
 	{
 		D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
 		psoDesc.pRootSignature = ScenePass.RootSignature;
@@ -1044,11 +1045,11 @@ void UD3D12RenderDevice::CreateScenePass()
 		psoDesc.BlendState.RenderTarget[1].BlendEnable = FALSE;
 		psoDesc.BlendState.RenderTarget[1].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
 
-		psoDesc.DepthStencilState.DepthEnable = FALSE;
+		psoDesc.DepthStencilState.DepthEnable = i ? TRUE : FALSE;
 		psoDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
 		psoDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
 
-		HRESULT result = Device->CreateGraphicsPipelineState(&psoDesc, ScenePass.PointPipeline.GetIID(), ScenePass.PointPipeline.InitPtr());
+		HRESULT result = Device->CreateGraphicsPipelineState(&psoDesc, ScenePass.PointPipeline[i].GetIID(), ScenePass.PointPipeline[i].InitPtr());
 		ThrowIfFailed(result, "CreateGraphicsPipelineState failed");
 	}
 
@@ -1180,8 +1181,8 @@ void UD3D12RenderDevice::ReleaseScenePass()
 	for (int i = 0; i < 2; i++)
 	{
 		ScenePass.LinePipeline[i].reset();
+		ScenePass.PointPipeline[i].reset();
 	}
-	ScenePass.PointPipeline.reset();
 	ScenePass.RootSignature.reset();
 }
 
@@ -2979,7 +2980,12 @@ void UD3D12RenderDevice::Draw2DPoint(FSceneNode* Frame, FPlane Color, DWORD Line
 	// Hack to fix UED selection problem with selection brush
 	if (GIsEditor) Z = 1.0f;
 
-	SetPipeline(ScenePass.PointPipeline.get(), D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+#if defined(OLDUNREAL469SDK)
+	bool occlude = !!(LineFlags & LINE_DepthCued);
+#else
+	bool occlude = OccludeLines;
+#endif
+	SetPipeline(ScenePass.PointPipeline[occlude].get(), D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	SetDescriptorSet(PF_Highlighted);
 	vec4 color = ApplyInverseGamma(vec4(Color.X, Color.Y, Color.Z, 1.0f));
 

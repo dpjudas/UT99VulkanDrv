@@ -822,6 +822,7 @@ void UD3D11RenderDevice::CreateScenePass()
 	}
 
 	// Point pipeline
+	for (int i = 0; i < 2; i++)
 	{
 		D3D11_BLEND_DESC blendDesc = {};
 		blendDesc.IndependentBlendEnable = TRUE;
@@ -835,18 +836,18 @@ void UD3D11RenderDevice::CreateScenePass()
 		blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 		blendDesc.RenderTarget[1].BlendEnable = FALSE;
 		blendDesc.RenderTarget[1].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
-		HRESULT result = Device->CreateBlendState(&blendDesc, ScenePass.PointPipeline.BlendState.TypedInitPtr());
+		HRESULT result = Device->CreateBlendState(&blendDesc, ScenePass.PointPipeline[i].BlendState.TypedInitPtr());
 		ThrowIfFailed(result, "CreateBlendState(ScenePass.LinePipeline.BlendState) failed");
 
 		D3D11_DEPTH_STENCIL_DESC depthStencilDesc = {};
-		depthStencilDesc.DepthEnable = FALSE;
+		depthStencilDesc.DepthEnable = i ? TRUE : FALSE;
 		depthStencilDesc.DepthFunc = D3D11_COMPARISON_LESS_EQUAL;
 		depthStencilDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
-		result = Device->CreateDepthStencilState(&depthStencilDesc, ScenePass.PointPipeline.DepthStencilState.TypedInitPtr());
+		result = Device->CreateDepthStencilState(&depthStencilDesc, ScenePass.PointPipeline[i].DepthStencilState.TypedInitPtr());
 		ThrowIfFailed(result, "CreateDepthStencilState(ScenePass.PointPipeline.DepthStencilState) failed");
 
-		ScenePass.PointPipeline.PixelShader = ScenePass.PixelShader;
-		ScenePass.PointPipeline.PrimitiveTopology = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+		ScenePass.PointPipeline[i].PixelShader = ScenePass.PixelShader;
+		ScenePass.PointPipeline[i].PrimitiveTopology = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 	}
 
 	D3D11_BUFFER_DESC bufDesc = {};
@@ -940,9 +941,9 @@ void UD3D11RenderDevice::ReleaseScenePass()
 	{
 		ScenePass.LinePipeline[i].BlendState.reset();
 		ScenePass.LinePipeline[i].DepthStencilState.reset();
+		ScenePass.PointPipeline[i].BlendState.reset();
+		ScenePass.PointPipeline[i].DepthStencilState.reset();
 	}
-	ScenePass.PointPipeline.BlendState.reset();
-	ScenePass.PointPipeline.DepthStencilState.reset();
 }
 
 void UD3D11RenderDevice::ReleaseBloomPass()
@@ -2925,7 +2926,12 @@ void UD3D11RenderDevice::Draw2DPoint(FSceneNode* Frame, FPlane Color, DWORD Line
 	// Hack to fix UED selection problem with selection brush
 	if (GIsEditor) Z = 1.0f;
 
-	SetPipeline(&ScenePass.PointPipeline);
+#if defined(OLDUNREAL469SDK)
+	bool occlude = !!(LineFlags & LINE_DepthCued);
+#else
+	bool occlude = OccludeLines;
+#endif
+	SetPipeline(&ScenePass.PointPipeline[occlude]);
 	SetDescriptorSet(PF_Highlighted);
 	vec4 color = ApplyInverseGamma(vec4(Color.X, Color.Y, Color.Z, 1.0f));
 
