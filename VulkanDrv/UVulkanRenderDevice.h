@@ -161,19 +161,24 @@ private:
 			if (vcount > (size_t)BufferManager::SceneVertexBufferSize || icount > (size_t)BufferManager::SceneIndexBufferSize)
 				return { nullptr, nullptr, 0 };
 
-			DrawBatch(Commands->GetDrawCommands());
-			RenderPasses->EndScene(Commands->GetDrawCommands());
-			SubmitAndWait(false, 0, 0, false);
-			auto drawcommands = Commands->GetDrawCommands();
-			RenderPasses->ContinueScene(drawcommands);
-			VkBuffer vertexBuffers[] = { Buffers->SceneVertexBuffer->buffer };
-			VkDeviceSize offsets[] = { 0 };
-			drawcommands->bindVertexBuffers(0, 1, vertexBuffers, offsets);
-			drawcommands->bindIndexBuffer(Buffers->SceneIndexBuffer->buffer, 0, VK_INDEX_TYPE_UINT32);
-			drawcommands->setViewport(0, 1, &viewportdesc);
+			FlushDrawBatchAndWait();
 		}
 
 		return { Buffers->SceneVertices + SceneVertexPos, Buffers->SceneIndexes + SceneIndexPos, (uint32_t)SceneVertexPos };
+	}
+
+	void FlushDrawBatchAndWait()
+	{
+		DrawBatch(Commands->GetDrawCommands());
+		RenderPasses->EndScene(Commands->GetDrawCommands());
+		SubmitAndWait(false, 0, 0, false);
+		auto drawcommands = Commands->GetDrawCommands();
+		RenderPasses->ContinueScene(drawcommands);
+		VkBuffer vertexBuffers[] = { Buffers->SceneVertexBuffer->buffer };
+		VkDeviceSize offsets[] = { 0 };
+		drawcommands->bindVertexBuffers(0, 1, vertexBuffers, offsets);
+		drawcommands->bindIndexBuffer(Buffers->SceneIndexBuffer->buffer, 0, VK_INDEX_TYPE_UINT32);
+		drawcommands->setViewport(0, 1, &viewportdesc);
 	}
 
 	void UseVertices(size_t vcount, size_t icount)
@@ -258,6 +263,13 @@ inline ivec4 UVulkanRenderDevice::GetTextureIndexes(DWORD PolyFlags, CachedTextu
 
 inline ivec4 UVulkanRenderDevice::GetTextureIndexes(DWORD PolyFlags, CachedTexture* tex, CachedTexture* lightmap, CachedTexture* macrotex, CachedTexture* detailtex)
 {
+	if (DescriptorSets->IsTextureArrayFull())
+	{
+		FlushDrawBatchAndWait();
+		DescriptorSets->ClearCache();
+		Textures->ClearAllBindlessIndexes();
+	}
+
 	ivec4 textureBinds;
 	textureBinds.x = DescriptorSets->GetTextureArrayIndex(PolyFlags, tex);
 	textureBinds.y = DescriptorSets->GetTextureArrayIndex(0, macrotex);

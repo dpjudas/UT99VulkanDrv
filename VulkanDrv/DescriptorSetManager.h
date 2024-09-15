@@ -52,7 +52,9 @@ public:
 
 	void ClearCache();
 
+	bool IsTextureArrayFull() const { return Textures.NextBindlessIndex + 4 > MaxBindlessTextures; }
 	int GetTextureArrayIndex(DWORD PolyFlags, CachedTexture* tex, bool clamp = false);
+
 	VulkanDescriptorSet* GetBindlessSet() { return Textures.BindlessSet.get(); }
 	VulkanDescriptorSet* GetPresentSet() { return Present.Set.get(); }
 	VulkanDescriptorSet* GetBloomPPImageSet() { return Bloom.PPImageSet.get(); }
