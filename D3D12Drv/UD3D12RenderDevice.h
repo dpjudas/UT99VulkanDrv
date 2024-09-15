@@ -9,10 +9,6 @@
 #include "D3D12MemAlloc/D3D12MemAlloc.h"
 #include <functional>
 
-#if defined(OLDUNREAL469SDK)
-#define SHOW_OccludeLines 0x00100000 // To do: remove once it is in the public SDK
-#endif
-
 struct SceneVertex
 {
 	uint32_t Flags;

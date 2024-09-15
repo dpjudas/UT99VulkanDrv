@@ -1314,7 +1314,7 @@ void UVulkanRenderDevice::Draw3DLine(FSceneNode* Frame, FPlane Color, DWORD Line
 	else
 	{
 #if defined(OLDUNREAL469SDK)
-		bool occlude = !!(Viewport->Actor->ShowFlags & SHOW_OccludeLines);
+		bool occlude = !!(LineFlags & LINE_DepthCued);
 #else
 		bool occlude = OccludeLines;
 #endif
@@ -1354,7 +1354,7 @@ void UVulkanRenderDevice::Draw2DLine(FSceneNode* Frame, FPlane Color, DWORD Line
 	guard(UVulkanRenderDevice::Draw2DLine);
 
 #if defined(OLDUNREAL469SDK)
-	bool occlude = !!(Viewport->Actor->ShowFlags & SHOW_OccludeLines);
+	bool occlude = !!(LineFlags & LINE_DepthCued);
 #else
 	bool occlude = OccludeLines;
 #endif
@@ -1389,7 +1389,7 @@ void UVulkanRenderDevice::Draw2DPoint(FSceneNode* Frame, FPlane Color, DWORD Lin
 	if (GIsEditor) Z = 1.0f;
 
 #if defined(OLDUNREAL469SDK)
-	bool occlude = !!(Viewport->Actor->ShowFlags & SHOW_OccludeLines);
+	bool occlude = !!(LineFlags & LINE_DepthCued);
 #else
 	bool occlude = OccludeLines;
 #endif

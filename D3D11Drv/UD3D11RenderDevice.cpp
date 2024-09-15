@@ -2851,7 +2851,7 @@ void UD3D11RenderDevice::Draw3DLine(FSceneNode* Frame, FPlane Color, DWORD LineF
 	else
 	{
 #if defined(OLDUNREAL469SDK)
-		bool occlude = !!(Viewport->Actor->ShowFlags & SHOW_OccludeLines);
+		bool occlude = !!(LineFlags & LINE_DepthCued);
 #else
 		bool occlude = OccludeLines;
 #endif
@@ -2891,7 +2891,7 @@ void UD3D11RenderDevice::Draw2DLine(FSceneNode* Frame, FPlane Color, DWORD LineF
 	guard(UD3D11RenderDevice::Draw2DLine);
 
 #if defined(OLDUNREAL469SDK)
-	bool occlude = !!(Viewport->Actor->ShowFlags & SHOW_OccludeLines);
+	bool occlude = !!(LineFlags & LINE_DepthCued);
 #else
 	bool occlude = OccludeLines;
 #endif

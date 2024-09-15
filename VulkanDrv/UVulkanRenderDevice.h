@@ -12,10 +12,6 @@
 #include "vec.h"
 #include "mat.h"
 
-#if defined(OLDUNREAL469SDK)
-#define SHOW_OccludeLines 0x00100000 // To do: remove once it is in the public SDK
-#endif
-
 class CachedTexture;
 
 #if defined(OLDUNREAL469SDK)
