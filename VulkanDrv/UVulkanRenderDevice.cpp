@@ -170,16 +170,23 @@ UBOOL UVulkanRenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT N
 		}
 #endif
 
-		deviceBuilder.OptionalDescriptorIndexing();
+		deviceBuilder.RequireExtension(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
 		deviceBuilder.RequireExtension(VK_KHR_SAMPLER_MIRROR_CLAMP_TO_EDGE_EXTENSION_NAME);
 		deviceBuilder.SelectDevice(VkDeviceIndex);
 
 		Device = deviceBuilder.Create(instance);
 
-		SupportsBindless =
+		bool supportsBindless =
 			Device->EnabledFeatures.DescriptorIndexing.descriptorBindingPartiallyBound &&
 			Device->EnabledFeatures.DescriptorIndexing.runtimeDescriptorArray &&
 			Device->EnabledFeatures.DescriptorIndexing.shaderSampledImageArrayNonUniformIndexing;
+
+		if (!supportsBindless)
+		{
+			debugf(TEXT("VulkanDrv requires a GPU that supports bindless textures!"));
+			Exit();
+			return 0;
+		}
 
 		Commands.reset(new CommandBufferManager(this));
 		Samplers.reset(new SamplerManager(this));
@@ -190,8 +197,6 @@ UBOOL UVulkanRenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT N
 		DescriptorSets.reset(new DescriptorSetManager(this));
 		RenderPasses.reset(new RenderPassManager(this));
 		Framebuffers.reset(new FramebufferManager(this));
-
-		UsesBindless = SupportsBindless;
 
 		const auto& props = Device->PhysicalDevice.Properties.Properties;
 
@@ -227,16 +232,6 @@ UBOOL UVulkanRenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT N
 		debugf(TEXT("Max. texture size: %d"), limits.maxImageDimension2D);
 		debugf(TEXT("Max. uniform buffer range: %d"), limits.maxUniformBufferRange);
 		debugf(TEXT("Min. uniform buffer offset alignment: %llu"), limits.minUniformBufferOffsetAlignment);
-
-		if (SupportsBindless)
-			debugf(TEXT("GPU supports bindless textures"));
-		else
-			debugf(TEXT("GPU does not support bindless textures"));
-
-		if (UsesBindless)
-			debugf(TEXT("Vulkan driver is using bindless textures"));
-		else
-			debugf(TEXT("Vulkan driver is not using bindless textures"));
 	}
 	catch (const std::exception& e)
 	{
@@ -365,8 +360,7 @@ void UVulkanRenderDevice::Exit()
 
 void UVulkanRenderDevice::SubmitAndWait(bool present, int presentWidth, int presentHeight, bool presentFullscreen)
 {
-	if (UsesBindless)
-		DescriptorSets->UpdateBindlessSet();
+	DescriptorSets->UpdateBindlessSet();
 
 	Commands->SubmitCommands(present, presentWidth, presentHeight, presentFullscreen);
 
@@ -672,7 +666,6 @@ void UVulkanRenderDevice::Unlock(UBOOL Blit)
 		SubmitAndWait(Blit ? true : false, windowWidth, windowHeight, Viewport->IsFullscreen());
 
 		Batch.Pipeline = nullptr;
-		Batch.DescriptorSet = nullptr;
 
 		if (Samplers->LODBias != LODBias)
 		{
@@ -761,9 +754,9 @@ void UVulkanRenderDevice::DrawBatch(VulkanCommandBuffer* cmdbuffer)
 	size_t icount = SceneIndexPos - Batch.SceneIndexStart;
 	if (icount > 0)
 	{
-		auto layout = Batch.Bindless ? RenderPasses->Scene.BindlessPipelineLayout.get() : RenderPasses->Scene.PipelineLayout.get();
+		auto layout = RenderPasses->Scene.BindlessPipelineLayout.get();
 		cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, Batch.Pipeline);
-		cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, layout, 0, Batch.DescriptorSet);
+		cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, layout, 0, DescriptorSets->GetBindlessSet());
 		cmdbuffer->pushConstants(layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ScenePushConstants), &pushconstants);
 		cmdbuffer->drawIndexed(icount, 1, Batch.SceneIndexStart, 0, 0);
 		Batch.SceneIndexStart = SceneIndexPos;
@@ -826,9 +819,9 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 		DetailVMult = GetVMult(*Surface.FogMap);
 	}
 
-	SetPipeline(RenderPasses->GetPipeline(PolyFlags, UsesBindless));
+	SetPipeline(RenderPasses->GetPipeline(PolyFlags));
 
-	ivec4 textureBinds = SetDescriptorSet(PolyFlags, tex, lightmap, macrotex, detailtex);
+	ivec4 textureBinds = GetTextureIndexes(PolyFlags, tex, lightmap, macrotex, detailtex);
 	vec4 color(1.0f);
 
 	for (FSavedPoly* Poly = Facet.Polys; Poly; Poly = Poly->Next)
@@ -886,8 +879,8 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 
 	// Editor highlight surface (so stupid this is delegated to the renderdev as the engine could just issue a second call):
 
-	SetPipeline(RenderPasses->GetPipeline(PF_Highlighted, UsesBindless));
-	textureBinds = SetDescriptorSet(PF_Highlighted, nullptr);
+	SetPipeline(RenderPasses->GetPipeline(PF_Highlighted));
+	textureBinds = GetTextureIndexes(PF_Highlighted, nullptr);
 
 	if (PolyFlags & PF_FlatShaded)
 	{
@@ -966,10 +959,10 @@ void UVulkanRenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& In
 
 	PolyFlags = ApplyPrecedenceRules(PolyFlags);
 
-	SetPipeline(RenderPasses->GetPipeline(PolyFlags, UsesBindless));
+	SetPipeline(RenderPasses->GetPipeline(PolyFlags));
 
 	CachedTexture* tex = Textures->GetTexture(&Info, !!(PolyFlags & PF_Masked));
-	ivec4 textureBinds = SetDescriptorSet(PolyFlags, tex);
+	ivec4 textureBinds = GetTextureIndexes(PolyFlags, tex);
 
 	float UMult = GetUMult(Info);
 	float VMult = GetVMult(Info);
@@ -1071,10 +1064,10 @@ void UVulkanRenderDevice::DrawGouraudTriangles(const FSceneNode* Frame, const FT
 
 	PolyFlags = ApplyPrecedenceRules(PolyFlags);
 
-	SetPipeline(RenderPasses->GetPipeline(PolyFlags, UsesBindless));
+	SetPipeline(RenderPasses->GetPipeline(PolyFlags));
 
 	CachedTexture* tex = Textures->GetTexture(const_cast<FTextureInfo*>(&Info), !!(PolyFlags & PF_Masked));
-	ivec4 textureBinds = SetDescriptorSet(PolyFlags, tex);
+	ivec4 textureBinds = GetTextureIndexes(PolyFlags, tex);
 
 	float UMult = GetUMult(Info);
 	float VMult = GetVMult(Info);
@@ -1221,8 +1214,8 @@ void UVulkanRenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT 
 	float v1 = (V + VL) * VMult;
 	bool clamp = (u0 >= 0.0f && u1 <= 1.00001f && v0 >= 0.0f && v1 <= 1.0f + 1.00001f);
 
-	SetPipeline(RenderPasses->GetPipeline(PolyFlags, UsesBindless));
-	ivec4 textureBinds = SetDescriptorSet(PolyFlags, tex, clamp);
+	SetPipeline(RenderPasses->GetPipeline(PolyFlags));
+	ivec4 textureBinds = GetTextureIndexes(PolyFlags, tex, clamp);
 
 	float r, g, b, a;
 	if (PolyFlags & PF_Modulated)
@@ -1318,8 +1311,8 @@ void UVulkanRenderDevice::Draw3DLine(FSceneNode* Frame, FPlane Color, DWORD Line
 #else
 		bool occlude = OccludeLines;
 #endif
-		SetPipeline(RenderPasses->GetLinePipeline(occlude, UsesBindless));
-		ivec4 textureBinds = SetDescriptorSet(PF_Highlighted, nullptr);
+		SetPipeline(RenderPasses->GetLinePipeline(occlude));
+		ivec4 textureBinds = GetTextureIndexes(PF_Highlighted, nullptr);
 		vec4 color = ApplyInverseGamma(vec4(Color.X, Color.Y, Color.Z, 1.0f));
 
 		auto alloc = ReserveVertices(2, 2);
@@ -1358,8 +1351,8 @@ void UVulkanRenderDevice::Draw2DLine(FSceneNode* Frame, FPlane Color, DWORD Line
 #else
 	bool occlude = OccludeLines;
 #endif
-	SetPipeline(RenderPasses->GetLinePipeline(occlude, UsesBindless));
-	ivec4 textureBinds = SetDescriptorSet(PF_Highlighted, nullptr);
+	SetPipeline(RenderPasses->GetLinePipeline(occlude));
+	ivec4 textureBinds = GetTextureIndexes(PF_Highlighted, nullptr);
 	vec4 color = ApplyInverseGamma(vec4(Color.X, Color.Y, Color.Z, 1.0f));
 
 	auto alloc = ReserveVertices(2, 2);
@@ -1393,8 +1386,8 @@ void UVulkanRenderDevice::Draw2DPoint(FSceneNode* Frame, FPlane Color, DWORD Lin
 #else
 	bool occlude = OccludeLines;
 #endif
-	SetPipeline(RenderPasses->GetPointPipeline(occlude, UsesBindless));
-	ivec4 textureBinds = SetDescriptorSet(PF_Highlighted, nullptr);
+	SetPipeline(RenderPasses->GetPointPipeline(occlude));
+	ivec4 textureBinds = GetTextureIndexes(PF_Highlighted, nullptr);
 	vec4 color = ApplyInverseGamma(vec4(Color.X, Color.Y, Color.Z, 1.0f));
 
 	auto alloc = ReserveVertices(4, 6);
@@ -1625,7 +1618,6 @@ void UVulkanRenderDevice::EndFlash()
 		pushconstants.nearClip = vec4(0.0f, 0.0f, 0.0f, 1.0f);
 
 		SetPipeline(RenderPasses->GetEndFlashPipeline());
-		SetDescriptorSet(DescriptorSets->GetTextureSet(0, nullptr), false);
 
 		auto alloc = ReserveVertices(4, 6);
 		if (alloc.vptr)

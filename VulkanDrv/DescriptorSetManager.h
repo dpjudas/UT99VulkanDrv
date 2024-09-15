@@ -50,7 +50,6 @@ public:
 	DescriptorSetManager(UVulkanRenderDevice* renderer);
 	~DescriptorSetManager();
 
-	VulkanDescriptorSet* GetTextureSet(DWORD PolyFlags, CachedTexture* tex, CachedTexture* lightmap = nullptr, CachedTexture* macrotex = nullptr, CachedTexture* detailtex = nullptr, bool clamp = false);
 	void ClearCache();
 
 	int GetTextureArrayIndex(DWORD PolyFlags, CachedTexture* tex, bool clamp = false);
@@ -66,13 +65,11 @@ public:
 	static const int MaxBindlessTextures = 16536;
 
 	VulkanDescriptorSetLayout* GetTextureBindlessLayout() { return Textures.BindlessLayout.get(); }
-	VulkanDescriptorSetLayout* GetTextureLayout() { return Textures.Layout.get(); }
 	VulkanDescriptorSetLayout* GetPresentLayout() { return Present.Layout.get(); }
 	VulkanDescriptorSetLayout* GetBloomLayout() { return Bloom.Layout.get(); }
 
 private:
 	void CreateBindlessTextureSet();
-	void CreateTextureLayout();
 	void CreatePresentLayout();
 	void CreatePresentSet();
 	void CreateBloomLayout();
@@ -83,17 +80,11 @@ private:
 	struct
 	{
 		std::unique_ptr<VulkanDescriptorSetLayout> BindlessLayout;
-		std::unique_ptr<VulkanDescriptorSetLayout> Layout;
-
 		std::unique_ptr<VulkanDescriptorPool> BindlessPool;
 		std::unique_ptr<VulkanDescriptorSet> BindlessSet;
 		WriteDescriptors WriteBindless;
 		int NextBindlessIndex = 0;
 
-		std::vector<std::unique_ptr<VulkanDescriptorPool>> Pool;
-		int PoolSetsLeft = 0;
-
-		std::unordered_map<TexDescriptorKey, std::unique_ptr<VulkanDescriptorSet>> Sets;
 	} Textures;
 
 	struct

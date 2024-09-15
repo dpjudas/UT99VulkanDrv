@@ -25,20 +25,19 @@ public:
 	void BeginPresent(VulkanCommandBuffer* cmdbuffer);
 	void EndPresent(VulkanCommandBuffer* cmdbuffer);
 
-	VulkanPipeline* GetPipeline(DWORD polyflags, bool bindless);
+	VulkanPipeline* GetPipeline(DWORD polyflags);
 	VulkanPipeline* GetEndFlashPipeline();
-	VulkanPipeline* GetLinePipeline(bool occludeLines, bool bindless) { return Scene.LinePipeline[occludeLines][bindless].get(); }
-	VulkanPipeline* GetPointPipeline(bool occludeLines, bool bindless) { return Scene.PointPipeline[occludeLines][bindless].get(); }
+	VulkanPipeline* GetLinePipeline(bool occludeLines) { return Scene.LinePipeline[occludeLines].get(); }
+	VulkanPipeline* GetPointPipeline(bool occludeLines) { return Scene.PointPipeline[occludeLines].get(); }
 
 	struct
 	{
-		std::unique_ptr<VulkanPipelineLayout> PipelineLayout;
 		std::unique_ptr<VulkanPipelineLayout> BindlessPipelineLayout;
 		std::unique_ptr<VulkanRenderPass> RenderPass;
 		std::unique_ptr<VulkanRenderPass> RenderPassContinue;
-		std::unique_ptr<VulkanPipeline> Pipeline[2][32];
-		std::unique_ptr<VulkanPipeline> LinePipeline[2][2];
-		std::unique_ptr<VulkanPipeline> PointPipeline[2][2];
+		std::unique_ptr<VulkanPipeline> Pipeline[32];
+		std::unique_ptr<VulkanPipeline> LinePipeline[2];
+		std::unique_ptr<VulkanPipeline> PointPipeline[2];
 	} Scene;
 
 	struct
@@ -66,7 +65,6 @@ public:
 	} Postprocess;
 
 private:
-	void CreateScenePipelineLayout();
 	void CreateSceneBindlessPipelineLayout();
 	void CreatePresentPipelineLayout();
 	void CreateBloomPipelineLayout();

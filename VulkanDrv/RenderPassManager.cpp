@@ -5,7 +5,6 @@
 
 RenderPassManager::RenderPassManager(UVulkanRenderDevice* renderer) : renderer(renderer)
 {
-	CreateScenePipelineLayout();
 	CreateSceneBindlessPipelineLayout();
 	CreatePostprocessRenderPass();
 	CreatePresentPipelineLayout();
@@ -18,20 +17,8 @@ RenderPassManager::~RenderPassManager()
 {
 }
 
-void RenderPassManager::CreateScenePipelineLayout()
-{
-	Scene.PipelineLayout = PipelineLayoutBuilder()
-		.AddSetLayout(renderer->DescriptorSets->GetTextureLayout())
-		.AddPushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ScenePushConstants))
-		.DebugName("ScenePipelineLayout")
-		.Create(renderer->Device.get());
-}
-
 void RenderPassManager::CreateSceneBindlessPipelineLayout()
 {
-	if (!renderer->SupportsBindless)
-		return;
-
 	Scene.BindlessPipelineLayout = PipelineLayoutBuilder()
 		.AddSetLayout(renderer->DescriptorSets->GetTextureBindlessLayout())
 		.AddPushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ScenePushConstants))
@@ -98,7 +85,7 @@ void RenderPassManager::EndPresent(VulkanCommandBuffer* cmdbuffer)
 	cmdbuffer->endRenderPass();
 }
 
-VulkanPipeline* RenderPassManager::GetPipeline(DWORD PolyFlags, bool bindless)
+VulkanPipeline* RenderPassManager::GetPipeline(DWORD PolyFlags)
 {
 	int index;
 	if (PolyFlags & PF_Translucent)
@@ -131,169 +118,160 @@ VulkanPipeline* RenderPassManager::GetPipeline(DWORD PolyFlags, bool bindless)
 		index |= 16;
 	}
 
-	return Scene.Pipeline[bindless ? 1 : 0][index].get();
+	return Scene.Pipeline[index].get();
 }
 
 VulkanPipeline* RenderPassManager::GetEndFlashPipeline()
 {
-	return Scene.Pipeline[0][2].get();
+	return Scene.Pipeline[2].get();
 }
 
 void RenderPassManager::CreatePipelines()
 {
-	VulkanShader* vertShader[2] = { renderer->Shaders->Scene.VertexShader.get(), renderer->Shaders->SceneBindless.VertexShader.get() };
-	VulkanShader* fragShader[2] = { renderer->Shaders->Scene.FragmentShader.get(), renderer->Shaders->SceneBindless.FragmentShader.get() };
-	VulkanShader* fragShaderAlphaTest[2] = { renderer->Shaders->Scene.FragmentShaderAlphaTest.get(), renderer->Shaders->SceneBindless.FragmentShaderAlphaTest.get() };
-	VulkanPipelineLayout* layout[2] = { Scene.PipelineLayout.get(), Scene.BindlessPipelineLayout.get() };
-	static const char* debugName[2] = { "ScenePipeline", "SceneBindlessPipeline" };
+	VulkanShader* vertShader = renderer->Shaders->Scene.VertexShader.get();
+	VulkanShader* fragShader = renderer->Shaders->Scene.FragmentShader.get();
+	VulkanShader* fragShaderAlphaTest = renderer->Shaders->Scene.FragmentShaderAlphaTest.get();
+	VulkanPipelineLayout* layout = Scene.BindlessPipelineLayout.get();
+	static const char* debugName = "ScenePipeline";
 
-	for (int type = 0; type < 2; type++)
+	for (int i = 0; i < 32; i++)
 	{
-		if (type == 1 && !renderer->SupportsBindless)
+		GraphicsPipelineBuilder builder;
+		builder.AddVertexShader(vertShader);
+		builder.Viewport(0.0f, 0.0f, (float)renderer->Textures->Scene->Width, (float)renderer->Textures->Scene->Height);
+		builder.Scissor(0, 0, renderer->Textures->Scene->Width, renderer->Textures->Scene->Height);
+		builder.Topology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+		builder.Cull(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+		builder.AddVertexBufferBinding(0, sizeof(SceneVertex));
+		builder.AddVertexAttribute(0, 0, VK_FORMAT_R32_UINT, offsetof(SceneVertex, Flags));
+		builder.AddVertexAttribute(1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(SceneVertex, Position));
+		builder.AddVertexAttribute(2, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, TexCoord));
+		builder.AddVertexAttribute(3, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, TexCoord2));
+		builder.AddVertexAttribute(4, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, TexCoord3));
+		builder.AddVertexAttribute(5, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, TexCoord4));
+		builder.AddVertexAttribute(6, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(SceneVertex, Color));
+		builder.AddVertexAttribute(7, 0, VK_FORMAT_R32G32B32A32_SINT, offsetof(SceneVertex, TextureBinds));
+		builder.AddDynamicState(VK_DYNAMIC_STATE_VIEWPORT);
+		builder.Layout(layout);
+		builder.RenderPass(Scene.RenderPass.get());
+
+		// Avoid clipping the weapon. The UE1 engine clips the geometry anyway.
+		if (renderer->Device.get()->EnabledFeatures.Features.depthClamp)
+			builder.DepthClampEnable(true);
+
+		ColorBlendAttachmentBuilder colorblend;
+		switch (i & 3)
+		{
+		case 0: // PF_Translucent
+			colorblend.BlendMode(VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR);
+			builder.DepthBias(true, -1.0f, 0.0f, -1.0f);
 			break;
-
-		for (int i = 0; i < 32; i++)
-		{
-			GraphicsPipelineBuilder builder;
-			builder.AddVertexShader(vertShader[type]);
-			builder.Viewport(0.0f, 0.0f, (float)renderer->Textures->Scene->Width, (float)renderer->Textures->Scene->Height);
-			builder.Scissor(0, 0, renderer->Textures->Scene->Width, renderer->Textures->Scene->Height);
-			builder.Topology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-			builder.Cull(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
-			builder.AddVertexBufferBinding(0, sizeof(SceneVertex));
-			builder.AddVertexAttribute(0, 0, VK_FORMAT_R32_UINT, offsetof(SceneVertex, Flags));
-			builder.AddVertexAttribute(1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(SceneVertex, Position));
-			builder.AddVertexAttribute(2, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, TexCoord));
-			builder.AddVertexAttribute(3, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, TexCoord2));
-			builder.AddVertexAttribute(4, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, TexCoord3));
-			builder.AddVertexAttribute(5, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, TexCoord4));
-			builder.AddVertexAttribute(6, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(SceneVertex, Color));
-			if (type == 1)
-				builder.AddVertexAttribute(7, 0, VK_FORMAT_R32G32B32A32_SINT, offsetof(SceneVertex, TextureBinds));
-			builder.AddDynamicState(VK_DYNAMIC_STATE_VIEWPORT);
-			builder.Layout(layout[type]);
-			builder.RenderPass(Scene.RenderPass.get());
-
-			// Avoid clipping the weapon. The UE1 engine clips the geometry anyway.
-			if (renderer->Device.get()->EnabledFeatures.Features.depthClamp)
-				builder.DepthClampEnable(true);
-
-			ColorBlendAttachmentBuilder colorblend;
-			switch (i & 3)
-			{
-			case 0: // PF_Translucent
-				colorblend.BlendMode(VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR);
-				builder.DepthBias(true, -1.0f, 0.0f, -1.0f);
-				break;
-			case 1: // PF_Modulated
-				colorblend.BlendMode(VK_BLEND_OP_ADD, VK_BLEND_FACTOR_DST_COLOR, VK_BLEND_FACTOR_SRC_COLOR);
-				builder.DepthBias(true, -1.0f, 0.0f, -1.0f);
-				break;
-			case 2: // PF_Highlighted
-				colorblend.BlendMode(VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA);
-				builder.DepthBias(true, -1.0f, 0.0f, -1.0f);
-				break;
-			case 3:
-				colorblend.BlendMode(VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ZERO); // Hmm, is it faster to keep the blend mode enabled or to toggle it?
-				break;
-			}
-
-			if (i & 4) // PF_Invisible
-			{
-				colorblend.ColorWriteMask(0);
-			}
-
-			if (i & 8) // PF_Occlude
-			{
-				builder.DepthStencilEnable(true, true, false);
-			}
-			else
-			{
-				builder.DepthStencilEnable(true, false, false);
-			}
-
-			if (i & 16) // PF_Masked
-				builder.AddFragmentShader(fragShaderAlphaTest[type]);
-			else
-				builder.AddFragmentShader(fragShader[type]);
-
-			builder.AddColorBlendAttachment(colorblend.Create());
-			builder.AddColorBlendAttachment(ColorBlendAttachmentBuilder().Create());
-
-			builder.RasterizationSamples(renderer->Textures->Scene->SceneSamples);
-			builder.DebugName(debugName[type]);
-
-			Scene.Pipeline[type][i] = builder.Create(renderer->Device.get());
+		case 1: // PF_Modulated
+			colorblend.BlendMode(VK_BLEND_OP_ADD, VK_BLEND_FACTOR_DST_COLOR, VK_BLEND_FACTOR_SRC_COLOR);
+			builder.DepthBias(true, -1.0f, 0.0f, -1.0f);
+			break;
+		case 2: // PF_Highlighted
+			colorblend.BlendMode(VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA);
+			builder.DepthBias(true, -1.0f, 0.0f, -1.0f);
+			break;
+		case 3:
+			colorblend.BlendMode(VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ZERO); // Hmm, is it faster to keep the blend mode enabled or to toggle it?
+			break;
 		}
 
-		// Line pipeline
-		for (int i = 0; i < 2; i++)
+		if (i & 4) // PF_Invisible
 		{
-			GraphicsPipelineBuilder builder;
-			builder.AddVertexShader(vertShader[type]);
-			builder.Viewport(0.0f, 0.0f, (float)renderer->Textures->Scene->Width, (float)renderer->Textures->Scene->Height);
-			builder.Scissor(0, 0, renderer->Textures->Scene->Width, renderer->Textures->Scene->Height);
-			builder.Topology(VK_PRIMITIVE_TOPOLOGY_LINE_LIST);
-			builder.Cull(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
-			builder.AddVertexBufferBinding(0, sizeof(SceneVertex));
-			builder.AddVertexAttribute(0, 0, VK_FORMAT_R32_UINT, offsetof(SceneVertex, Flags));
-			builder.AddVertexAttribute(1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(SceneVertex, Position));
-			builder.AddVertexAttribute(2, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, TexCoord));
-			builder.AddVertexAttribute(3, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, TexCoord2));
-			builder.AddVertexAttribute(4, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, TexCoord3));
-			builder.AddVertexAttribute(5, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, TexCoord4));
-			builder.AddVertexAttribute(6, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(SceneVertex, Color));
-			if (type == 1)
-				builder.AddVertexAttribute(7, 0, VK_FORMAT_R32G32B32A32_SINT, offsetof(SceneVertex, TextureBinds));
-			builder.AddDynamicState(VK_DYNAMIC_STATE_VIEWPORT);
-			builder.Layout(layout[type]);
-			builder.RenderPass(Scene.RenderPass.get());
-
-			builder.AddColorBlendAttachment(ColorBlendAttachmentBuilder().BlendMode(VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA).Create());
-			builder.AddColorBlendAttachment(ColorBlendAttachmentBuilder().Create());
-
-			builder.DepthStencilEnable(i == 1, false, false);
-			builder.AddFragmentShader(fragShader[type]);
-
-			builder.RasterizationSamples(renderer->Textures->Scene->SceneSamples);
-			builder.DebugName(debugName[type]);
-
-			Scene.LinePipeline[i][type] = builder.Create(renderer->Device.get());
+			colorblend.ColorWriteMask(0);
 		}
 
-		// Point pipeline
-		for (int i = 0; i < 2; i++)
+		if (i & 8) // PF_Occlude
 		{
-			GraphicsPipelineBuilder builder;
-			builder.AddVertexShader(vertShader[type]);
-			builder.AddFragmentShader(fragShader[type]);
-			builder.Viewport(0.0f, 0.0f, (float)renderer->Textures->Scene->Width, (float)renderer->Textures->Scene->Height);
-			builder.Scissor(0, 0, renderer->Textures->Scene->Width, renderer->Textures->Scene->Height);
-			builder.Topology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-			builder.Cull(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
-			builder.AddVertexBufferBinding(0, sizeof(SceneVertex));
-			builder.AddVertexAttribute(0, 0, VK_FORMAT_R32_UINT, offsetof(SceneVertex, Flags));
-			builder.AddVertexAttribute(1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(SceneVertex, Position));
-			builder.AddVertexAttribute(2, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, TexCoord));
-			builder.AddVertexAttribute(3, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, TexCoord2));
-			builder.AddVertexAttribute(4, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, TexCoord3));
-			builder.AddVertexAttribute(5, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, TexCoord4));
-			builder.AddVertexAttribute(6, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(SceneVertex, Color));
-			if (type == 1)
-				builder.AddVertexAttribute(7, 0, VK_FORMAT_R32G32B32A32_SINT, offsetof(SceneVertex, TextureBinds));
-			builder.AddDynamicState(VK_DYNAMIC_STATE_VIEWPORT);
-			builder.Layout(layout[type]);
-			builder.RenderPass(Scene.RenderPass.get());
-
-			builder.AddColorBlendAttachment(ColorBlendAttachmentBuilder().BlendMode(VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA).Create());
-			builder.AddColorBlendAttachment(ColorBlendAttachmentBuilder().Create());
-
-			builder.DepthStencilEnable(false, false, false);
-			builder.RasterizationSamples(renderer->Textures->Scene->SceneSamples);
-			builder.DebugName(debugName[type]);
-
-			Scene.PointPipeline[i][type] = builder.Create(renderer->Device.get());
+			builder.DepthStencilEnable(true, true, false);
 		}
+		else
+		{
+			builder.DepthStencilEnable(true, false, false);
+		}
+
+		if (i & 16) // PF_Masked
+			builder.AddFragmentShader(fragShaderAlphaTest);
+		else
+			builder.AddFragmentShader(fragShader);
+
+		builder.AddColorBlendAttachment(colorblend.Create());
+		builder.AddColorBlendAttachment(ColorBlendAttachmentBuilder().Create());
+
+		builder.RasterizationSamples(renderer->Textures->Scene->SceneSamples);
+		builder.DebugName(debugName);
+
+		Scene.Pipeline[i] = builder.Create(renderer->Device.get());
+	}
+
+	// Line pipeline
+	for (int i = 0; i < 2; i++)
+	{
+		GraphicsPipelineBuilder builder;
+		builder.AddVertexShader(vertShader);
+		builder.Viewport(0.0f, 0.0f, (float)renderer->Textures->Scene->Width, (float)renderer->Textures->Scene->Height);
+		builder.Scissor(0, 0, renderer->Textures->Scene->Width, renderer->Textures->Scene->Height);
+		builder.Topology(VK_PRIMITIVE_TOPOLOGY_LINE_LIST);
+		builder.Cull(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+		builder.AddVertexBufferBinding(0, sizeof(SceneVertex));
+		builder.AddVertexAttribute(0, 0, VK_FORMAT_R32_UINT, offsetof(SceneVertex, Flags));
+		builder.AddVertexAttribute(1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(SceneVertex, Position));
+		builder.AddVertexAttribute(2, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, TexCoord));
+		builder.AddVertexAttribute(3, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, TexCoord2));
+		builder.AddVertexAttribute(4, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, TexCoord3));
+		builder.AddVertexAttribute(5, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, TexCoord4));
+		builder.AddVertexAttribute(6, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(SceneVertex, Color));
+		builder.AddVertexAttribute(7, 0, VK_FORMAT_R32G32B32A32_SINT, offsetof(SceneVertex, TextureBinds));
+		builder.AddDynamicState(VK_DYNAMIC_STATE_VIEWPORT);
+		builder.Layout(layout);
+		builder.RenderPass(Scene.RenderPass.get());
+
+		builder.AddColorBlendAttachment(ColorBlendAttachmentBuilder().BlendMode(VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA).Create());
+		builder.AddColorBlendAttachment(ColorBlendAttachmentBuilder().Create());
+
+		builder.DepthStencilEnable(i == 1, false, false);
+		builder.AddFragmentShader(fragShader);
+
+		builder.RasterizationSamples(renderer->Textures->Scene->SceneSamples);
+		builder.DebugName(debugName);
+
+		Scene.LinePipeline[i] = builder.Create(renderer->Device.get());
+	}
+
+	// Point pipeline
+	for (int i = 0; i < 2; i++)
+	{
+		GraphicsPipelineBuilder builder;
+		builder.AddVertexShader(vertShader);
+		builder.AddFragmentShader(fragShader);
+		builder.Viewport(0.0f, 0.0f, (float)renderer->Textures->Scene->Width, (float)renderer->Textures->Scene->Height);
+		builder.Scissor(0, 0, renderer->Textures->Scene->Width, renderer->Textures->Scene->Height);
+		builder.Topology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+		builder.Cull(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+		builder.AddVertexBufferBinding(0, sizeof(SceneVertex));
+		builder.AddVertexAttribute(0, 0, VK_FORMAT_R32_UINT, offsetof(SceneVertex, Flags));
+		builder.AddVertexAttribute(1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(SceneVertex, Position));
+		builder.AddVertexAttribute(2, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, TexCoord));
+		builder.AddVertexAttribute(3, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, TexCoord2));
+		builder.AddVertexAttribute(4, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, TexCoord3));
+		builder.AddVertexAttribute(5, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(SceneVertex, TexCoord4));
+		builder.AddVertexAttribute(6, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(SceneVertex, Color));
+		builder.AddVertexAttribute(7, 0, VK_FORMAT_R32G32B32A32_SINT, offsetof(SceneVertex, TextureBinds));
+		builder.AddDynamicState(VK_DYNAMIC_STATE_VIEWPORT);
+		builder.Layout(layout);
+		builder.RenderPass(Scene.RenderPass.get());
+
+		builder.AddColorBlendAttachment(ColorBlendAttachmentBuilder().BlendMode(VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA).Create());
+		builder.AddColorBlendAttachment(ColorBlendAttachmentBuilder().Create());
+
+		builder.DepthStencilEnable(false, false, false);
+		builder.RasterizationSamples(renderer->Textures->Scene->SceneSamples);
+		builder.DebugName(debugName);
+
+		Scene.PointPipeline[i] = builder.Create(renderer->Device.get());
 	}
 }
 
@@ -324,10 +302,10 @@ void RenderPassManager::CreateRenderPass()
 			VK_IMAGE_LAYOUT_UNDEFINED,
 			VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
 		.AddExternalSubpassDependency(
-			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT,
-			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT)
+			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+			VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_SHADER_WRITE_BIT,
+			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_SHADER_READ_BIT)
 		.AddSubpass()
 		.AddSubpassColorAttachmentRef(0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
 		.AddSubpassColorAttachmentRef(1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
@@ -360,10 +338,10 @@ void RenderPassManager::CreateRenderPass()
 			VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
 			VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
 		.AddExternalSubpassDependency(
-			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT,
-			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT)
+			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+			VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_SHADER_WRITE_BIT,
+			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_SHADER_READ_BIT)
 		.AddSubpass()
 		.AddSubpassColorAttachmentRef(0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
 		.AddSubpassColorAttachmentRef(1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
@@ -385,8 +363,8 @@ void RenderPassManager::CreatePresentRenderPass()
 		.AddExternalSubpassDependency(
 			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
 			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT,
-			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT)
+			VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_SHADER_WRITE_BIT,
+			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_SHADER_READ_BIT)
 		.AddSubpass()
 		.AddSubpassColorAttachmentRef(0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
 		.DebugName("PresentRenderPass")
@@ -438,8 +416,8 @@ void RenderPassManager::CreatePostprocessRenderPass()
 		.AddExternalSubpassDependency(
 			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
 			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT,
-			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT)
+			VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_SHADER_WRITE_BIT,
+			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_SHADER_READ_BIT)
 		.AddSubpass()
 		.AddSubpassColorAttachmentRef(0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
 		.DebugName("PPRenderPass")
@@ -456,8 +434,8 @@ void RenderPassManager::CreatePostprocessRenderPass()
 		.AddExternalSubpassDependency(
 			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
 			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT,
-			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT)
+			VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_SHADER_WRITE_BIT,
+			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_SHADER_READ_BIT)
 		.AddSubpass()
 		.AddSubpassColorAttachmentRef(0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
 		.DebugName("PPRenderPassCombine")

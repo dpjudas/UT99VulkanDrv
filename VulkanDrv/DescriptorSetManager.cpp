@@ -7,7 +7,6 @@
 DescriptorSetManager::DescriptorSetManager(UVulkanRenderDevice* renderer) : renderer(renderer)
 {
 	CreateBindlessTextureSet();
-	CreateTextureLayout();
 	CreatePresentLayout();
 	CreatePresentSet();
 	CreateBloomLayout();
@@ -18,57 +17,27 @@ DescriptorSetManager::~DescriptorSetManager()
 {
 }
 
-VulkanDescriptorSet* DescriptorSetManager::GetTextureSet(DWORD PolyFlags, CachedTexture* tex, CachedTexture* lightmap, CachedTexture* macrotex, CachedTexture* detailtex, bool clamp)
-{
-	uint32_t samplermode = 0;
-	if (PolyFlags & PF_NoSmooth) samplermode |= 1;
-	if (clamp) samplermode |= 2;
-
-	auto& descriptorSet = Textures.Sets[{ tex, lightmap, detailtex, macrotex, samplermode }];
-	if (!descriptorSet)
-	{
-		if (Textures.PoolSetsLeft == 0)
-		{
-			Textures.Pool.push_back(DescriptorPoolBuilder()
-				.AddPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 * 4)
-				.MaxSets(1000)
-				.DebugName("TexturePool")
-				.Create(renderer->Device.get()));
-			Textures.PoolSetsLeft = 1000;
-		}
-
-		descriptorSet = Textures.Pool.back()->allocate(Textures.Layout.get());
-		Textures.PoolSetsLeft--;
-
-		WriteDescriptors writes;
-		int i = 0;
-		for (CachedTexture* texture : { tex, lightmap, macrotex, detailtex })
-		{
-			VulkanSampler* sampler = (i == 0) ? renderer->Samplers->Samplers[samplermode].get() : renderer->Samplers->Samplers[0].get();
-
-			if (texture)
-				writes.AddCombinedImageSampler(descriptorSet.get(), i++, texture->imageView.get(), sampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-			else
-				writes.AddCombinedImageSampler(descriptorSet.get(), i++, renderer->Textures->NullTextureView.get(), sampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-		}
-		writes.Execute(renderer->Device.get());
-	}
-	return descriptorSet.get();
-}
-
 void DescriptorSetManager::ClearCache()
 {
-	Textures.Sets.clear();
-
-	Textures.Pool.clear();
-	Textures.PoolSetsLeft = 0;
-
 	Textures.WriteBindless = WriteDescriptors();
 	Textures.NextBindlessIndex = 0;
 }
 
 int DescriptorSetManager::GetTextureArrayIndex(DWORD PolyFlags, CachedTexture* tex, bool clamp)
 {
+	if (Textures.NextBindlessIndex == MaxBindlessTextures)
+	{
+		static bool firstCall = true;
+		if (firstCall)
+		{
+			debugf(TEXT("============================================================================"));
+			debugf(TEXT("VulkanDrv encountered more than %d textures!!!"), MaxBindlessTextures);
+			debugf(TEXT("============================================================================"));
+			firstCall = false;
+		}
+		return 0; // Oh oh, we are out of texture slots
+	}
+
 	if (Textures.NextBindlessIndex == 0)
 	{
 		Textures.WriteBindless.AddCombinedImageSampler(Textures.BindlessSet.get(), 0, 0, renderer->Textures->NullTextureView.get(), renderer->Samplers->Samplers[0].get(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
@@ -103,9 +72,6 @@ void DescriptorSetManager::UpdateBindlessSet()
 
 void DescriptorSetManager::CreateBindlessTextureSet()
 {
-	if (!renderer->SupportsBindless)
-		return;
-
 	Textures.BindlessPool = DescriptorPoolBuilder()
 		.Flags(VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT_EXT)
 		.AddPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, MaxBindlessTextures)
@@ -124,17 +90,6 @@ void DescriptorSetManager::CreateBindlessTextureSet()
 		.Create(renderer->Device.get());
 
 	Textures.BindlessSet = Textures.BindlessPool->allocate(Textures.BindlessLayout.get(), MaxBindlessTextures);
-}
-
-void DescriptorSetManager::CreateTextureLayout()
-{
-	Textures.Layout = DescriptorSetLayoutBuilder()
-		.AddBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT)
-		.AddBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT)
-		.AddBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT)
-		.AddBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT)
-		.DebugName("TextureLayout")
-		.Create(renderer->Device.get());
 }
 
 void DescriptorSetManager::CreatePresentLayout()

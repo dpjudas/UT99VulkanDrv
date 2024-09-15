@@ -86,9 +86,6 @@ public:
 	std::unique_ptr<RenderPassManager> RenderPasses;
 	std::unique_ptr<FramebufferManager> Framebuffers;
 
-	bool SupportsBindless = false;
-	bool UsesBindless = false;
-
 	// Configuration.
 	BITFIELD UseVSync;
 	FLOAT GammaOffset;
@@ -199,9 +196,8 @@ private:
 	bool IsLocked = false;
 
 	void SetPipeline(VulkanPipeline* pipeline);
-	ivec4 SetDescriptorSet(DWORD PolyFlags, CachedTexture* tex, bool clamp = false);
-	ivec4 SetDescriptorSet(DWORD PolyFlags, CachedTexture* tex, CachedTexture* lightmap, CachedTexture* macrotex, CachedTexture* detailtex);
-	void SetDescriptorSet(VulkanDescriptorSet* descriptorSet, bool bindless);
+	ivec4 GetTextureIndexes(DWORD PolyFlags, CachedTexture* tex, bool clamp = false);
+	ivec4 GetTextureIndexes(DWORD PolyFlags, CachedTexture* tex, CachedTexture* lightmap, CachedTexture* macrotex, CachedTexture* detailtex);
 	void DrawBatch(VulkanCommandBuffer* cmdbuffer);
 	void SubmitAndWait(bool present, int presentWidth, int presentHeight, bool presentFullscreen);
 
@@ -211,8 +207,6 @@ private:
 	{
 		size_t SceneIndexStart = 0;
 		VulkanPipeline* Pipeline = nullptr;
-		VulkanDescriptorSet* DescriptorSet = nullptr;
-		bool Bindless = false;
 	} Batch;
 
 	ScenePushConstants pushconstants;
@@ -257,52 +251,19 @@ inline void UVulkanRenderDevice::SetPipeline(VulkanPipeline* pipeline)
 	}
 }
 
-inline ivec4 UVulkanRenderDevice::SetDescriptorSet(DWORD PolyFlags, CachedTexture* tex, bool clamp)
+inline ivec4 UVulkanRenderDevice::GetTextureIndexes(DWORD PolyFlags, CachedTexture* tex, bool clamp)
 {
-	if (UsesBindless)
-	{
-		SetDescriptorSet(DescriptorSets->GetBindlessSet(), true);
-		return ivec4(DescriptorSets->GetTextureArrayIndex(PolyFlags, tex, clamp), 0, 0, 0);
-	}
-	else
-	{
-		SetDescriptorSet(DescriptorSets->GetTextureSet(PolyFlags, tex, nullptr, nullptr, nullptr, clamp), false);
-		return ivec4(0);
-	}
+	return ivec4(DescriptorSets->GetTextureArrayIndex(PolyFlags, tex, clamp), 0, 0, 0);
 }
 
-inline ivec4 UVulkanRenderDevice::SetDescriptorSet(DWORD PolyFlags, CachedTexture* tex, CachedTexture* lightmap, CachedTexture* macrotex, CachedTexture* detailtex)
+inline ivec4 UVulkanRenderDevice::GetTextureIndexes(DWORD PolyFlags, CachedTexture* tex, CachedTexture* lightmap, CachedTexture* macrotex, CachedTexture* detailtex)
 {
 	ivec4 textureBinds;
-	if (UsesBindless)
-	{
-		textureBinds.x = DescriptorSets->GetTextureArrayIndex(PolyFlags, tex);
-		textureBinds.y = DescriptorSets->GetTextureArrayIndex(0, macrotex);
-		textureBinds.z = DescriptorSets->GetTextureArrayIndex(0, detailtex);
-		textureBinds.w = DescriptorSets->GetTextureArrayIndex(0, lightmap);
-
-		SetDescriptorSet(DescriptorSets->GetBindlessSet(), true);
-	}
-	else
-	{
-		textureBinds.x = 0.0f;
-		textureBinds.y = 0.0f;
-		textureBinds.z = 0.0f;
-		textureBinds.w = 0.0f;
-
-		SetDescriptorSet(DescriptorSets->GetTextureSet(PolyFlags, tex, lightmap, macrotex, detailtex), false);
-	}
+	textureBinds.x = DescriptorSets->GetTextureArrayIndex(PolyFlags, tex);
+	textureBinds.y = DescriptorSets->GetTextureArrayIndex(0, macrotex);
+	textureBinds.z = DescriptorSets->GetTextureArrayIndex(0, detailtex);
+	textureBinds.w = DescriptorSets->GetTextureArrayIndex(0, lightmap);
 	return textureBinds;
-}
-
-inline void UVulkanRenderDevice::SetDescriptorSet(VulkanDescriptorSet* descriptorSet, bool bindless)
-{
-	if (descriptorSet != Batch.DescriptorSet)
-	{
-		DrawBatch(Commands->GetDrawCommands());
-		Batch.DescriptorSet = descriptorSet;
-		Batch.Bindless = bindless;
-	}
 }
 
 inline float GetUMult(const FTextureInfo& Info) { return 1.0f / (Info.UScale * Info.USize); }

@@ -24,9 +24,7 @@ std::string FileResource::readAllText(const std::string& filename)
 			layout(location = 4) in vec2 aTexCoord3;
 			layout(location = 5) in vec2 aTexCoord4;
 			layout(location = 6) in vec4 aColor;
-			#if defined(BINDLESS_TEXTURES)
 			layout(location = 7) in ivec4 aTextureBinds;
-			#endif
 
 			layout(location = 0) flat out uint flags;
 			layout(location = 1) out vec2 texCoord;
@@ -35,9 +33,7 @@ std::string FileResource::readAllText(const std::string& filename)
 			layout(location = 4) out vec2 texCoord4;
 			layout(location = 5) out vec4 color;
 			layout(location = 6) flat out uint hitIndex;
-			#if defined(BINDLESS_TEXTURES)
 			layout(location = 7) flat out ivec4 textureBinds;
-			#endif
 
 			void main()
 			{
@@ -50,23 +46,14 @@ std::string FileResource::readAllText(const std::string& filename)
 				texCoord4 = aTexCoord4;
 				color = aColor;
 				hitIndex = uHitIndex;
-				#if defined(BINDLESS_TEXTURES)
 				textureBinds = aTextureBinds;
-				#endif
 			}
 		)";
 	}
 	else if (filename == "shaders/Scene.frag")
 	{
 		return R"(
-			#if defined(BINDLESS_TEXTURES)
 			layout(binding = 0) uniform sampler2D textures[];
-			#else
-			layout(binding = 0) uniform sampler2D tex;
-			layout(binding = 1) uniform sampler2D texLightmap;
-			layout(binding = 2) uniform sampler2D texMacro;
-			layout(binding = 3) uniform sampler2D texDetail;
-			#endif
 
 			layout(location = 0) flat in uint flags;
 			layout(location = 1) centroid in vec2 texCoord;
@@ -75,9 +62,7 @@ std::string FileResource::readAllText(const std::string& filename)
 			layout(location = 4) in vec2 texCoord4;
 			layout(location = 5) in vec4 color;
 			layout(location = 6) flat in uint hitIndex;
-			#if defined(BINDLESS_TEXTURES)
 			layout(location = 7) flat in ivec4 textureBinds;
-			#endif
 
 			layout(location = 0) out vec4 outColor;
 			layout(location = 1) out uint outHitIndex;
@@ -89,17 +74,10 @@ std::string FileResource::readAllText(const std::string& filename)
 				return vec4(clamp((c.rgb - cutoff) / (1.0 - cutoff), 0.0, 1.0), c.a);
 			}
 
-			#if defined(BINDLESS_TEXTURES)
 			vec4 textureTex(vec2 uv) { return texture(textures[textureBinds.x], uv); }
 			vec4 textureMacro(vec2 uv) { return texture(textures[textureBinds.y], uv); }
 			vec4 textureDetail(vec2 uv) { return texture(textures[textureBinds.z], uv); }
 			vec4 textureLightmap(vec2 uv) { return texture(textures[textureBinds.w], uv); }
-			#else
-			vec4 textureTex(vec2 uv) { return texture(tex, uv); }
-			vec4 textureMacro(vec2 uv) { return texture(texMacro, uv); }
-			vec4 textureLightmap(vec2 uv) { return texture(texLightmap, uv); }
-			vec4 textureDetail(vec2 uv) { return texture(texDetail, uv); }
-			#endif
 
 			void main()
 			{

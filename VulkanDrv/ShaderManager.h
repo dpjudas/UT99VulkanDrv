@@ -49,7 +49,7 @@ public:
 		std::unique_ptr<VulkanShader> VertexShader;
 		std::unique_ptr<VulkanShader> FragmentShader;
 		std::unique_ptr<VulkanShader> FragmentShaderAlphaTest;
-	} Scene, SceneBindless;
+	} Scene;
 
 	struct
 	{
