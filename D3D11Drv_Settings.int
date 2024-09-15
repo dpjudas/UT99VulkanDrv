@@ -24,5 +24,4 @@ Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=GammaOffsetRed,Title="Gam
 Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=GammaOffsetGreen,Title="Gamma Offset Green",Description="Add additional green channel gamma")
 Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=GammaOffsetBlue,Title="Gamma Offset Blue",Description="Add additional blue channel gamma")
 
-Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=OccludeLines,Title="Occlude Lines",Description="Occludes lines in the Unreal Editor")
 Property=(Config,Class=D3D11Drv.D3D11RenderDevice,Name=LODBias,Title="Texture LOD Bias",Description="Changes the level of detail for textures applied to distant surfaces and objects. Higher values increase the level of detail. Lower values decrease it. We recommend keeping the default setting.")

@@ -9,6 +9,10 @@
 #include "UploadManager.h"
 #include "CachedTexture.h"
 
+#if defined(OLDUNREAL469SDK)
+#define SHOW_OccludeLines 0x00100000 // To do: remove once it is in the public SDK
+#endif
+
 struct SceneVertex
 {
 	uint32_t Flags;
@@ -231,7 +235,9 @@ public:
 	BYTE Saturation;
 	INT GrayFormula;
 	BITFIELD Hdr;
+#if !defined(OLDUNREAL469SDK)
 	BITFIELD OccludeLines;
+#endif
 	BITFIELD Bloom;
 	BYTE BloomAmount;
 	FLOAT LODBias;

@@ -24,5 +24,4 @@ Property=(Config,Class=VulkanDrv.VulkanRenderDevice,Name=GammaOffsetRed,Title="G
 Property=(Config,Class=VulkanDrv.VulkanRenderDevice,Name=GammaOffsetGreen,Title="Gamma Offset Green",Description="Add additional green channel gamma")
 Property=(Config,Class=VulkanDrv.VulkanRenderDevice,Name=GammaOffsetBlue,Title="Gamma Offset Blue",Description="Add additional blue channel gamma")
 
-Property=(Config,Class=VulkanDrv.VulkanRenderDevice,Name=OccludeLines,Title="Occlude Lines",Description="Occludes lines in the Unreal Editor")
 Property=(Config,Class=VulkanDrv.VulkanRenderDevice,Name=LODBias,Title="Texture LOD Bias",Description="Changes the level of detail for textures applied to distant surfaces and objects. Higher values increase the level of detail. Lower values decrease it. We recommend keeping the default setting.")

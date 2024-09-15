@@ -58,7 +58,9 @@ void UD3D12RenderDevice::StaticConstructor()
 	GrayFormula = 1;
 
 	Hdr = 0;
+#if !defined(OLDUNREAL469SDK)
 	OccludeLines = 0;
+#endif
 	Bloom = 0;
 	BloomAmount = 128;
 
@@ -85,7 +87,9 @@ void UD3D12RenderDevice::StaticConstructor()
 	new(GetClass(), TEXT("Saturation"), RF_Public) UByteProperty(CPP_PROPERTY(Saturation), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("GrayFormula"), RF_Public) UIntProperty(CPP_PROPERTY(GrayFormula), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("Hdr"), RF_Public) UBoolProperty(CPP_PROPERTY(Hdr), TEXT("Display"), CPF_Config);
+#if !defined(OLDUNREAL469SDK)
 	new(GetClass(), TEXT("OccludeLines"), RF_Public) UBoolProperty(CPP_PROPERTY(OccludeLines), TEXT("Display"), CPF_Config);
+#endif
 	new(GetClass(), TEXT("Bloom"), RF_Public) UBoolProperty(CPP_PROPERTY(Bloom), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("BloomAmount"), RF_Public) UByteProperty(CPP_PROPERTY(BloomAmount), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("LODBias"), RF_Public) UFloatProperty(CPP_PROPERTY(LODBias), TEXT("Display"), CPF_Config);
@@ -2900,7 +2904,12 @@ void UD3D12RenderDevice::Draw3DLine(FSceneNode* Frame, FPlane Color, DWORD LineF
 	}
 	else
 	{
-		SetPipeline(ScenePass.LinePipeline[OccludeLines].get(), D3D_PRIMITIVE_TOPOLOGY_LINELIST);
+#if defined(OLDUNREAL469SDK)
+		bool occlude = !!(Viewport->Actor->ShowFlags & SHOW_OccludeLines);
+#else
+		bool occlude = OccludeLines;
+#endif
+		SetPipeline(ScenePass.LinePipeline[occlude].get(), D3D_PRIMITIVE_TOPOLOGY_LINELIST);
 		SetDescriptorSet(PF_Highlighted);
 		vec4 color = ApplyInverseGamma(vec4(Color.X, Color.Y, Color.Z, 1.0f));
 
@@ -2935,7 +2944,12 @@ void UD3D12RenderDevice::Draw2DLine(FSceneNode* Frame, FPlane Color, DWORD LineF
 {
 	guard(UD3D12RenderDevice::Draw2DLine);
 
-	SetPipeline(ScenePass.LinePipeline[OccludeLines].get(), D3D_PRIMITIVE_TOPOLOGY_LINELIST);
+#if defined(OLDUNREAL469SDK)
+	bool occlude = !!(Viewport->Actor->ShowFlags & SHOW_OccludeLines);
+#else
+	bool occlude = OccludeLines;
+#endif
+	SetPipeline(ScenePass.LinePipeline[occlude].get(), D3D_PRIMITIVE_TOPOLOGY_LINELIST);
 	SetDescriptorSet(PF_Highlighted);
 	vec4 color = ApplyInverseGamma(vec4(Color.X, Color.Y, Color.Z, 1.0f));
 

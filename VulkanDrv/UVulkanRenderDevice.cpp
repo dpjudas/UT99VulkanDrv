@@ -57,7 +57,9 @@ void UVulkanRenderDevice::StaticConstructor()
 	GrayFormula = 1;
 
 	Hdr = 0;
+#if !defined(OLDUNREAL469SDK)
 	OccludeLines = 0;
+#endif
 	Bloom = 0;
 	BloomAmount = 128;
 
@@ -86,7 +88,9 @@ void UVulkanRenderDevice::StaticConstructor()
 	new(GetClass(), TEXT("Saturation"), RF_Public) UByteProperty(CPP_PROPERTY(Saturation), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("GrayFormula"), RF_Public) UIntProperty(CPP_PROPERTY(GrayFormula), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("Hdr"), RF_Public) UBoolProperty(CPP_PROPERTY(Hdr), TEXT("Display"), CPF_Config);
+#if !defined(OLDUNREAL469SDK)
 	new(GetClass(), TEXT("OccludeLines"), RF_Public) UBoolProperty(CPP_PROPERTY(OccludeLines), TEXT("Display"), CPF_Config);
+#endif
 	new(GetClass(), TEXT("Bloom"), RF_Public) UBoolProperty(CPP_PROPERTY(Bloom), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("BloomAmount"), RF_Public) UByteProperty(CPP_PROPERTY(BloomAmount), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("LODBias"), RF_Public) UFloatProperty(CPP_PROPERTY(LODBias), TEXT("Display"), CPF_Config);
@@ -1309,7 +1313,12 @@ void UVulkanRenderDevice::Draw3DLine(FSceneNode* Frame, FPlane Color, DWORD Line
 	}
 	else
 	{
-		SetPipeline(RenderPasses->GetLinePipeline(OccludeLines, UsesBindless));
+#if defined(OLDUNREAL469SDK)
+		bool occlude = !!(Viewport->Actor->ShowFlags & SHOW_OccludeLines);
+#else
+		bool occlude = OccludeLines;
+#endif
+		SetPipeline(RenderPasses->GetLinePipeline(occlude, UsesBindless));
 		ivec4 textureBinds = SetDescriptorSet(PF_Highlighted, nullptr);
 		vec4 color = ApplyInverseGamma(vec4(Color.X, Color.Y, Color.Z, 1.0f));
 
@@ -1344,7 +1353,12 @@ void UVulkanRenderDevice::Draw2DLine(FSceneNode* Frame, FPlane Color, DWORD Line
 {
 	guard(UVulkanRenderDevice::Draw2DLine);
 
-	SetPipeline(RenderPasses->GetLinePipeline(OccludeLines, UsesBindless));
+#if defined(OLDUNREAL469SDK)
+	bool occlude = !!(Viewport->Actor->ShowFlags & SHOW_OccludeLines);
+#else
+	bool occlude = OccludeLines;
+#endif
+	SetPipeline(RenderPasses->GetLinePipeline(occlude, UsesBindless));
 	ivec4 textureBinds = SetDescriptorSet(PF_Highlighted, nullptr);
 	vec4 color = ApplyInverseGamma(vec4(Color.X, Color.Y, Color.Z, 1.0f));
 
@@ -1374,7 +1388,12 @@ void UVulkanRenderDevice::Draw2DPoint(FSceneNode* Frame, FPlane Color, DWORD Lin
 	// Hack to fix UED selection problem with selection brush
 	if (GIsEditor) Z = 1.0f;
 
-	SetPipeline(RenderPasses->GetPointPipeline(OccludeLines, UsesBindless));
+#if defined(OLDUNREAL469SDK)
+	bool occlude = !!(Viewport->Actor->ShowFlags & SHOW_OccludeLines);
+#else
+	bool occlude = OccludeLines;
+#endif
+	SetPipeline(RenderPasses->GetPointPipeline(occlude, UsesBindless));
 	ivec4 textureBinds = SetDescriptorSet(PF_Highlighted, nullptr);
 	vec4 color = ApplyInverseGamma(vec4(Color.X, Color.Y, Color.Z, 1.0f));
 
