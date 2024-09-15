@@ -52,9 +52,6 @@ void UploadManager::UploadTexture(CachedTexture* tex, const FTextureInfo& Info, 
 			.Create(renderer->Device.get());
 	}
 
-	if (tex->pendingUploads[0].empty() && tex->pendingUploads[1].empty())
-		PendingUploads.push_back(tex);
-
 	tex->pendingUploads[0].clear();
 	tex->pendingUploads[1].clear();
 
@@ -87,10 +84,7 @@ void UploadManager::UploadTextureRect(CachedTexture* tex, const FTextureInfo& In
 	region.imageOffset = { (int32_t)x, (int32_t)y, 0 };
 	region.imageExtent = { (uint32_t)w, (uint32_t)h, 1 };
 
-	if (tex->pendingUploads[0].empty() && tex->pendingUploads[1].empty())
-		PendingUploads.push_back(tex);
-
-	tex->pendingUploads[1].push_back(region);
+	AddPendingUpload(tex, region, true);
 
 	UploadBufferPos += pixelsSize;
 }
@@ -119,6 +113,9 @@ void UploadManager::UploadData(CachedTexture* tex, const FTextureInfo& Info, boo
 			uint32_t mipwidth = Mip->USize;
 			uint32_t mipheight = Mip->VSize;
 
+			if (tex->pendingUploads[0].empty() && tex->pendingUploads[1].empty())
+				PendingUploads.push_back(tex);
+
 			VkBufferImageCopy region = {};
 			region.bufferOffset = UploadBufferPos;
 			region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -126,7 +123,7 @@ void UploadManager::UploadData(CachedTexture* tex, const FTextureInfo& Info, boo
 			region.imageSubresource.layerCount = 1;
 			region.imageOffset = { 0, 0, 0 };
 			region.imageExtent = { mipwidth, mipheight, 1 };
-			tex->pendingUploads[0].push_back(region);
+			AddPendingUpload(tex, region, false);
 
 			uploader->UploadRect(renderer->Buffers->UploadData + UploadBufferPos, Mip, 0, 0, Mip->USize, Mip->VSize, Info.Palette, masked);
 
@@ -149,8 +146,7 @@ void UploadManager::UploadWhite(CachedTexture* tex)
 	region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 	region.imageSubresource.layerCount = 1;
 	region.imageExtent = { 1, 1, 1 };
-
-	tex->pendingUploads[0].push_back(region);
+	AddPendingUpload(tex, region, false);
 
 	UploadBufferPos += 16; // 16-byte aligned
 }
@@ -161,6 +157,14 @@ void UploadManager::WaitIfUploadBufferIsFull(int bytes)
 	{
 		renderer->Commands->WaitForTransfer();
 	}
+}
+
+void UploadManager::AddPendingUpload(CachedTexture* tex, const VkBufferImageCopy& region, bool isPartial)
+{
+	if (tex->pendingUploads[0].empty() && tex->pendingUploads[1].empty())
+		PendingUploads.push_back(tex);
+
+	tex->pendingUploads[isPartial].push_back(region);
 }
 
 void UploadManager::SubmitUploads()
