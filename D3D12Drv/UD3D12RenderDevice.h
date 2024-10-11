@@ -209,6 +209,13 @@ public:
 		int Multisample = 1;
 	} SceneBuffers;
 
+	struct ScenePipelineState
+	{
+		ComPtr<ID3D12PipelineState> Pipeline;
+		float MinDepth = 0.1f;
+		float MaxDepth = 1.0f;
+	};
+
 	struct
 	{
 		ComPtr<ID3D12Resource> VertexBuffer;
@@ -217,9 +224,9 @@ public:
 		D3D12_INDEX_BUFFER_VIEW IndexBufferView = {};
 		D3D12_SAMPLER_DESC Samplers[16] = {};
 		ComPtr<ID3D12RootSignature> RootSignature;
-		ComPtr<ID3D12PipelineState> Pipelines[32];
-		ComPtr<ID3D12PipelineState> LinePipeline[2];
-		ComPtr<ID3D12PipelineState> PointPipeline[2];
+		ScenePipelineState Pipelines[32];
+		ScenePipelineState LinePipeline[2];
+		ScenePipelineState PointPipeline[2];
 		FLOAT LODBias = 0.0f;
 		int Multisample = 1;
 	} ScenePass;
@@ -232,7 +239,7 @@ public:
 		size_t SceneIndexStart = 0;
 		size_t SceneIndexEnd = 0;
 		D3D_PRIMITIVE_TOPOLOGY PrimitiveTopology = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-		ID3D12PipelineState* Pipeline = nullptr;
+		ScenePipelineState* Pipeline = nullptr;
 		CachedTexture* Tex = nullptr;
 		CachedTexture* Lightmap = nullptr;
 		CachedTexture* Detailtex = nullptr;
@@ -350,7 +357,7 @@ private:
 	void ComputeBlurSamples(int sampleCount, float blurAmount, float* sampleWeights);
 
 	void SetPipeline(DWORD polyflags);
-	void SetPipeline(ID3D12PipelineState* pipeline, D3D_PRIMITIVE_TOPOLOGY PrimitiveTopology = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	void SetPipeline(ScenePipelineState* pipeline, D3D_PRIMITIVE_TOPOLOGY PrimitiveTopology = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	void SetDescriptorSet(DWORD polyflags, CachedTexture* tex = nullptr, CachedTexture* lightmap = nullptr, CachedTexture* macrotex = nullptr, CachedTexture* detailtex = nullptr, bool clamp = false);
 
 	void AddDrawBatch();
@@ -387,7 +394,7 @@ private:
 
 	int GetSettingsMultisample();
 
-	ID3D12PipelineState* GetPipeline(DWORD PolyFlags);
+	ScenePipelineState* GetPipeline(DWORD PolyFlags);
 
 	ComPtr<ID3D12RootSignature> CreateRootSignature(const char* name, const std::vector<std::vector<D3D12_DESCRIPTOR_RANGE>>& descriptorTables = {}, const D3D12_ROOT_CONSTANTS& pushConstants = {}, const std::vector<D3D12_STATIC_SAMPLER_DESC>& staticSamplers = {});
 	std::vector<uint8_t> CompileHlsl(const std::string& filename, const std::string& shadertype, const std::vector<std::string> defines = {});
@@ -416,6 +423,7 @@ private:
 	float RFX2;
 	float RFY2;
 	ScenePushConstants SceneConstants = {};
+	D3D12_VIEWPORT SceneViewport = {};
 
 	struct HitQuery
 	{
@@ -463,7 +471,7 @@ inline void UD3D12RenderDevice::SetPipeline(DWORD PolyFlags)
 	SetPipeline(GetPipeline(PolyFlags), D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 }
 
-inline void UD3D12RenderDevice::SetPipeline(ID3D12PipelineState* pipeline, D3D_PRIMITIVE_TOPOLOGY PrimitiveTopology)
+inline void UD3D12RenderDevice::SetPipeline(ScenePipelineState* pipeline, D3D_PRIMITIVE_TOPOLOGY PrimitiveTopology)
 {
 	if (pipeline != Batch.Pipeline || PrimitiveTopology != Batch.PrimitiveTopology)
 	{

@@ -969,7 +969,7 @@ void UD3D12RenderDevice::CreateScenePass()
 		else
 			psoDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
 
-		HRESULT result = Device->CreateGraphicsPipelineState(&psoDesc, ScenePass.Pipelines[i].GetIID(), ScenePass.Pipelines[i].InitPtr());
+		HRESULT result = Device->CreateGraphicsPipelineState(&psoDesc, ScenePass.Pipelines[i].Pipeline.GetIID(), ScenePass.Pipelines[i].Pipeline.InitPtr());
 		ThrowIfFailed(result, "CreateGraphicsPipelineState failed");
 	}
 
@@ -1005,12 +1005,18 @@ void UD3D12RenderDevice::CreateScenePass()
 		psoDesc.BlendState.RenderTarget[1].BlendEnable = FALSE;
 		psoDesc.BlendState.RenderTarget[1].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
 
-		psoDesc.DepthStencilState.DepthEnable = i ? TRUE : FALSE;
+		psoDesc.DepthStencilState.DepthEnable = TRUE;
 		psoDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
-		psoDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+		psoDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
 
-		HRESULT result = Device->CreateGraphicsPipelineState(&psoDesc, ScenePass.LinePipeline[i].GetIID(), ScenePass.LinePipeline[i].InitPtr());
+		HRESULT result = Device->CreateGraphicsPipelineState(&psoDesc, ScenePass.LinePipeline[i].Pipeline.GetIID(), ScenePass.LinePipeline[i].Pipeline.InitPtr());
 		ThrowIfFailed(result, "CreateGraphicsPipelineState failed");
+
+		if (i == 0)
+		{
+			ScenePass.LinePipeline[i].MinDepth = 0.0f;
+			ScenePass.LinePipeline[i].MaxDepth = 0.1f;
+		}
 	}
 
 	// Point pipeline
@@ -1045,12 +1051,18 @@ void UD3D12RenderDevice::CreateScenePass()
 		psoDesc.BlendState.RenderTarget[1].BlendEnable = FALSE;
 		psoDesc.BlendState.RenderTarget[1].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
 
-		psoDesc.DepthStencilState.DepthEnable = i ? TRUE : FALSE;
+		psoDesc.DepthStencilState.DepthEnable = TRUE;
 		psoDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
-		psoDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+		psoDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
 
-		HRESULT result = Device->CreateGraphicsPipelineState(&psoDesc, ScenePass.PointPipeline[i].GetIID(), ScenePass.PointPipeline[i].InitPtr());
+		HRESULT result = Device->CreateGraphicsPipelineState(&psoDesc, ScenePass.PointPipeline[i].Pipeline.GetIID(), ScenePass.PointPipeline[i].Pipeline.InitPtr());
 		ThrowIfFailed(result, "CreateGraphicsPipelineState failed");
+
+		if (i == 0)
+		{
+			ScenePass.PointPipeline[i].MinDepth = 0.0f;
+			ScenePass.PointPipeline[i].MaxDepth = 0.1f;
+		}
 	}
 
 	D3D12_HEAP_PROPERTIES uploadHeapProps = { D3D12_HEAP_TYPE_UPLOAD };
@@ -1176,12 +1188,12 @@ void UD3D12RenderDevice::ReleaseScenePass()
 	ReleaseSceneSamplers();
 	for (auto& pipeline : ScenePass.Pipelines)
 	{
-		pipeline.reset();
+		pipeline.Pipeline.reset();
 	}
 	for (int i = 0; i < 2; i++)
 	{
-		ScenePass.LinePipeline[i].reset();
-		ScenePass.PointPipeline[i].reset();
+		ScenePass.LinePipeline[i].Pipeline.reset();
+		ScenePass.PointPipeline[i].Pipeline.reset();
 	}
 	ScenePass.RootSignature.reset();
 }
@@ -1234,7 +1246,7 @@ void UD3D12RenderDevice::ReleaseSceneBuffers()
 	}
 }
 
-ID3D12PipelineState* UD3D12RenderDevice::GetPipeline(DWORD PolyFlags)
+UD3D12RenderDevice::ScenePipelineState* UD3D12RenderDevice::GetPipeline(DWORD PolyFlags)
 {
 	int index;
 	if (PolyFlags & PF_Translucent)
@@ -1267,7 +1279,7 @@ ID3D12PipelineState* UD3D12RenderDevice::GetPipeline(DWORD PolyFlags)
 		index |= 16;
 	}
 
-	return ScenePass.Pipelines[index];
+	return &ScenePass.Pipelines[index];
 }
 
 void UD3D12RenderDevice::RunBloomPass()
@@ -2910,7 +2922,7 @@ void UD3D12RenderDevice::Draw3DLine(FSceneNode* Frame, FPlane Color, DWORD LineF
 #else
 		bool occlude = OccludeLines;
 #endif
-		SetPipeline(ScenePass.LinePipeline[occlude].get(), D3D_PRIMITIVE_TOPOLOGY_LINELIST);
+		SetPipeline(&ScenePass.LinePipeline[occlude], D3D_PRIMITIVE_TOPOLOGY_LINELIST);
 		SetDescriptorSet(PF_Highlighted);
 		vec4 color = ApplyInverseGamma(vec4(Color.X, Color.Y, Color.Z, 1.0f));
 
@@ -2950,7 +2962,7 @@ void UD3D12RenderDevice::Draw2DLine(FSceneNode* Frame, FPlane Color, DWORD LineF
 #else
 	bool occlude = OccludeLines;
 #endif
-	SetPipeline(ScenePass.LinePipeline[occlude].get(), D3D_PRIMITIVE_TOPOLOGY_LINELIST);
+	SetPipeline(&ScenePass.LinePipeline[occlude], D3D_PRIMITIVE_TOPOLOGY_LINELIST);
 	SetDescriptorSet(PF_Highlighted);
 	vec4 color = ApplyInverseGamma(vec4(Color.X, Color.Y, Color.Z, 1.0f));
 
@@ -2985,7 +2997,7 @@ void UD3D12RenderDevice::Draw2DPoint(FSceneNode* Frame, FPlane Color, DWORD Line
 #else
 	bool occlude = OccludeLines;
 #endif
-	SetPipeline(ScenePass.PointPipeline[occlude].get(), D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	SetPipeline(&ScenePass.PointPipeline[occlude], D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	SetDescriptorSet(PF_Highlighted);
 	vec4 color = ApplyInverseGamma(vec4(Color.X, Color.Y, Color.Z, 1.0f));
 
@@ -3225,14 +3237,14 @@ void UD3D12RenderDevice::SetSceneNode(FSceneNode* Frame)
 	RFX2 = 2.0f * RProjZ / Frame->FX;
 	RFY2 = 2.0f * RProjZ * Aspect / Frame->FY;
 
-	D3D12_VIEWPORT viewport = {};
-	viewport.TopLeftX = Frame->XB;
-	viewport.TopLeftY = SceneBuffers.Height - Frame->YB - Frame->Y;
-	viewport.Width = Frame->X;
-	viewport.Height = Frame->Y;
-	viewport.MinDepth = 0.0f;
-	viewport.MaxDepth = 1.0f;
-	Commands.Draw->RSSetViewports(1, &viewport);
+	SceneViewport = {};
+	SceneViewport.TopLeftX = Frame->XB;
+	SceneViewport.TopLeftY = SceneBuffers.Height - Frame->YB - Frame->Y;
+	SceneViewport.Width = Frame->X;
+	SceneViewport.Height = Frame->Y;
+	SceneViewport.MinDepth = 0.1f;
+	SceneViewport.MaxDepth = 1.0f;
+	Commands.Draw->RSSetViewports(1, &SceneViewport);
 
 	SceneConstants.ObjectToProjection = mat4::frustum(-RProjZ, RProjZ, -Aspect * RProjZ, Aspect * RProjZ, 1.0f, 32768.0f, handedness::left, clipzrange::zero_positive_w);
 	SceneConstants.NearClip = vec4(Frame->NearClip.X, Frame->NearClip.Y, Frame->NearClip.Z, Frame->NearClip.W);
@@ -3292,6 +3304,13 @@ void UD3D12RenderDevice::DrawEntry(const DrawBatchEntry& entry)
 {
 	size_t icount = entry.SceneIndexEnd - entry.SceneIndexStart;
 
+	if (SceneViewport.MinDepth != entry.Pipeline->MinDepth || SceneViewport.MaxDepth != entry.Pipeline->MaxDepth)
+	{
+		SceneViewport.MinDepth = entry.Pipeline->MinDepth;
+		SceneViewport.MaxDepth = entry.Pipeline->MaxDepth;
+		Commands.Draw->RSSetViewports(1, &SceneViewport);
+	}
+
 	DescriptorSet& common = Descriptors.Tex[{ entry.Tex, entry.Lightmap, entry.Detailtex, entry.Macrotex }];
 	if (!common)
 	{
@@ -3318,7 +3337,7 @@ void UD3D12RenderDevice::DrawEntry(const DrawBatchEntry& entry)
 		Commands.Draw->IASetPrimitiveTopology(Commands.PrimitiveTopology);
 	}
 
-	Commands.Draw->SetPipelineState(entry.Pipeline);
+	Commands.Draw->SetPipelineState(entry.Pipeline->Pipeline);
 	Commands.Draw->SetGraphicsRootDescriptorTable(0, common.GPUHandle());
 	Commands.Draw->SetGraphicsRootDescriptorTable(1, sampler.GPUHandle());
 	Commands.Draw->DrawIndexedInstanced(icount, 1, entry.SceneIndexStart, 0, 0);
