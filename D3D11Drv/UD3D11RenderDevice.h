@@ -148,6 +148,8 @@ public:
 		ComPtr<ID3D11PixelShader> PixelShader;
 		ComPtr<ID3D11BlendState> BlendState;
 		ComPtr<ID3D11DepthStencilState> DepthStencilState;
+		float MinDepth = 0.1f;
+		float MaxDepth = 1.0f;
 	};
 
 	struct
@@ -364,6 +366,8 @@ private:
 	float RFX2;
 	float RFY2;
 	ScenePushConstants SceneConstants = {};
+	D3D11_VIEWPORT SceneViewport = {};
+	bool DepthCuedActive = false;
 
 	struct HitQuery
 	{

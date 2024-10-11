@@ -811,7 +811,7 @@ void UD3D11RenderDevice::CreateScenePass()
 		ThrowIfFailed(result, "CreateBlendState(ScenePass.LinePipeline.BlendState) failed");
 
 		D3D11_DEPTH_STENCIL_DESC depthStencilDesc = {};
-		depthStencilDesc.DepthEnable = i ? TRUE : FALSE;
+		depthStencilDesc.DepthEnable = TRUE;
 		depthStencilDesc.DepthFunc = D3D11_COMPARISON_LESS_EQUAL;
 		depthStencilDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
 		result = Device->CreateDepthStencilState(&depthStencilDesc, ScenePass.LinePipeline[i].DepthStencilState.TypedInitPtr());
@@ -819,6 +819,12 @@ void UD3D11RenderDevice::CreateScenePass()
 
 		ScenePass.LinePipeline[i].PixelShader = ScenePass.PixelShader;
 		ScenePass.LinePipeline[i].PrimitiveTopology = D3D11_PRIMITIVE_TOPOLOGY_LINELIST;
+
+		if (i == 1)
+		{
+			ScenePass.LinePipeline[i].MinDepth = 0.0f;
+			ScenePass.LinePipeline[i].MaxDepth = 0.1f;
+		}
 	}
 
 	// Point pipeline
@@ -3138,14 +3144,14 @@ void UD3D11RenderDevice::SetSceneNode(FSceneNode* Frame)
 	RFX2 = 2.0f * RProjZ / Frame->FX;
 	RFY2 = 2.0f * RProjZ * Aspect / Frame->FY;
 
-	D3D11_VIEWPORT viewport = {};
-	viewport.TopLeftX = Frame->XB;
-	viewport.TopLeftY = SceneBuffers.Height - Frame->YB - Frame->Y;
-	viewport.Width = Frame->X;
-	viewport.Height = Frame->Y;
-	viewport.MinDepth = 0.0f;
-	viewport.MaxDepth = 1.0f;
-	Context->RSSetViewports(1, &viewport);
+	SceneViewport = {};
+	SceneViewport.TopLeftX = Frame->XB;
+	SceneViewport.TopLeftY = SceneBuffers.Height - Frame->YB - Frame->Y;
+	SceneViewport.Width = Frame->X;
+	SceneViewport.Height = Frame->Y;
+	SceneViewport.MinDepth = 0.1f;
+	SceneViewport.MaxDepth = 1.0f;
+	Context->RSSetViewports(1, &SceneViewport);
 
 	SceneConstants.ObjectToProjection = mat4::frustum(-RProjZ, RProjZ, -Aspect * RProjZ, Aspect * RProjZ, 1.0f, 32768.0f, handedness::left, clipzrange::zero_positive_w);
 	SceneConstants.NearClip = vec4(Frame->NearClip.X, Frame->NearClip.Y, Frame->NearClip.Z, Frame->NearClip.W);
@@ -3240,6 +3246,13 @@ void UD3D11RenderDevice::DrawEntry(const DrawBatchEntry& entry)
 		ScenePass.Samplers[entry.MacrotexSamplerMode],
 		ScenePass.Samplers[entry.DetailtexSamplerMode]
 	};
+
+	if (SceneViewport.MinDepth != entry.Pipeline->MinDepth || SceneViewport.MaxDepth != entry.Pipeline->MaxDepth)
+	{
+		SceneViewport.MinDepth = entry.Pipeline->MinDepth;
+		SceneViewport.MaxDepth = entry.Pipeline->MaxDepth;
+		Context->RSSetViewports(1, &SceneViewport);
+	}
 
 	Context->PSSetSamplers(0, 4, samplers);
 	Context->PSSetShaderResources(0, 4, views);
