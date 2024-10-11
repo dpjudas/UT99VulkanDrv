@@ -754,8 +754,15 @@ void UVulkanRenderDevice::DrawBatch(VulkanCommandBuffer* cmdbuffer)
 	size_t icount = SceneIndexPos - Batch.SceneIndexStart;
 	if (icount > 0)
 	{
+		if (viewportdesc.minDepth != Batch.Pipeline->MinDepth || viewportdesc.maxDepth != Batch.Pipeline->MaxDepth)
+		{
+			viewportdesc.minDepth = Batch.Pipeline->MinDepth;
+			viewportdesc.maxDepth = Batch.Pipeline->MaxDepth;
+			cmdbuffer->setViewport(0, 1, &viewportdesc);
+		}
+
 		auto layout = RenderPasses->Scene.BindlessPipelineLayout.get();
-		cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, Batch.Pipeline);
+		cmdbuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, Batch.Pipeline->Pipeline.get());
 		cmdbuffer->bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, layout, 0, DescriptorSets->GetBindlessSet());
 		cmdbuffer->pushConstants(layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ScenePushConstants), &pushconstants);
 		cmdbuffer->drawIndexed(icount, 1, Batch.SceneIndexStart, 0, 0);
@@ -1666,7 +1673,7 @@ void UVulkanRenderDevice::SetSceneNode(FSceneNode* Frame)
 	viewportdesc.y = Frame->YB;
 	viewportdesc.width = Frame->X;
 	viewportdesc.height = Frame->Y;
-	viewportdesc.minDepth = 0.0f;
+	viewportdesc.minDepth = 0.1f;
 	viewportdesc.maxDepth = 1.0f;
 	commands->setViewport(0, 1, &viewportdesc);
 

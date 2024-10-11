@@ -200,7 +200,7 @@ private:
 
 	bool IsLocked = false;
 
-	void SetPipeline(VulkanPipeline* pipeline);
+	void SetPipeline(PipelineState* pipeline);
 	ivec4 GetTextureIndexes(DWORD PolyFlags, CachedTexture* tex, bool clamp = false);
 	ivec4 GetTextureIndexes(DWORD PolyFlags, CachedTexture* tex, CachedTexture* lightmap, CachedTexture* macrotex, CachedTexture* detailtex);
 	void DrawBatch(VulkanCommandBuffer* cmdbuffer);
@@ -211,7 +211,7 @@ private:
 	struct
 	{
 		size_t SceneIndexStart = 0;
-		VulkanPipeline* Pipeline = nullptr;
+		PipelineState* Pipeline = nullptr;
 	} Batch;
 
 	ScenePushConstants pushconstants;
@@ -247,7 +247,7 @@ private:
 #endif
 };
 
-inline void UVulkanRenderDevice::SetPipeline(VulkanPipeline* pipeline)
+inline void UVulkanRenderDevice::SetPipeline(PipelineState* pipeline)
 {
 	if (pipeline != Batch.Pipeline)
 	{

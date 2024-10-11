@@ -2,6 +2,13 @@
 
 class UVulkanRenderDevice;
 
+struct PipelineState
+{
+	std::unique_ptr<VulkanPipeline> Pipeline;
+	float MinDepth = 0.1f;
+	float MaxDepth = 1.0f;
+};
+
 class RenderPassManager
 {
 public:
@@ -25,19 +32,19 @@ public:
 	void BeginPresent(VulkanCommandBuffer* cmdbuffer);
 	void EndPresent(VulkanCommandBuffer* cmdbuffer);
 
-	VulkanPipeline* GetPipeline(DWORD polyflags);
-	VulkanPipeline* GetEndFlashPipeline();
-	VulkanPipeline* GetLinePipeline(bool occludeLines) { return Scene.LinePipeline[occludeLines].get(); }
-	VulkanPipeline* GetPointPipeline(bool occludeLines) { return Scene.PointPipeline[occludeLines].get(); }
+	PipelineState* GetPipeline(DWORD polyflags);
+	PipelineState* GetEndFlashPipeline();
+	PipelineState* GetLinePipeline(bool occludeLines) { return &Scene.LinePipeline[occludeLines]; }
+	PipelineState* GetPointPipeline(bool occludeLines) { return &Scene.PointPipeline[occludeLines]; }
 
 	struct
 	{
 		std::unique_ptr<VulkanPipelineLayout> BindlessPipelineLayout;
 		std::unique_ptr<VulkanRenderPass> RenderPass;
 		std::unique_ptr<VulkanRenderPass> RenderPassContinue;
-		std::unique_ptr<VulkanPipeline> Pipeline[32];
-		std::unique_ptr<VulkanPipeline> LinePipeline[2];
-		std::unique_ptr<VulkanPipeline> PointPipeline[2];
+		PipelineState Pipeline[32];
+		PipelineState LinePipeline[2];
+		PipelineState PointPipeline[2];
 	} Scene;
 
 	struct

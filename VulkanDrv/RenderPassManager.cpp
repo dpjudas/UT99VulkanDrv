@@ -85,7 +85,7 @@ void RenderPassManager::EndPresent(VulkanCommandBuffer* cmdbuffer)
 	cmdbuffer->endRenderPass();
 }
 
-VulkanPipeline* RenderPassManager::GetPipeline(DWORD PolyFlags)
+PipelineState* RenderPassManager::GetPipeline(DWORD PolyFlags)
 {
 	int index;
 	if (PolyFlags & PF_Translucent)
@@ -118,12 +118,12 @@ VulkanPipeline* RenderPassManager::GetPipeline(DWORD PolyFlags)
 		index |= 16;
 	}
 
-	return Scene.Pipeline[index].get();
+	return &Scene.Pipeline[index];
 }
 
-VulkanPipeline* RenderPassManager::GetEndFlashPipeline()
+PipelineState* RenderPassManager::GetEndFlashPipeline()
 {
-	return Scene.Pipeline[2].get();
+	return &Scene.Pipeline[2];
 }
 
 void RenderPassManager::CreatePipelines()
@@ -204,7 +204,7 @@ void RenderPassManager::CreatePipelines()
 		builder.RasterizationSamples(renderer->Textures->Scene->SceneSamples);
 		builder.DebugName(debugName);
 
-		Scene.Pipeline[i] = builder.Create(renderer->Device.get());
+		Scene.Pipeline[i].Pipeline = builder.Create(renderer->Device.get());
 	}
 
 	// Line pipeline
@@ -232,13 +232,19 @@ void RenderPassManager::CreatePipelines()
 		builder.AddColorBlendAttachment(ColorBlendAttachmentBuilder().BlendMode(VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA).Create());
 		builder.AddColorBlendAttachment(ColorBlendAttachmentBuilder().Create());
 
-		builder.DepthStencilEnable(i == 1, false, false);
+		builder.DepthStencilEnable(true, true, false);
 		builder.AddFragmentShader(fragShader);
 
 		builder.RasterizationSamples(renderer->Textures->Scene->SceneSamples);
 		builder.DebugName(debugName);
 
-		Scene.LinePipeline[i] = builder.Create(renderer->Device.get());
+		Scene.LinePipeline[i].Pipeline = builder.Create(renderer->Device.get());
+
+		if (i == 0)
+		{
+			Scene.LinePipeline[i].MinDepth = 0.0f;
+			Scene.LinePipeline[i].MaxDepth = 0.1f;
+		}
 	}
 
 	// Point pipeline
@@ -267,11 +273,17 @@ void RenderPassManager::CreatePipelines()
 		builder.AddColorBlendAttachment(ColorBlendAttachmentBuilder().BlendMode(VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA).Create());
 		builder.AddColorBlendAttachment(ColorBlendAttachmentBuilder().Create());
 
-		builder.DepthStencilEnable(false, false, false);
+		builder.DepthStencilEnable(true, true, false);
 		builder.RasterizationSamples(renderer->Textures->Scene->SceneSamples);
 		builder.DebugName(debugName);
 
-		Scene.PointPipeline[i] = builder.Create(renderer->Device.get());
+		Scene.PointPipeline[i].Pipeline = builder.Create(renderer->Device.get());
+
+		if (i == 0)
+		{
+			Scene.PointPipeline[i].MinDepth = 0.0f;
+			Scene.PointPipeline[i].MaxDepth = 0.1f;
+		}
 	}
 }
 
