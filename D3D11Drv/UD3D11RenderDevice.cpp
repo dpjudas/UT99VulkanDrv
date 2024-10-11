@@ -846,7 +846,7 @@ void UD3D11RenderDevice::CreateScenePass()
 		ThrowIfFailed(result, "CreateBlendState(ScenePass.LinePipeline.BlendState) failed");
 
 		D3D11_DEPTH_STENCIL_DESC depthStencilDesc = {};
-		depthStencilDesc.DepthEnable = i ? TRUE : FALSE;
+		depthStencilDesc.DepthEnable = TRUE;
 		depthStencilDesc.DepthFunc = D3D11_COMPARISON_LESS_EQUAL;
 		depthStencilDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
 		result = Device->CreateDepthStencilState(&depthStencilDesc, ScenePass.PointPipeline[i].DepthStencilState.TypedInitPtr());
@@ -854,6 +854,12 @@ void UD3D11RenderDevice::CreateScenePass()
 
 		ScenePass.PointPipeline[i].PixelShader = ScenePass.PixelShader;
 		ScenePass.PointPipeline[i].PrimitiveTopology = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+
+		if (i == 0)
+		{
+			ScenePass.PointPipeline[i].MinDepth = 0.0f;
+			ScenePass.PointPipeline[i].MaxDepth = 0.1f;
+		}
 	}
 
 	D3D11_BUFFER_DESC bufDesc = {};
