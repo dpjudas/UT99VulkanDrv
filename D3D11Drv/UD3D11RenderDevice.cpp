@@ -820,7 +820,7 @@ void UD3D11RenderDevice::CreateScenePass()
 		ScenePass.LinePipeline[i].PixelShader = ScenePass.PixelShader;
 		ScenePass.LinePipeline[i].PrimitiveTopology = D3D11_PRIMITIVE_TOPOLOGY_LINELIST;
 
-		if (i == 1)
+		if (i == 0)
 		{
 			ScenePass.LinePipeline[i].MinDepth = 0.0f;
 			ScenePass.LinePipeline[i].MaxDepth = 0.1f;
