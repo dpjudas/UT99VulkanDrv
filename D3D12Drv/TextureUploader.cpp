@@ -3,10 +3,6 @@
 #include "TextureUploader.h"
 #include <map>
 
-#ifndef __LINUX_ARM__
-#define USE_SSE2
-#endif
-
 #ifdef USE_SSE2
 #include <immintrin.h>
 #endif

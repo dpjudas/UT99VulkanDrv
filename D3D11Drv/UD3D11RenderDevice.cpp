@@ -10,11 +10,10 @@
 #include <functional>
 #include <dxgi1_5.h>
 
-// Unfortunately this code is slower than what the compiler generates on its own ;(
-// #define USE_SSE2
-
 #ifdef USE_SSE2
-#include <immintrin.h>
+// Unfortunately this code is slower than what the compiler generates on its own ;(
+#undef USE_SSE2
+//#include <immintrin.h>
 #endif
 
 IMPLEMENT_CLASS(UD3D11RenderDevice);
