@@ -2,7 +2,9 @@
 #include "Precomp.h"
 #include "mat.h"
 #include <cmath>
+#ifdef __LINUX_ARM__
 #ifndef NO_SSE
+#endif
 #include <emmintrin.h>
 #endif
 
