@@ -3,8 +3,9 @@
 #include "mat.h"
 #include <cmath>
 #ifdef __LINUX_ARM__
-#ifndef NO_SSE
+#define NO_SSE
 #endif
+#ifndef NO_SSE
 #include <emmintrin.h>
 #endif
 
