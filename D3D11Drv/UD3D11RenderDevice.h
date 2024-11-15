@@ -395,6 +395,8 @@ private:
 
 	bool InSetResCall = false;
 	UBOOL CurrentFullscreen = 0;
+	int CurrentSizeX = 0;
+	int CurrentSizeY = 0;
 };
 
 inline void ThrowIfFailed(HRESULT result, const char* msg) { if (FAILED(result)) throw std::runtime_error(msg); }

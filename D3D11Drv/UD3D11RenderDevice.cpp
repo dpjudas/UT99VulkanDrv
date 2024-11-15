@@ -326,8 +326,13 @@ UBOOL UD3D11RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 {
 	guard(UD3D11RenderDevice::SetRes);
 
+	debugf(TEXT("D3D11Drv: SetRes(%d, %d, %d, %d) called"), NewX, NewY, NewColorBytes, Fullscreen);
+
 	if (InSetResCall)
+	{
+		debugf(TEXT("D3D11Drv: Ignoring recursive SetRes(%d, %d, %d, %d) call"), NewX, NewY, NewColorBytes, Fullscreen);
 		return TRUE;
+	}
 	SetResCallLock lock(InSetResCall);
 
 	ReleaseSwapChainResources();
@@ -367,6 +372,8 @@ UBOOL UD3D11RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 		}
 #endif
 
+		debugf(TEXT("D3D11Drv: Calling Viewport->ResizeViewport(BLIT_Fullscreen | BLIT_Direct3D, %d, %d, %d)"), NewX, NewY, NewColorBytes);
+
 		// If we are going fullscreen we want to resize the window *prior* to entering fullscreen.
 		if (!Viewport->ResizeViewport(BLIT_Fullscreen | BLIT_Direct3D, NewX, NewY, NewColorBytes))
 		{
@@ -399,6 +406,8 @@ UBOOL UD3D11RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 			}
 		}
 
+		debugf(TEXT("D3D11Drv: Calling Viewport->ResizeViewport(BLIT_HardwarePaint | BLIT_Direct3D, %d, %d, %d)"), NewX, NewY, NewColorBytes);
+
 		// If we exiting fullscreen, we want to resize/reposition the window *after* exiting fullscreen
 		if (!Viewport->ResizeViewport(BLIT_HardwarePaint | BLIT_Direct3D, NewX, NewY, NewColorBytes))
 		{
@@ -407,6 +416,8 @@ UBOOL UD3D11RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 		}
 	}
 
+	CurrentSizeX = NewX;
+	CurrentSizeY = NewY;
 	CurrentFullscreen = Fullscreen;
 
 	BufferCount = UseVSync ? 2 : 3;
@@ -437,7 +448,9 @@ bool UD3D11RenderDevice::UpdateSwapChain()
 	if (DxgiSwapChainAllowTearing)
 		flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
 
-	HRESULT result = SwapChain->ResizeBuffers(BufferCount, Viewport->SizeX, Viewport->SizeY, ActiveHdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM, flags);
+	debugf(TEXT("D3D11Drv: Updating SwapChain size to %d x %d"), CurrentSizeX, CurrentSizeY);
+
+	HRESULT result = SwapChain->ResizeBuffers(BufferCount, CurrentSizeX, CurrentSizeY, ActiveHdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM, flags);
 	if (FAILED(result))
 	{
 		return false;
@@ -453,11 +466,13 @@ bool UD3D11RenderDevice::UpdateSwapChain()
 		}
 	}
 
-	if (Viewport->SizeX && Viewport->SizeY)
+	if (CurrentSizeX && CurrentSizeY)
 	{
 		try
 		{
-			ResizeSceneBuffers(Viewport->SizeX, Viewport->SizeY, GetSettingsMultisample());
+			debugf(TEXT("D3D11Drv: Resizing scene buffers to %d x %d"), CurrentSizeX, CurrentSizeY);
+
+			ResizeSceneBuffers(CurrentSizeX, CurrentSizeY, GetSettingsMultisample());
 		}
 		catch (const std::exception& e)
 		{
@@ -1443,11 +1458,11 @@ void UD3D11RenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane Scr
 		UpdateSwapChain();
 	}
 
-	if (Viewport->SizeX && Viewport->SizeY)
+	if (CurrentSizeX && CurrentSizeY)
 	{
 		try
 		{
-			ResizeSceneBuffers(SceneBuffers.Width, SceneBuffers.Height, GetSettingsMultisample());
+			ResizeSceneBuffers(CurrentSizeX, CurrentSizeY, GetSettingsMultisample());
 		}
 		catch (const std::exception& e)
 		{
@@ -1482,8 +1497,8 @@ void UD3D11RenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane Scr
 	Context->RSSetState(ScenePass.RasterizerState[SceneBuffers.Multisample > 1]);
 
 	D3D11_RECT box = {};
-	box.right = Viewport->SizeX;
-	box.bottom = Viewport->SizeY;
+	box.right = CurrentSizeX;
+	box.bottom = CurrentSizeY;
 	Context->RSSetScissorRects(1, &box);
 
 	if (!SceneVertices)
@@ -1634,8 +1649,8 @@ void UD3D11RenderDevice::Unlock(UBOOL Blit)
 		Context->OMSetRenderTargets(1, rtvs, nullptr);
 
 		D3D11_VIEWPORT viewport = {};
-		viewport.Width = Viewport->SizeX;
-		viewport.Height = Viewport->SizeY;
+		viewport.Width = CurrentSizeX;
+		viewport.Height = CurrentSizeY;
 		viewport.MaxDepth = 1.0f;
 		Context->RSSetViewports(1, &viewport);
 
@@ -3016,8 +3031,8 @@ void UD3D11RenderDevice::ReadPixels(FColor* Pixels)
 		Context->OMSetRenderTargets(1, rtvs, nullptr);
 
 		D3D11_VIEWPORT viewport = {};
-		viewport.Width = Viewport->SizeX;
-		viewport.Height = Viewport->SizeY;
+		viewport.Width = CurrentSizeX;
+		viewport.Height = CurrentSizeY;
 		viewport.MaxDepth = 1.0f;
 		Context->RSSetViewports(1, &viewport);
 
@@ -3059,8 +3074,8 @@ void UD3D11RenderDevice::ReadPixels(FColor* Pixels)
 	if (SUCCEEDED(result))
 	{
 		uint8_t* srcpixels = (uint8_t*)mapped.pData;
-		int w = Viewport->SizeX;
-		int h = Viewport->SizeY;
+		int w = CurrentSizeX;
+		int h = CurrentSizeY;
 		void* data = Pixels;
 
 		for (int y = 0; y < h; y++)
