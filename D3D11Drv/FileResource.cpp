@@ -117,7 +117,7 @@ std::string FileResource::readAllText(const std::string& filename)
 
 				if ((input.flags & 1) != 0) // Lightmap
 				{
-					output.outColor.rgb *= clamp(textureLightmap(input.texCoord2).rgb, 0.0, 1.0) * oneXBlending;
+					output.outColor.rgb *= textureLightmap(input.texCoord2).rgb * oneXBlending;
 				}
 
 				if ((input.flags & 4) != 0) // Detail texture
@@ -142,9 +142,7 @@ std::string FileResource::readAllText(const std::string& filename)
 				if (output.outColor.a < 0.5) discard;
 				#endif
 
-				// Clamp if it isn't a lightmap texture (we want lightmap textures to go overbright so the HDR mode can pick it up)
-				if ((input.flags & 1) == 0)
-					output.outColor = clamp(output.outColor, 0.0, 1.0);
+				output.outColor = clamp(output.outColor, 0.0, 1.0);
 
 				output.outHitIndex = input.hitIndex;
 				return output;
