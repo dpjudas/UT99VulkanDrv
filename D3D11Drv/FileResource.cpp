@@ -191,7 +191,7 @@ std::string FileResource::readAllText(const std::string& filename)
 				float Contrast;
 				float Saturation;
 				float Brightness;
-				float Padding;
+				float HdrScale;
 				float4 GammaCorrection;
 			}
 
@@ -222,7 +222,7 @@ std::string FileResource::readAllText(const std::string& filename)
 
 			float3 linearHdr(float3 c)
 			{
-				return pow(c, float3(2.2, 2.2, 2.2)) * 1.2;
+				return pow(c, float3(2.2, 2.2, 2.2)) * HdrScale;
 			}
 
 			#if defined(GAMMA_MODE_D3D9)

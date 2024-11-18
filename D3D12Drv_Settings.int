@@ -2,14 +2,15 @@
 Property=(Config,Class=D3D12Drv.D3D12RenderDevice,Name=AntialiasMode,Title="Anti Aliasing",Description="Anti alias method used to reduce jagged edges",Value("Off"),Value("MSAA_2x"),Value("MSAA_4x"))
 Property=(Config,Class=D3D12Drv.D3D12RenderDevice,Name=LightMode,Title="Light Mode",Description="Adjust how map surfaces and actors are lit",Value("Normal"),Value("OneXBlending"),Value("BrighterActors"))
 
-Property=(Config,Class=D3D12Drv.D3D12RenderDevice,Name=Hdr,Title="HDR Mode",Description="Enables using high dynamic range. Only works if your monitor is set to run in HDR mode in the Windows display settings",RequireRestart)
-
 Property=(Config,Class=D3D12Drv.D3D12RenderDevice,Name=UsePrecache,Title="Precaching",Description="If checked, all textures will be precached onto video memory.")
 Property=(Config,Class=D3D12Drv.D3D12RenderDevice,Name=DetailTextures,Title="Detail Texturing",Description="If checked, enables Detail Texturing.")
 Property=(Config,Class=D3D12Drv.D3D12RenderDevice,Name=HighDetailActors,Title="High Detail Actors",Description="HighDetailActors")
 Property=(Config,Class=D3D12Drv.D3D12RenderDevice,Name=Coronas,Title="Coronas",Description="Coronas")
 Property=(Config,Class=D3D12Drv.D3D12RenderDevice,Name=ShinySurfaces,Title="Shiny Surfaces",Description="ShinySurfaces")
 Property=(Config,Class=D3D12Drv.D3D12RenderDevice,Name=VolumetricLighting,Title="Volumetric Lighting",Description="VolumetricLighting")
+
+Property=(Config,Class=D3D12Drv.D3D12RenderDevice,Name=Hdr,Title="HDR Mode",Description="Enables using high dynamic range. Only works if your monitor is set to run in HDR mode in the Windows display settings",RequireRestart)
+Property=(Config,Class=D3D12Drv.D3D12RenderDevice,Name=HdrScale,Title="HDR Scale",Description="Adjust HDR brightness multiplier")
 
 Property=(Config,Class=D3D12Drv.D3D12RenderDevice,Name=Bloom,Title="Bloom",Description="Bloom overbright pixels")
 Property=(Config,Class=D3D12Drv.D3D12RenderDevice,Name=BloomAmount,Title="Bloom Amount",Description="Bloom amount")

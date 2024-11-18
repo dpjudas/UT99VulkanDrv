@@ -33,7 +33,7 @@ struct PresentPushConstants
 	float Contrast;
 	float Saturation;
 	float Brightness;
-	float Padding;
+	float HdrScale;
 	vec4 GammaCorrection;
 };
 
@@ -233,6 +233,7 @@ public:
 	BYTE Saturation;
 	INT GrayFormula;
 	BITFIELD Hdr;
+	BYTE HdrScale;
 #if !defined(OLDUNREAL469SDK)
 	BITFIELD OccludeLines;
 #endif

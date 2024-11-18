@@ -97,6 +97,7 @@ public:
 	BYTE Saturation;
 	INT GrayFormula;
 	BITFIELD Hdr;
+	BYTE HdrScale;
 #if !defined(OLDUNREAL469SDK)
 	BITFIELD OccludeLines;
 #endif

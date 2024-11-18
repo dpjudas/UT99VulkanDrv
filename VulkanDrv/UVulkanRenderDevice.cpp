@@ -57,6 +57,7 @@ void UVulkanRenderDevice::StaticConstructor()
 	GrayFormula = 1;
 
 	Hdr = 0;
+	HdrScale = 128;
 #if !defined(OLDUNREAL469SDK)
 	OccludeLines = 0;
 #endif
@@ -88,6 +89,7 @@ void UVulkanRenderDevice::StaticConstructor()
 	new(GetClass(), TEXT("Saturation"), RF_Public) UByteProperty(CPP_PROPERTY(Saturation), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("GrayFormula"), RF_Public) UIntProperty(CPP_PROPERTY(GrayFormula), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("Hdr"), RF_Public) UBoolProperty(CPP_PROPERTY(Hdr), TEXT("Display"), CPF_Config);
+	new(GetClass(), TEXT("HdrScale"), RF_Public) UByteProperty(CPP_PROPERTY(HdrScale), TEXT("Display"), CPF_Config);
 #if !defined(OLDUNREAL469SDK)
 	new(GetClass(), TEXT("OccludeLines"), RF_Public) UBoolProperty(CPP_PROPERTY(OccludeLines), TEXT("Display"), CPF_Config);
 #endif
@@ -1968,6 +1970,7 @@ void UVulkanRenderDevice::ComputeBlurSamples(int sampleCount, float blurAmount, 
 PresentPushConstants UVulkanRenderDevice::GetPresentPushConstants()
 {
 	PresentPushConstants pushconstants;
+	pushconstants.HdrScale = 0.8f + HdrScale * (3.0f / 255.0f);
 	if (Viewport->IsOrtho())
 	{
 		pushconstants.GammaCorrection = { 1.0f };

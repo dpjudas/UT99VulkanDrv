@@ -29,7 +29,7 @@ struct PresentPushConstants
 	float Contrast;
 	float Saturation;
 	float Brightness;
-	float Padding;
+	float HdrScale;
 	vec4 GammaCorrection;
 };
 
