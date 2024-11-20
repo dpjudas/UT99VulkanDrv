@@ -127,7 +127,9 @@ void VulkanPrintLog(const char* typestr, const std::string& msg)
 
 void VulkanError(const char* text)
 {
-	throw std::runtime_error(text);
+	debugf(TEXT("Fatal vulkan error: %s"), appFromAnsi(text));
+	appExit();
+	// throw std::runtime_error(text);
 }
 
 UBOOL UVulkanRenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT NewColorBytes, UBOOL Fullscreen)
