@@ -138,6 +138,8 @@ UBOOL UVulkanRenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT N
 
 	try
 	{
+
+#ifdef WIN32
 		auto instance = VulkanInstanceBuilder()
 			.RequireSurfaceExtensions()
 			.DebugLayer(VkDebug)
@@ -145,12 +147,28 @@ UBOOL UVulkanRenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT N
 
 		auto deviceBuilder = VulkanDeviceBuilder();
 
-#ifdef WIN32
 		auto surface = VulkanSurfaceBuilder()
 			.Win32Window((HWND)Viewport->GetWindow())
 			.Create(instance);
 		deviceBuilder.Surface(surface);
 #else
+		auto instanceBuilder = VulkanInstanceBuilder();
+		instanceBuilder.RequireExtension(VK_KHR_SURFACE_EXTENSION_NAME);
+		instanceBuilder.OptionalExtension(VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME); // For HDR support
+		instanceBuilder.DebugLayer(VkDebug);
+
+		unsigned int extCount = 0;
+		SDL_Vulkan_GetInstanceExtensions(window, &extCount, nullptr);
+		std::vector<const char*> extNames(extCount);
+		SDL_Vulkan_GetInstanceExtensions(window, &extCount, extNames.data());
+		for (const char* name : extNames)
+		{
+			instanceBuilder.RequireExtension(name);
+		}
+
+		auto instance = instanceBuilder.Create();
+		auto deviceBuilder = VulkanDeviceBuilder();
+
 		// SDLDrv doesn't create the window until you call ResizeViewport
 		if (!Viewport->ResizeViewport(Fullscreen ? (BLIT_Fullscreen | BLIT_Vulkan) : (BLIT_HardwarePaint | BLIT_Vulkan), NewX, NewY, NewColorBytes))
 		{
@@ -169,16 +187,6 @@ UBOOL UVulkanRenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT N
 
 		auto surface = std::make_shared<VulkanSurface>(instance, surfaceHandle);
 		deviceBuilder.Surface(surface);
-
-		unsigned int extCount = 0;
-		SDL_Vulkan_GetInstanceExtensions(window, &extCount, nullptr);
-		std::vector<const char*> extNames(extCount);
-		SDL_Vulkan_GetInstanceExtensions(window, &extCount, extNames.data());
-
-		for (const char* name : extNames)
-		{
-			deviceBuilder.RequireExtension(name);
-		}
 #endif
 
 		deviceBuilder.RequireExtension(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
