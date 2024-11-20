@@ -1716,6 +1716,7 @@ void UVulkanRenderDevice::ClearTextureCache()
 {
 	DescriptorSets->ClearCache();
 	Textures->ClearCache();
+	Uploads->ClearCache();
 }
 
 void UVulkanRenderDevice::BlitSceneToPostprocess()

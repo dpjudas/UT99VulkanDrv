@@ -20,6 +20,8 @@ public:
 
 	void SubmitUploads();
 
+	void ClearCache();
+
 private:
 	void UploadData(CachedTexture* tex, const FTextureInfo& Info, bool masked, TextureUploader* uploader);
 	void UploadWhite(CachedTexture* tex);

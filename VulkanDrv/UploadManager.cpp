@@ -12,6 +12,11 @@ UploadManager::~UploadManager()
 {
 }
 
+void UploadManager::ClearCache()
+{
+	PendingUploads.clear();
+}
+
 bool UploadManager::SupportsTextureFormat(ETextureFormat Format) const
 {
 	return TextureUploader::GetUploader(Format);
