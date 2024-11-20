@@ -162,7 +162,10 @@ UBOOL UVulkanRenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT N
 
 		VkSurfaceKHR surfaceHandle = {};
 		if (SDL_Vulkan_CreateSurface(window, instance->Instance, &surfaceHandle) == SDL_FALSE)
+		{
+			debugf(TEXT("Couldn't create Vulkan surface: %ls"), appFromAnsi(SDL_GetError()));
 			return 0;
+		}
 
 		auto surface = std::make_shared<VulkanSurface>(instance, surfaceHandle);
 		deviceBuilder.Surface(surface);
