@@ -152,6 +152,15 @@ UBOOL UVulkanRenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT N
 			.Create(instance);
 		deviceBuilder.Surface(surface);
 #else
+		// SDLDrv doesn't create the window until you call ResizeViewport
+		if (!Viewport->ResizeViewport(Fullscreen ? (BLIT_Fullscreen | BLIT_Vulkan) : (BLIT_HardwarePaint | BLIT_Vulkan), NewX, NewY, NewColorBytes))
+		{
+			debugf(TEXT("Couldn't create Window"));
+			return 0;
+		}
+
+		auto window = (SDL_Window*)Viewport->GetWindow();
+
 		auto instanceBuilder = VulkanInstanceBuilder();
 		instanceBuilder.RequireExtension(VK_KHR_SURFACE_EXTENSION_NAME);
 		instanceBuilder.OptionalExtension(VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME); // For HDR support
@@ -168,15 +177,6 @@ UBOOL UVulkanRenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT N
 
 		auto instance = instanceBuilder.Create();
 		auto deviceBuilder = VulkanDeviceBuilder();
-
-		// SDLDrv doesn't create the window until you call ResizeViewport
-		if (!Viewport->ResizeViewport(Fullscreen ? (BLIT_Fullscreen | BLIT_Vulkan) : (BLIT_HardwarePaint | BLIT_Vulkan), NewX, NewY, NewColorBytes))
-		{
-			debugf(TEXT("Couldn't create Window"));
-			return 0;
-		}
-
-		auto window = (SDL_Window*)Viewport->GetWindow();
 
 		VkSurfaceKHR surfaceHandle = {};
 		if (SDL_Vulkan_CreateSurface(window, instance->Instance, &surfaceHandle) == SDL_FALSE)
