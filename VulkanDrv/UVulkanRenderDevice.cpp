@@ -2,7 +2,6 @@
 #include "Precomp.h"
 #include "UVulkanRenderDevice.h"
 #include "CachedTexture.h"
-#include "UTF16.h"
 #include <cmath>
 
 #if !defined(WIN32)
@@ -123,7 +122,7 @@ void UVulkanRenderDevice::StaticConstructor()
 
 void VulkanPrintLog(const char* typestr, const std::string& msg)
 {
-	debugf(TEXT("[%s] %s"), to_utf16(typestr).c_str(), to_utf16(msg).c_str());
+	debugf(TEXT("[%s] %s"), appFromAnsi(typestr), appFromAnsi(msg.c_str()));
 }
 
 void VulkanError(const char* text)
@@ -152,6 +151,13 @@ UBOOL UVulkanRenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT N
 			.Create(instance);
 		deviceBuilder.Surface(surface);
 #else
+		// SDLDrv doesn't create the window until you call ResizeViewport
+		if (!Viewport->ResizeViewport(Fullscreen ? (BLIT_Fullscreen | BLIT_Vulkan) : (BLIT_HardwarePaint | BLIT_Vulkan), NewX, NewY, NewColorBytes))
+		{
+			debugf(TEXT("Couldn't create Window"));
+			return 0;
+		}
+
 		auto window = (SDL_Window*)Viewport->GetWindow();
 
 		VkSurfaceKHR surfaceHandle = {};
@@ -217,7 +223,7 @@ UBOOL UVulkanRenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT N
 		apiVersion = FString::Printf(TEXT("%d.%d.%d"), VK_VERSION_MAJOR(props.apiVersion), VK_VERSION_MINOR(props.apiVersion), VK_VERSION_PATCH(props.apiVersion));
 		driverVersion = FString::Printf(TEXT("%d.%d.%d"), VK_VERSION_MAJOR(props.driverVersion), VK_VERSION_MINOR(props.driverVersion), VK_VERSION_PATCH(props.driverVersion));
 
-		debugf(TEXT("Vulkan device: %s"), to_utf16(props.deviceName).c_str());
+		debugf(TEXT("Vulkan device: %s"), appFromAnsi(props.deviceName));
 		debugf(TEXT("Vulkan device type: %s"), *deviceType);
 		debugf(TEXT("Vulkan version: %s (api) %s (driver)"), *apiVersion, *driverVersion);
 
@@ -226,7 +232,7 @@ UBOOL UVulkanRenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT N
 			debugf(TEXT("Vulkan extensions:"));
 			for (const VkExtensionProperties& p : Device->PhysicalDevice.Extensions)
 			{
-				debugf(TEXT(" %s"), to_utf16(p.extensionName).c_str());
+				debugf(TEXT(" %s"), appFromAnsi(p.extensionName));
 			}
 		}
 
@@ -237,7 +243,7 @@ UBOOL UVulkanRenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT N
 	}
 	catch (const std::exception& e)
 	{
-		debugf(TEXT("Could not create vulkan renderer: %s"), to_utf16(e.what()).c_str());
+		debugf(TEXT("Could not create vulkan renderer: %s"), appFromAnsi(e.what()));
 		Exit();
 		return 0;
 	}
@@ -539,7 +545,7 @@ UBOOL UVulkanRenderDevice::Exec(const TCHAR* Cmd, FOutputDevice& Ar)
 
 		for (size_t i = 0; i < supportedDevices.size(); i++)
 		{
-			Ar.Log(FString::Printf(TEXT("#%d - %s\r\n"), (int)i, to_utf16(supportedDevices[i].Device->Properties.Properties.deviceName).c_str()));
+			Ar.Log(FString::Printf(TEXT("#%d - %s\r\n"), (int)i, appFromAnsi(supportedDevices[i].Device->Properties.Properties.deviceName)));
 		}
 		return 1;
 	}
@@ -722,7 +728,7 @@ void UVulkanRenderDevice::Unlock(UBOOL Blit)
 	catch (std::exception& e)
 	{
 		static std::wstring err;
-		err = to_utf16(e.what());
+		err = appFromAnsi(e.what());
 		appUnwindf(TEXT("%s"), err.c_str());
 	}
 

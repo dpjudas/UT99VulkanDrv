@@ -281,7 +281,6 @@
     <ClInclude Include="TextureManager.h" />
     <ClInclude Include="TextureUploader.h" />
     <ClInclude Include="UploadManager.h" />
-    <ClInclude Include="UTF16.h" />
     <ClInclude Include="UVulkanRenderDevice.h" />
     <ClInclude Include="vec.h" />
     <ClInclude Include="CachedTexture.h" />
@@ -309,7 +308,6 @@
     <ClCompile Include="TextureManager.cpp" />
     <ClCompile Include="TextureUploader.cpp" />
     <ClCompile Include="UploadManager.cpp" />
-    <ClCompile Include="UTF16.cpp" />
     <ClCompile Include="UVulkanRenderDevice.cpp" />
     <ClCompile Include="VulkanDrv.cpp" />
   </ItemGroup>

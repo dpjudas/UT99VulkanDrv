@@ -18,7 +18,6 @@
     <ClInclude Include="RenderPassManager.h" />
     <ClInclude Include="FramebufferManager.h" />
     <ClInclude Include="CommandBufferManager.h" />
-    <ClInclude Include="UTF16.h" />
     <ClInclude Include="UploadManager.h" />
     <ClInclude Include="TextureUploader.h" />
   </ItemGroup>
@@ -38,7 +37,6 @@
     <ClCompile Include="RenderPassManager.cpp" />
     <ClCompile Include="FramebufferManager.cpp" />
     <ClCompile Include="CommandBufferManager.cpp" />
-    <ClCompile Include="UTF16.cpp" />
     <ClCompile Include="UploadManager.cpp" />
     <ClCompile Include="TextureUploader.cpp" />
   </ItemGroup>
