@@ -3,6 +3,7 @@
 #include "UVulkanRenderDevice.h"
 #include "CachedTexture.h"
 #include <cmath>
+#include <stdexcept>
 
 #if !defined(WIN32)
 #include <SDL2/SDL_vulkan.h>
@@ -127,9 +128,7 @@ void VulkanPrintLog(const char* typestr, const std::string& msg)
 
 void VulkanError(const char* text)
 {
-	debugf(TEXT("Fatal vulkan error: %s"), appFromAnsi(text));
-	appExit();
-	// throw std::runtime_error(text);
+	throw std::runtime_error(text);
 }
 
 UBOOL UVulkanRenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT NewColorBytes, UBOOL Fullscreen)
