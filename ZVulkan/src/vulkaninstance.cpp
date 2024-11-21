@@ -145,6 +145,9 @@ void VulkanInstance::CreateInstance()
 
 std::vector<VulkanPhysicalDevice> VulkanInstance::GetPhysicalDevices(VkInstance instance, uint32_t apiVersion)
 {
+	if (!vkEnumeratePhysicalDevices) // Some platform got a null function pointer when there is no vulkan support
+		return {};
+
 	uint32_t deviceCount = 0;
 	VkResult result = vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
 	if (result == VK_ERROR_INITIALIZATION_FAILED) // Some drivers return this when a card does not support vulkan
