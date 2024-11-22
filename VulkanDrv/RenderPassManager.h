@@ -25,13 +25,6 @@ public:
 	void CreatePostprocessRenderPass();
 	void CreateBloomPipeline();
 
-	void BeginScene(VulkanCommandBuffer* cmdbuffer, float r, float g, float b, float a);
-	void ContinueScene(VulkanCommandBuffer* cmdbuffer);
-	void EndScene(VulkanCommandBuffer* cmdbuffer);
-
-	void BeginPresent(VulkanCommandBuffer* cmdbuffer);
-	void EndPresent(VulkanCommandBuffer* cmdbuffer);
-
 	PipelineState* GetPipeline(DWORD polyflags);
 	PipelineState* GetEndFlashPipeline();
 	PipelineState* GetLinePipeline(bool occludeLines) { return &Scene.LinePipeline[occludeLines]; }
