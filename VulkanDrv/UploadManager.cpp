@@ -118,9 +118,6 @@ void UploadManager::UploadData(CachedTexture* tex, const FTextureInfo& Info, boo
 			uint32_t mipwidth = Mip->USize;
 			uint32_t mipheight = Mip->VSize;
 
-			if (tex->pendingUploads[0].empty() && tex->pendingUploads[1].empty())
-				PendingUploads.push_back(tex);
-
 			VkBufferImageCopy region = {};
 			region.bufferOffset = UploadBufferPos;
 			region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -166,46 +163,42 @@ void UploadManager::WaitIfUploadBufferIsFull(int bytes)
 
 void UploadManager::AddPendingUpload(CachedTexture* tex, const VkBufferImageCopy& region, bool isPartial)
 {
-	if (tex->pendingUploads[0].empty() && tex->pendingUploads[1].empty())
+	if (!tex->inPendingUploads)
+	{
 		PendingUploads.push_back(tex);
+		tex->inPendingUploads = true;
+	}
 
 	tex->pendingUploads[isPartial].push_back(region);
 }
 
 void UploadManager::SubmitUploads()
 {
+	if (PendingUploads.empty())
+		return;
+
 	auto cmdbuffer = renderer->Commands->GetTransferCommands();
+
+	// Transition images to transfer
+	PipelineBarrier beforeBarrier;
+	for (CachedTexture* tex : PendingUploads)
+	{
+		beforeBarrier.AddImage(
+			tex->image->image,
+			tex->imageLayout,
+			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT,
+			VK_ACCESS_TRANSFER_WRITE_BIT,
+			VK_IMAGE_ASPECT_COLOR_BIT,
+			0, tex->image->mipLevels);
+
+		tex->imageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+	}
+	beforeBarrier.Execute(cmdbuffer, VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 
 	// Do full texture uploads, then partial
 	for (int i = 0; i < 2; i++)
 	{
-		bool partialUpdates = (i == 1);
-
-		// Transition images to transfer
-		bool foundUpload = false;
-		PipelineBarrier beforeBarrier;
-		for (CachedTexture* tex : PendingUploads)
-		{
-			if (!tex->pendingUploads[i].empty())
-			{
-				beforeBarrier.AddImage(
-					tex->image->image,
-					partialUpdates ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED,
-					VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-					partialUpdates ? VK_ACCESS_SHADER_READ_BIT : 0,
-					VK_ACCESS_TRANSFER_WRITE_BIT,
-					VK_IMAGE_ASPECT_COLOR_BIT,
-					0, partialUpdates ? 1 : tex->pendingUploads[i].size());
-				foundUpload = true;
-			}
-		}
-		if (!foundUpload)
-			continue;
-		VkPipelineStageFlags srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-		if (partialUpdates)
-			srcStage |= VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-		beforeBarrier.Execute(cmdbuffer, srcStage, VK_PIPELINE_STAGE_TRANSFER_BIT);
-
 		// Copy from buffer to images
 		VkBuffer buffer = renderer->Buffers->UploadBuffer->buffer;
 		for (CachedTexture* tex : PendingUploads)
@@ -220,28 +213,32 @@ void UploadManager::SubmitUploads()
 				cmdbuffer->copyBufferToImage(buffer, tex->image->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, tex->pendingUploads[i].size(), tex->pendingUploads[i].data());
 			}
 		}
-
-		// Transition images to texture sampling
-		PipelineBarrier afterBarrier;
-		for (CachedTexture* tex : PendingUploads)
-		{
-			if (!tex->pendingUploads[i].empty())
-			{
-				afterBarrier.AddImage(
-					tex->image->image,
-					VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-					VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-					VK_ACCESS_TRANSFER_WRITE_BIT,
-					VK_ACCESS_SHADER_READ_BIT,
-					VK_IMAGE_ASPECT_COLOR_BIT,
-					0, partialUpdates ? 1 : tex->pendingUploads[i].size());
-
-				tex->pendingUploads[i].clear();
-			}
-		}
-		afterBarrier.Execute(cmdbuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
 	}
 
+	// Transition images to texture sampling
+	PipelineBarrier afterBarrier;
+	for (CachedTexture* tex : PendingUploads)
+	{
+		afterBarrier.AddImage(
+			tex->image->image,
+			tex->imageLayout,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			VK_ACCESS_TRANSFER_WRITE_BIT,
+			VK_ACCESS_SHADER_READ_BIT,
+			VK_IMAGE_ASPECT_COLOR_BIT,
+			0, tex->image->mipLevels);
+
+		tex->imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	}
+	afterBarrier.Execute(cmdbuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+
+	// Remove textures from pending uploads
+	for (CachedTexture* tex : PendingUploads)
+	{
+		tex->pendingUploads[0].clear();
+		tex->pendingUploads[1].clear();
+		tex->inPendingUploads = false;
+	}
 	PendingUploads.clear();
 	UploadBufferPos = 0;
 }
