@@ -459,6 +459,8 @@ private:
 	} FullscreenState;
 
 	bool InSetResCall = false;
+	int CurrentSizeX = 0;
+	int CurrentSizeY = 0;
 };
 
 void ThrowError(HRESULT result, const char* msg);

@@ -342,6 +342,9 @@ UBOOL UD3D12RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 		return FALSE;
 	}
 
+	CurrentSizeX = NewX;
+	CurrentSizeY = NewY;
+
 	if (Fullscreen && !FullscreenState.Enabled) // Entering fullscreen
 	{
 		// Save old state
@@ -376,8 +379,8 @@ UBOOL UD3D12RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 	if (!Fullscreen)
 	{
 		DXGI_MODE_DESC modeDesc = {};
-		modeDesc.Width = Viewport->SizeX;
-		modeDesc.Height = Viewport->SizeY;
+		modeDesc.Width = CurrentSizeX;
+		modeDesc.Height = CurrentSizeY;
 		modeDesc.Format = ActiveHdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM;
 		result = SwapChain3->ResizeTarget(&modeDesc);
 		if (FAILED(result))
@@ -385,7 +388,6 @@ UBOOL UD3D12RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 			debugf(TEXT("SwapChain.ResizeTarget failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
 		}
 	}
-
 
 	if (!UpdateSwapChain())
 		return FALSE;
@@ -410,8 +412,8 @@ void UD3D12RenderDevice::ReleaseSwapChainResources()
 
 bool UD3D12RenderDevice::UpdateSwapChain()
 {
-	int width = Viewport->SizeX;
-	int height = Viewport->SizeY;
+	int width = CurrentSizeX;
+	int height = CurrentSizeY;
 	if (FullscreenState.Enabled)
 	{
 		HDC screenDC = GetDC(0);
@@ -433,11 +435,11 @@ bool UD3D12RenderDevice::UpdateSwapChain()
 		SwapChain3->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020);
 	}
 
-	if (Viewport->SizeX && Viewport->SizeY)
+	if (CurrentSizeX && CurrentSizeY)
 	{
 		try
 		{
-			ResizeSceneBuffers(Viewport->SizeX, Viewport->SizeY, GetSettingsMultisample());
+			ResizeSceneBuffers(CurrentSizeX, CurrentSizeY, GetSettingsMultisample());
 		}
 		catch (const std::exception& e)
 		{
@@ -1926,11 +1928,11 @@ void UD3D12RenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane Scr
 		UpdateSwapChain();
 	}
 
-	if (Viewport->SizeX && Viewport->SizeY)
+	if (CurrentSizeX && CurrentSizeY)
 	{
 		try
 		{
-			ResizeSceneBuffers(SceneBuffers.Width, SceneBuffers.Height, GetSettingsMultisample());
+			ResizeSceneBuffers(CurrentSizeX, CurrentSizeY, GetSettingsMultisample());
 		}
 		catch (const std::exception& e)
 		{
@@ -1962,8 +1964,8 @@ void UD3D12RenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane Scr
 		Commands.Draw->ClearDepthStencilView(depthview, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
 		D3D12_RECT box = {};
-		box.right = Viewport->SizeX;
-		box.bottom = Viewport->SizeY;
+		box.right = CurrentSizeX;
+		box.bottom = CurrentSizeY;
 		Commands.Draw->RSSetScissorRects(1, &box);
 
 		SceneConstants.HitIndex = 0;
@@ -2112,9 +2114,9 @@ void UD3D12RenderDevice::Unlock(UBOOL Blit)
 			GetClientRect((HWND)Viewport->GetWindow(), &box);
 			int width = box.right;
 			int height = box.bottom;
-			float scale = std::min(width / (float)Viewport->SizeX, height / (float)Viewport->SizeY);
-			int letterboxWidth = (int)std::round(Viewport->SizeX * scale);
-			int letterboxHeight = (int)std::round(Viewport->SizeY * scale);
+			float scale = std::min(width / (float)CurrentSizeX, height / (float)CurrentSizeY);
+			int letterboxWidth = (int)std::round(CurrentSizeX * scale);
+			int letterboxHeight = (int)std::round(CurrentSizeY * scale);
 			int letterboxX = (width - letterboxWidth) / 2;
 			int letterboxY = (height - letterboxHeight) / 2;
 
@@ -3068,14 +3070,14 @@ void UD3D12RenderDevice::ReadPixels(FColor* Pixels)
 		Commands.Draw->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
 
 		D3D12_VIEWPORT viewport = {};
-		viewport.Width = Viewport->SizeX;
-		viewport.Height = Viewport->SizeY;
+		viewport.Width = CurrentSizeX;
+		viewport.Height = CurrentSizeY;
 		viewport.MaxDepth = 1.0f;
 		Commands.Draw->RSSetViewports(1, &viewport);
 
 		D3D12_RECT box = {};
-		box.right = Viewport->SizeX;
-		box.bottom = Viewport->SizeY;
+		box.right = CurrentSizeX;
+		box.bottom = CurrentSizeY;
 		Commands.Draw->RSSetScissorRects(1, &box);
 
 		PresentPushConstants pushconstants = GetPresentPushConstants();
@@ -3151,8 +3153,8 @@ void UD3D12RenderDevice::ReadPixels(FColor* Pixels)
 	if (SUCCEEDED(result))
 	{
 		uint8_t* srcpixels = (uint8_t*)data;
-		int w = Viewport->SizeX;
-		int h = Viewport->SizeY;
+		int w = CurrentSizeX;
+		int h = CurrentSizeY;
 		void* data = Pixels;
 
 		for (int y = 0; y < h; y++)
