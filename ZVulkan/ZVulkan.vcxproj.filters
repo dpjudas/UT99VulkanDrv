@@ -31,9 +31,6 @@
     <Filter Include="src\glslang\glslang">
       <UniqueIdentifier>{b14c62ff-f096-4508-ab9c-31026dd7b9b7}</UniqueIdentifier>
     </Filter>
-    <Filter Include="src\glslang\OGLCompilersDLL">
-      <UniqueIdentifier>{a703f692-1d5a-42c6-8aa7-e72afed148f8}</UniqueIdentifier>
-    </Filter>
     <Filter Include="src\glslang\spirv">
       <UniqueIdentifier>{fbf8c1f7-f33d-4568-b975-d24fb853e375}</UniqueIdentifier>
     </Filter>
@@ -63,6 +60,9 @@
     </Filter>
     <Filter Include="src\glslang\glslang\MachineIndependent\preprocessor">
       <UniqueIdentifier>{161a53d6-3c21-4bf1-babe-e9184dff2408}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\glslang\glslang\ResourceLimits">
+      <UniqueIdentifier>{2e2245a3-dff0-44c8-8076-f61477b72b10}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -291,9 +291,6 @@
     <ClInclude Include="src\glslang\spirv\GLSL.std.450.h">
       <Filter>src\glslang\spirv</Filter>
     </ClInclude>
-    <ClInclude Include="src\glslang\spirv\GlslangToSpv.h">
-      <Filter>src\glslang\spirv</Filter>
-    </ClInclude>
     <ClInclude Include="src\glslang\spirv\hex_float.h">
       <Filter>src\glslang\spirv</Filter>
     </ClInclude>
@@ -318,8 +315,8 @@
     <ClInclude Include="src\glslang\spirv\SpvTools.h">
       <Filter>src\glslang\spirv</Filter>
     </ClInclude>
-    <ClInclude Include="src\glslang\OGLCompilersDLL\InitializeDll.h">
-      <Filter>src\glslang\OGLCompilersDLL</Filter>
+    <ClInclude Include="src\glslang\spirv\GlslangToSpv.h">
+      <Filter>src\glslang\spirv</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -452,9 +449,6 @@
     <ClCompile Include="src\glslang\spirv\doc.cpp">
       <Filter>src\glslang\spirv</Filter>
     </ClCompile>
-    <ClCompile Include="src\glslang\spirv\GlslangToSpv.cpp">
-      <Filter>src\glslang\spirv</Filter>
-    </ClCompile>
     <ClCompile Include="src\glslang\spirv\InReadableOrder.cpp">
       <Filter>src\glslang\spirv</Filter>
     </ClCompile>
@@ -473,8 +467,11 @@
     <ClCompile Include="src\glslang\spirv\SpvTools.cpp">
       <Filter>src\glslang\spirv</Filter>
     </ClCompile>
-    <ClCompile Include="src\glslang\OGLCompilersDLL\InitializeDll.cpp">
-      <Filter>src\glslang\OGLCompilersDLL</Filter>
+    <ClCompile Include="src\glslang\spirv\GlslangToSpv.cpp">
+      <Filter>src\glslang\spirv</Filter>
+    </ClCompile>
+    <ClCompile Include="src\glslang\glslang\ResourceLimits\ResourceLimits.cpp">
+      <Filter>src\glslang\glslang\ResourceLimits</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

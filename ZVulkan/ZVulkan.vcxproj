@@ -94,7 +94,6 @@
     <ClInclude Include="src\glslang\glslang\MachineIndependent\Versions.h" />
     <ClInclude Include="src\glslang\glslang\OSDependent\osinclude.h" />
     <ClInclude Include="src\glslang\glslang\Public\ShaderLang.h" />
-    <ClInclude Include="src\glslang\OGLCompilersDLL\InitializeDll.h" />
     <ClInclude Include="src\glslang\spirv\bitutils.h" />
     <ClInclude Include="src\glslang\spirv\disassemble.h" />
     <ClInclude Include="src\glslang\spirv\doc.h" />
@@ -169,7 +168,7 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='UnrealGoldRelease|Win32'">true</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="src\glslang\glslang\OSDependent\Windows\ossource.cpp" />
-    <ClCompile Include="src\glslang\OGLCompilersDLL\InitializeDll.cpp" />
+    <ClCompile Include="src\glslang\glslang\ResourceLimits\ResourceLimits.cpp" />
     <ClCompile Include="src\glslang\spirv\disassemble.cpp" />
     <ClCompile Include="src\glslang\spirv\doc.cpp" />
     <ClCompile Include="src\glslang\spirv\GlslangToSpv.cpp" />
