@@ -406,6 +406,12 @@ UBOOL UD3D11RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 				debugf(TEXT("SwapChain.SetFullscreenState failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
 				// Don't fail this as it can happen if the application isn't the foreground process
 			}
+
+			result = SwapChain->ResizeTarget(&modeDesc);
+			if (FAILED(result))
+			{
+				debugf(TEXT("SwapChain.ResizeTarget failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
+			}
 		}
 
 		debugf(TEXT("D3D11Drv: Calling Viewport->ResizeViewport(BLIT_HardwarePaint | BLIT_Direct3D, %d, %d, %d)"), NewX, NewY, NewColorBytes);
