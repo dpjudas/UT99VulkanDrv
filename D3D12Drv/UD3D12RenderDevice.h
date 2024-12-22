@@ -128,6 +128,8 @@ public:
 	void UpdateTextureRect(FTextureInfo& Info, INT U, INT V, INT UL, INT VL) override;
 #endif
 
+	int GetWantedSwapChainBufferCount() { return 2;/* UseVSync ? 2 : 3;*/ }
+
 	int InterfacePadding[64]; // For allowing URenderDeviceOldUnreal469 interface to add things
 
 	HWND WindowHandle = 0;
@@ -136,12 +138,11 @@ public:
 	ComPtr<ID3D12InfoQueue1> InfoQueue1;
 	ComPtr<ID3D12CommandQueue> GraphicsQueue;
 	D3D_FEATURE_LEVEL FeatureLevel = D3D_FEATURE_LEVEL_11_0; // To do: find out how to discover this
-	UINT64 FenceValue = 1;
-	HANDLE FenceEvent = INVALID_HANDLE_VALUE;
-	ComPtr<ID3D12Fence> Fence;
 	ComPtr<IDXGISwapChain3> SwapChain3;
+	int BackBufferIndex = 0;
 	bool DxgiSwapChainAllowTearing = false;
 	int BufferCount = 2;
+	std::vector<UINT64> FrameFenceValues;
 	std::vector<ComPtr<ID3D12Resource>> FrameBuffers;
 	DescriptorSet FrameBufferRTVs;
 
@@ -161,13 +162,22 @@ public:
 		std::unordered_map<uint32_t, DescriptorSet> Sampler;
 	} Descriptors;
 
-	struct
+	struct CommandBatch
 	{
 		ComPtr<ID3D12CommandAllocator> TransferAllocator;
 		ComPtr<ID3D12CommandAllocator> DrawAllocator;
 		ComPtr<ID3D12GraphicsCommandList> Transfer;
 		ComPtr<ID3D12GraphicsCommandList> Draw;
-		bool InSceneDraw = false;
+		UINT64 FenceValue = 0;
+	};
+
+	struct
+	{
+		UINT64 FenceValue = 0;
+		ComPtr<ID3D12Fence> Fence;
+		HANDLE FenceHandle = INVALID_HANDLE_VALUE;
+		CommandBatch Batches[2];
+		CommandBatch* Current = nullptr;
 		D3D_PRIMITIVE_TOPOLOGY PrimitiveTopology = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 	} Commands;
 
@@ -229,10 +239,15 @@ public:
 		ScenePipelineState PointPipeline[2];
 		FLOAT LODBias = 0.0f;
 		int Multisample = 1;
+		SceneVertex* VertexData = nullptr;
+		size_t VertexBase = 0;
+		size_t VertexPos = 0;
+		uint32_t* IndexData = nullptr;
+		size_t IndexBase = 0;
+		size_t IndexPos = 0;
+		static const int VertexBufferSize = 512 * 1024;
+		static const int IndexBufferSize = 1024 * 1024;
 	} ScenePass;
-
-	static const int SceneVertexBufferSize = 512 * 1024;
-	static const int SceneIndexBufferSize = 1024 * 1024;
 
 	struct DrawBatchEntry
 	{
@@ -250,18 +265,13 @@ public:
 	} Batch;
 	std::vector<DrawBatchEntry> QueuedBatches;
 
-	SceneVertex* SceneVertices = nullptr;
-	size_t SceneVertexPos = 0;
-
-	uint32_t* SceneIndexes = nullptr;
-	size_t SceneIndexPos = 0;
-
 	struct
 	{
 		ComPtr<ID3D12Resource> Buffer;
 		uint8_t* Data = nullptr;
+		UINT64 Base = 0;
 		UINT64 Pos = 0;
-		const UINT64 Size = 64 * 1024 * 1024;
+		const UINT64 Size = 32 * 1024 * 1024;
 		struct
 		{
 			std::vector<D3D12_PLACED_SUBRESOURCE_FOOTPRINT> Footprints;
@@ -375,22 +385,22 @@ private:
 	VertexReserveInfo ReserveVertices(size_t vcount, size_t icount)
 	{
 		// If buffers are full, flush and wait for room.
-		if (SceneVertexPos + vcount > (size_t)SceneVertexBufferSize || SceneIndexPos + icount > (size_t)SceneIndexBufferSize)
+		if (ScenePass.VertexPos + vcount > (size_t)ScenePass.VertexBufferSize || ScenePass.IndexPos + icount > (size_t)ScenePass.IndexBufferSize)
 		{
 			// If the request is larger than our buffers we can't draw this.
-			if (vcount > (size_t)SceneVertexBufferSize || icount > (size_t)SceneIndexBufferSize)
+			if (vcount > (size_t)ScenePass.VertexBufferSize || icount > (size_t)ScenePass.IndexBufferSize)
 				return { nullptr, nullptr, 0 };
 
 			DrawBatches(true);
 		}
 
-		return { SceneVertices + SceneVertexPos, SceneIndexes + SceneIndexPos, (uint32_t)SceneVertexPos };
+		return { ScenePass.VertexData + ScenePass.VertexBase + ScenePass.VertexPos, ScenePass.IndexData + ScenePass.IndexBase + ScenePass.IndexPos, (uint32_t)(ScenePass.VertexBase + ScenePass.VertexPos) };
 	}
 
 	void UseVertices(size_t vcount, size_t icount)
 	{
-		SceneVertexPos += vcount;
-		SceneIndexPos += icount;
+		ScenePass.VertexPos += vcount;
+		ScenePass.IndexPos += icount;
 	}
 
 	int GetSettingsMultisample();
@@ -404,9 +414,9 @@ private:
 
 	PresentPushConstants GetPresentPushConstants();
 
-	void SetSceneDrawState();
 	void WaitDeviceIdle();
-	void WaitForCommands(bool present);
+	void WaitForFence(UINT64 value);
+	void SubmitCommands(bool present);
 	void TransitionResourceBarrier(ID3D12GraphicsCommandList* cmdlist, ID3D12Resource* resource, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after);
 	void TransitionResourceBarrier(ID3D12GraphicsCommandList* cmdlist, ID3D12Resource* resource0, D3D12_RESOURCE_STATES before0, D3D12_RESOURCE_STATES after0, ID3D12Resource* resource1, D3D12_RESOURCE_STATES before1, D3D12_RESOURCE_STATES after1);
 
