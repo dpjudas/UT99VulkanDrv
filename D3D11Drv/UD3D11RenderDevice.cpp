@@ -251,6 +251,16 @@ UBOOL UD3D11RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 				swapDesc.BufferDesc.RefreshRate.Numerator = RefreshRate;
 				swapDesc.BufferDesc.RefreshRate.Denominator = 1;
 			}
+			else
+			{
+				DEVMODE devmode = {};
+				devmode.dmSize = sizeof(DEVMODE);
+				if (EnumDisplaySettings(nullptr, ENUM_CURRENT_SETTINGS, &devmode) && devmode.dmDisplayFrequency > 1)
+				{
+					swapDesc.BufferDesc.RefreshRate.Numerator = devmode.dmDisplayFrequency;
+					swapDesc.BufferDesc.RefreshRate.Denominator = 1;
+				}
+			}
 
 			// First try create a swap chain for Windows 8 and newer. If that fails, try the old for Windows 7
 			HRESULT result = E_FAIL;
@@ -339,6 +349,15 @@ UBOOL UD3D11RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 
 	ReleaseSwapChainResources();
 
+	// Resize the swap chain buffers before doing the mode switch. Shouldn't really make any difference but you never know!
+	if (Fullscreen)
+	{
+		UINT flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
+		if (DxgiSwapChainAllowTearing)
+			flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
+		SwapChain->ResizeBuffers(UseVSync ? 2 : 3, NewX, NewY, ActiveHdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM, flags);
+	}
+
 	HRESULT result;
 
 	DXGI_MODE_DESC modeDesc = {};
@@ -350,17 +369,38 @@ UBOOL UD3D11RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 		modeDesc.RefreshRate.Numerator = RefreshRate;
 		modeDesc.RefreshRate.Denominator = 1;
 	}
+	else
+	{
+		DEVMODE devmode = {};
+		devmode.dmSize = sizeof(DEVMODE);
+		if (EnumDisplaySettings(nullptr, ENUM_CURRENT_SETTINGS, &devmode) && devmode.dmDisplayFrequency > 1)
+		{
+			modeDesc.RefreshRate.Numerator = devmode.dmDisplayFrequency;
+			modeDesc.RefreshRate.Denominator = 1;
+		}
+	}
 
 	if (Fullscreen)
 	{
-#if 0
 		IDXGIOutput* output = nullptr;
 		result = SwapChain->GetContainingOutput(&output);
 		if (SUCCEEDED(result))
 		{
 			DXGI_MODE_DESC modeToMatch = modeDesc;
-			result = output->FindClosestMatchingMode(&modeToMatch, &modeDesc, Device);
-			if (FAILED(result))
+			DXGI_MODE_DESC modeFound = {};
+			result = output->FindClosestMatchingMode(&modeToMatch, &modeFound, Device);
+			if (SUCCEEDED(result))
+			{
+				if (modeToMatch.Width == modeFound.Width && modeToMatch.Height == modeFound.Height)
+				{
+					modeDesc = modeFound;
+				}
+				else
+				{
+					debugf(TEXT("FindClosestMatchingMode could not find a mode with the specified resolution (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
+				}
+			}
+			else
 			{
 				debugf(TEXT("FindClosestMatchingMode failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
 			}
@@ -372,7 +412,6 @@ UBOOL UD3D11RenderDevice::SetRes(INT NewX, INT NewY, INT NewColorBytes, UBOOL Fu
 		{
 			debugf(TEXT("GetContainingOutput failed (%d, %d, %d, %d)"), NewX, NewY, NewColorBytes, (INT)Fullscreen);
 		}
-#endif
 
 		debugf(TEXT("D3D11Drv: Calling Viewport->ResizeViewport(BLIT_Fullscreen | BLIT_Direct3D, %d, %d, %d)"), NewX, NewY, NewColorBytes);
 
