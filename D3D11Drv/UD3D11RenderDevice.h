@@ -4,6 +4,8 @@
 #include "mat.h"
 #include "ComPtr.h"
 #include "CycleTimer.h"
+#include <set>
+#include <string>
 
 #include "TextureManager.h"
 #include "UploadManager.h"
@@ -103,10 +105,14 @@ public:
 	ComPtr<ID3D11DeviceContext> Context;
 	ComPtr<IDXGISwapChain> SwapChain;
 	ComPtr<IDXGISwapChain1> SwapChain1;
+	ComPtr<ID3D11Debug> DebugLayer;
+	ComPtr<ID3D11InfoQueue> InfoQueue;
 	ComPtr<ID3D11Texture2D> BackBuffer;
 	ComPtr<ID3D11RenderTargetView> BackBufferView;
 	bool DxgiSwapChainAllowTearing = false;
 	int BufferCount = 2;
+	std::set<std::string> SeenDebugMessages;
+	int TotalSeenDebugMessages = 0;
 
 	struct PPBlurLevel
 	{
@@ -245,6 +251,7 @@ public:
 	BYTE LightMode;
 	INT RefreshRate;
 	BITFIELD GammaCorrectScreenshots;
+	BITFIELD UseDebugLayer;
 
 	struct
 	{
@@ -315,6 +322,8 @@ private:
 	void AddDrawBatch();
 	void DrawBatches(bool nextBuffer = false);
 	void DrawEntry(const DrawBatchEntry& entry);
+
+	void PrintDebugLayerMessages();
 
 	struct VertexReserveInfo
 	{

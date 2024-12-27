@@ -77,6 +77,7 @@ void UD3D11RenderDevice::StaticConstructor()
 	RefreshRate = 0;
 
 	GammaCorrectScreenshots = 1;
+	UseDebugLayer = 0;
 
 #if defined(OLDUNREAL469SDK)
 	new(GetClass(), TEXT("UseLightmapAtlas"), RF_Public) UBoolProperty(CPP_PROPERTY(UseLightmapAtlas), TEXT("Display"), CPF_Config);
@@ -85,6 +86,7 @@ void UD3D11RenderDevice::StaticConstructor()
 	new(GetClass(), TEXT("UseVSync"), RF_Public) UBoolProperty(CPP_PROPERTY(UseVSync), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("UsePrecache"), RF_Public) UBoolProperty(CPP_PROPERTY(UsePrecache), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("GammaCorrectScreenshots"), RF_Public) UBoolProperty(CPP_PROPERTY(GammaCorrectScreenshots), TEXT("Display"), CPF_Config);
+	new(GetClass(), TEXT("UseDebugLayer"), RF_Public) UBoolProperty(CPP_PROPERTY(UseDebugLayer), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("GammaOffset"), RF_Public) UFloatProperty(CPP_PROPERTY(GammaOffset), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("GammaOffsetRed"), RF_Public) UFloatProperty(CPP_PROPERTY(GammaOffsetRed), TEXT("Display"), CPF_Config);
 	new(GetClass(), TEXT("GammaOffsetGreen"), RF_Public) UFloatProperty(CPP_PROPERTY(GammaOffsetGreen), TEXT("Display"), CPF_Config);
@@ -157,12 +159,16 @@ UBOOL UD3D11RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 			D3D_FEATURE_LEVEL_10_0
 		};
 
+		UINT deviceFlags = D3D11_CREATE_DEVICE_SINGLETHREADED | D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+		if (UseDebugLayer)
+			deviceFlags |= D3D11_CREATE_DEVICE_DEBUG;
+
 		// First try use a more recent way of creating the device and swap chain
 		HRESULT result = D3D11CreateDevice(
 			nullptr,
 			D3D_DRIVER_TYPE_HARDWARE,
 			0,
-			D3D11_CREATE_DEVICE_SINGLETHREADED | D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+			deviceFlags,
 			featurelevels.data(), (UINT)featurelevels.size(),
 			D3D11_SDK_VERSION,
 			Device.TypedInitPtr(),
@@ -193,9 +199,9 @@ UBOOL UD3D11RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 				}
 			}
 
-			UINT flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
+			UINT swapChainFlags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
 			if (DxgiSwapChainAllowTearing)
-				flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
+				swapChainFlags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
 
 			DXGI_SWAP_CHAIN_DESC1 swapDesc = {};
 			swapDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
@@ -206,7 +212,7 @@ UBOOL UD3D11RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 			swapDesc.SampleDesc.Count = 1;
 			swapDesc.Scaling = DXGI_SCALING_STRETCH;
 			swapDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-			swapDesc.Flags = flags;
+			swapDesc.Flags = swapChainFlags;
 			swapDesc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
 			result = dxgiFactory->CreateSwapChainForHwnd(Device, (HWND)Viewport->GetWindow(), &swapDesc, nullptr, nullptr, SwapChain1.TypedInitPtr());
 			if (SUCCEEDED(result))
@@ -272,7 +278,7 @@ UBOOL UD3D11RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 					nullptr,
 					D3D_DRIVER_TYPE_HARDWARE,
 					0,
-					D3D11_CREATE_DEVICE_SINGLETHREADED | D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+					deviceFlags,
 					featurelevels.data(), (UINT)featurelevels.size(),
 					D3D11_SDK_VERSION,
 					&swapDesc,
@@ -284,6 +290,33 @@ UBOOL UD3D11RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 					break;
 			}
 			ThrowIfFailed(result, "D3D11CreateDeviceAndSwapChain failed");
+		}
+
+		if (UseDebugLayer)
+		{
+			result = Device->QueryInterface(DebugLayer.GetIID(), DebugLayer.InitPtr());
+			if (SUCCEEDED(result))
+			{
+				result = DebugLayer->QueryInterface(InfoQueue.GetIID(), InfoQueue.InitPtr());
+				if (SUCCEEDED(result))
+				{
+					std::initializer_list<D3D11_MESSAGE_ID> denyList =
+					{
+						D3D11_MESSAGE_ID_SETPRIVATEDATA_CHANGINGPARAMS
+					};
+					D3D11_INFO_QUEUE_FILTER filter = {};
+					filter.DenyList.NumIDs = (UINT)denyList.size();
+					filter.DenyList.pIDList = const_cast<D3D11_MESSAGE_ID*>(denyList.begin());
+					result = InfoQueue->AddStorageFilterEntries(&filter);
+
+					// result = InfoQueue->SetBreakOnSeverity(D3D11_MESSAGE_SEVERITY_CORRUPTION, TRUE);
+					// result = InfoQueue->SetBreakOnSeverity(D3D11_MESSAGE_SEVERITY_ERROR, TRUE);
+				}
+			}
+			else
+			{
+				debugf(TEXT("D3D11Drv: Could not get ID3D11Debug interface"));
+			}
 		}
 
 		SetColorSpace();
@@ -310,6 +343,50 @@ UBOOL UD3D11RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 
 	return 1;
 	unguard;
+}
+
+void UD3D11RenderDevice::PrintDebugLayerMessages()
+{
+	if (InfoQueue)
+	{
+		UINT64 count = InfoQueue->GetNumStoredMessages();
+		for (UINT64 i = 0; i < count; i++)
+		{
+			SIZE_T msgLength = 0;
+			HRESULT result = InfoQueue->GetMessage(i, nullptr, &msgLength);
+			if (msgLength >= sizeof(D3D11_MESSAGE))
+			{
+				std::vector<uint8_t> buffer(msgLength);
+				D3D11_MESSAGE* msg = (D3D11_MESSAGE*)buffer.data();
+				result = InfoQueue->GetMessage(i, msg, &msgLength);
+				if (SUCCEEDED(result))
+				{
+					std::string description = msg->pDescription;
+					bool found = SeenDebugMessages.find(description) != SeenDebugMessages.end();
+					if (!found)
+					{
+						if (TotalSeenDebugMessages < 20)
+						{
+							TotalSeenDebugMessages++;
+							SeenDebugMessages.insert(description);
+
+							const char* severitystr = "unknown";
+							switch (msg->Severity)
+							{
+							case D3D11_MESSAGE_SEVERITY_CORRUPTION: severitystr = "corruption"; break;
+							case D3D11_MESSAGE_SEVERITY_ERROR: severitystr = "error"; break;
+							case D3D11_MESSAGE_SEVERITY_WARNING: severitystr = "warning"; break;
+							case D3D11_MESSAGE_SEVERITY_INFO: severitystr = "info"; break;
+							case D3D11_MESSAGE_SEVERITY_MESSAGE: severitystr = "message"; break;
+							}
+							debugf(TEXT("D3D11Drv: [%s] %s"), to_utf16(severitystr).c_str(), to_utf16(msg->pDescription).c_str());
+						}
+					}
+				}
+			}
+		}
+		InfoQueue->ClearStoredMessages();
+	}
 }
 
 void UD3D11RenderDevice::SetColorSpace()
@@ -554,6 +631,7 @@ void UD3D11RenderDevice::Exit()
 	guard(UD3D11RenderDevice::Exit);
 
 	UnmapVertices();
+	PrintDebugLayerMessages();
 
 	Uploads.reset();
 	Textures.reset();
@@ -1872,6 +1950,8 @@ void UD3D11RenderDevice::Unlock(UBOOL Blit)
 	HitSize = nullptr;
 
 	IsLocked = false;
+
+	PrintDebugLayerMessages();
 
 	unguard;
 }
