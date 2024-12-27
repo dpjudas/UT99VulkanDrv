@@ -97,6 +97,8 @@ public:
 	void DrawTileList(const FSceneNode* Frame, const FTextureInfo& Info, const FTileRect* Tiles, INT NumTiles, FSpanBuffer* Span, FLOAT Z, FPlane Color, FPlane Fog, DWORD PolyFlags) override;
 #endif
 
+	void SetDebugName(ID3D11DeviceChild* obj, const char* name);
+
 	int InterfacePadding[64]; // For allowing URenderDeviceOldUnreal469 interface to add things
 
 	HWND WindowHandle = 0;
