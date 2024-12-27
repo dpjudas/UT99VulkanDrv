@@ -656,7 +656,7 @@ void UD3D11RenderDevice::Exit()
 
 	if (DebugLayer)
 	{
-		DebugLayer->ReportLiveDeviceObjects(D3D11_RLDO_SUMMARY | D3D11_RLDO_DETAIL | D3D11_RLDO_IGNORE_INTERNAL);
+		DebugLayer->ReportLiveDeviceObjects(/*D3D11_RLDO_SUMMARY |*/ D3D11_RLDO_DETAIL | D3D11_RLDO_IGNORE_INTERNAL);
 		PrintDebugLayerMessages();
 	}
 
