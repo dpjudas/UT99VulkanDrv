@@ -646,6 +646,15 @@ void UD3D11RenderDevice::Exit()
 	Context.reset();
 	Device.reset();
 
+	if (DebugLayer)
+	{
+		DebugLayer->ReportLiveDeviceObjects(D3D11_RLDO_SUMMARY | D3D11_RLDO_DETAIL | D3D11_RLDO_IGNORE_INTERNAL);
+		PrintDebugLayerMessages();
+	}
+
+	InfoQueue.reset();
+	DebugLayer.reset();
+
 	unguard;
 }
 
