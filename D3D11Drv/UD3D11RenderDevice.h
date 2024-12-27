@@ -97,6 +97,7 @@ public:
 	void DrawTileList(const FSceneNode* Frame, const FTextureInfo& Info, const FTileRect* Tiles, INT NumTiles, FSpanBuffer* Span, FLOAT Z, FPlane Color, FPlane Fog, DWORD PolyFlags) override;
 #endif
 
+	void SetDebugName(ID3D11Device* obj, const char* name);
 	void SetDebugName(ID3D11DeviceChild* obj, const char* name);
 
 	int InterfacePadding[64]; // For allowing URenderDeviceOldUnreal469 interface to add things
@@ -153,7 +154,7 @@ public:
 	struct ScenePipelineState
 	{
 		D3D11_PRIMITIVE_TOPOLOGY PrimitiveTopology = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-		ComPtr<ID3D11PixelShader> PixelShader;
+		ID3D11PixelShader* PixelShader = nullptr;
 		ComPtr<ID3D11BlendState> BlendState;
 		ComPtr<ID3D11DepthStencilState> DepthStencilState;
 		float MinDepth = 0.1f;

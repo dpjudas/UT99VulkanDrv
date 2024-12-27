@@ -322,6 +322,9 @@ UBOOL UD3D11RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 			}
 		}
 
+		SetDebugName(Device, "D3D11Drv.Device");
+		SetDebugName(Context, "D3D11Drv.Context");
+
 		SetColorSpace();
 
 		CreateScenePass();
@@ -1164,6 +1167,7 @@ void UD3D11RenderDevice::ReleasePresentPass()
 	PresentPass.DitherTexture.reset();
 	PresentPass.BlendState.reset();
 	PresentPass.DepthStencilState.reset();
+	PresentPass.RasterizerState.reset();
 }
 
 void UD3D11RenderDevice::ReleaseSceneBuffers()
@@ -3493,6 +3497,12 @@ void UD3D11RenderDevice::CreatePixelShader(ComPtr<ID3D11PixelShader>& outShader,
 	HRESULT result = Device->CreatePixelShader(bytecode.data(), bytecode.size(), nullptr, outShader.TypedInitPtr());
 	ThrowIfFailed(result, ("CreatePixelShader(" + shaderName + ") failed").c_str());
 	SetDebugName(outShader, shaderName.c_str());
+}
+
+void UD3D11RenderDevice::SetDebugName(ID3D11Device* obj, const char* name)
+{
+	if (UseDebugLayer)
+		obj->SetPrivateData(WKPDID_D3DDebugObjectName, strlen(name), name);
 }
 
 void UD3D11RenderDevice::SetDebugName(ID3D11DeviceChild* obj, const char* name)
