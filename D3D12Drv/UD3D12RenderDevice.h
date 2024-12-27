@@ -343,6 +343,7 @@ public:
 private:
 	void ReleaseSwapChainResources();
 	bool UpdateSwapChain();
+	void SetColorSpace();
 	void ResizeSceneBuffers(int width, int height, int multisample);
 	void ClearTextureCache();
 

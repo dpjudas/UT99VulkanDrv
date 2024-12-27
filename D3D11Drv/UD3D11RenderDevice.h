@@ -285,6 +285,7 @@ private:
 
 	void ReleaseSwapChainResources();
 	bool UpdateSwapChain();
+	void SetColorSpace();
 	void ResizeSceneBuffers(int width, int height, int multisample);
 	void ClearTextureCache();
 
@@ -357,6 +358,10 @@ private:
 	vec4 ApplyInverseGamma(vec4 color);
 
 	PresentPushConstants GetPresentPushConstants();
+
+	bool VerticesMapped() const { return SceneVertices && SceneIndexes; }
+	void MapVertices(bool nextBuffer);
+	void UnmapVertices();
 
 	UBOOL UsePrecache;
 	FPlane FlashScale;

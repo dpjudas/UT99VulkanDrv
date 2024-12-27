@@ -16,7 +16,7 @@ public:
 			Ptr->AddRef();
 	}
 	
-	ComPtr(ComPtr&& move)
+	ComPtr(ComPtr&& move) noexcept
 	{
 		Ptr = move.Ptr;
 		move.Ptr = nullptr;
@@ -37,6 +37,12 @@ public:
 			if (Ptr)
 				Ptr->AddRef();
 		}
+		return *this;
+	}
+
+	ComPtr& operator=(ComPtr&& move) noexcept
+	{
+		std::swap(Ptr, move.Ptr);
 		return *this;
 	}
 

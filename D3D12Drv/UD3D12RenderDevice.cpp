@@ -232,10 +232,7 @@ UBOOL UD3D12RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 		result = swapChain1->QueryInterface(SwapChain3.GetIID(), SwapChain3.InitPtr());
 		ThrowIfFailed(result, "QueryInterface(IID_SwapChain3) failed");
 
-		if (ActiveHdr)
-		{
-			SwapChain3->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020);
-		}
+		SetColorSpace();
 
 		result = factory->MakeWindowAssociation((HWND)Viewport->GetWindow(), DXGI_MWA_NO_WINDOW_CHANGES | DXGI_MWA_NO_ALT_ENTER);
 		ThrowIfFailed(result, "MakeWindowAssociation failed");
@@ -294,6 +291,27 @@ UBOOL UD3D12RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 
 	return 1;
 	unguard;
+}
+
+void UD3D12RenderDevice::SetColorSpace()
+{
+	if (ActiveHdr)
+	{
+		UINT support = 0;
+		HRESULT result = SwapChain3->CheckColorSpaceSupport(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020, &support);
+		if (SUCCEEDED(result) && (support & DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG_PRESENT) == DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG_PRESENT)
+		{
+			result = SwapChain3->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020);
+			if (FAILED(result))
+			{
+				debugf(TEXT("D3D12Drv: IDXGISwapChain3.SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020) failed"));
+			}
+		}
+		else
+		{
+			debugf(TEXT("D3D12Drv: Swap chain does not support DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020"));
+		}
+	}
 }
 
 class SetResCallLock
@@ -441,10 +459,7 @@ bool UD3D12RenderDevice::UpdateSwapChain()
 	if (FAILED(result))
 		return false;
 
-	if (ActiveHdr)
-	{
-		SwapChain3->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020);
-	}
+	SetColorSpace();
 
 	if (CurrentSizeX && CurrentSizeY)
 	{
@@ -2093,6 +2108,9 @@ PresentPushConstants UD3D12RenderDevice::GetPresentPushConstants()
 void UD3D12RenderDevice::Unlock(UBOOL Blit)
 {
 	guard(UD3D12RenderDevice::Unlock);
+
+	if (!IsLocked) // Don't trust the engine.
+		return;
 
 	try
 	{

@@ -286,15 +286,7 @@ UBOOL UD3D11RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 			ThrowIfFailed(result, "D3D11CreateDeviceAndSwapChain failed");
 		}
 
-		if (ActiveHdr)
-		{
-			ComPtr<IDXGISwapChain3> swapChain3;
-			HRESULT result = SwapChain->QueryInterface(swapChain3.GetIID(), swapChain3.InitPtr());
-			if (SUCCEEDED(result))
-			{
-				result = swapChain3->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020);
-			}
-		}
+		SetColorSpace();
 
 		CreateScenePass();
 		CreatePresentPass();
@@ -318,6 +310,32 @@ UBOOL UD3D11RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 
 	return 1;
 	unguard;
+}
+
+void UD3D11RenderDevice::SetColorSpace()
+{
+	if (ActiveHdr)
+	{
+		ComPtr<IDXGISwapChain3> swapChain3;
+		HRESULT result = SwapChain->QueryInterface(swapChain3.GetIID(), swapChain3.InitPtr());
+		if (SUCCEEDED(result))
+		{
+			UINT support = 0;
+			result = swapChain3->CheckColorSpaceSupport(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020, &support);
+			if (SUCCEEDED(result) && (support & DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG_PRESENT) == DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG_PRESENT)
+			{
+				result = swapChain3->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020);
+				if (FAILED(result))
+				{
+					debugf(TEXT("D3D11Drv: IDXGISwapChain3.SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020) failed"));
+				}
+			}
+			else
+			{
+				debugf(TEXT("D3D11Drv: Swap chain does not support DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020"));
+			}
+		}
+	}
 }
 
 class SetResCallLock
@@ -503,15 +521,7 @@ bool UD3D11RenderDevice::UpdateSwapChain()
 		return false;
 	}
 
-	if (ActiveHdr)
-	{
-		ComPtr<IDXGISwapChain3> swapChain3;
-		HRESULT result = SwapChain->QueryInterface(swapChain3.GetIID(), swapChain3.InitPtr());
-		if (SUCCEEDED(result))
-		{
-			result = swapChain3->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020);
-		}
-	}
+	SetColorSpace();
 
 	if (CurrentSizeX && CurrentSizeY)
 	{
@@ -543,17 +553,7 @@ void UD3D11RenderDevice::Exit()
 {
 	guard(UD3D11RenderDevice::Exit);
 
-	if (SceneVertices)
-	{
-		Context->Unmap(ScenePass.VertexBuffer, 0);
-		SceneVertices = nullptr;
-	}
-
-	if (SceneIndexes)
-	{
-		Context->Unmap(ScenePass.IndexBuffer, 0);
-		SceneIndexes = nullptr;
-	}
+	UnmapVertices();
 
 	Uploads.reset();
 	Textures.reset();
@@ -564,6 +564,7 @@ void UD3D11RenderDevice::Exit()
 	BackBufferView.reset();
 	BackBuffer.reset();
 	SwapChain.reset();
+	SwapChain1.reset();
 	Context.reset();
 	Device.reset();
 
@@ -1483,6 +1484,44 @@ UBOOL UD3D11RenderDevice::Exec(const TCHAR* Cmd, FOutputDevice& Ar)
 	unguard;
 }
 
+void UD3D11RenderDevice::MapVertices(bool nextBuffer)
+{
+	if (!SceneVertices)
+	{
+		D3D11_MAPPED_SUBRESOURCE mappedVertexBuffer = {};
+		HRESULT result = Context->Map(ScenePass.VertexBuffer, 0, nextBuffer ? D3D11_MAP_WRITE_DISCARD : D3D11_MAP_WRITE_NO_OVERWRITE, 0, &mappedVertexBuffer);
+		if (SUCCEEDED(result))
+		{
+			SceneVertices = (SceneVertex*)mappedVertexBuffer.pData;
+		}
+	}
+
+	if (!SceneIndexes)
+	{
+		D3D11_MAPPED_SUBRESOURCE mappedIndexBuffer = {};
+		HRESULT result = Context->Map(ScenePass.IndexBuffer, 0, nextBuffer ? D3D11_MAP_WRITE_DISCARD : D3D11_MAP_WRITE_NO_OVERWRITE, 0, &mappedIndexBuffer);
+		if (SUCCEEDED(result))
+		{
+			SceneIndexes = (uint32_t*)mappedIndexBuffer.pData;
+		}
+	}
+}
+
+void UD3D11RenderDevice::UnmapVertices()
+{
+	if (SceneVertices)
+	{
+		Context->Unmap(ScenePass.VertexBuffer, 0);
+		SceneVertices = nullptr;
+	}
+
+	if (SceneIndexes)
+	{
+		Context->Unmap(ScenePass.IndexBuffer, 0);
+		SceneIndexes = nullptr;
+	}
+}
+
 void UD3D11RenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane ScreenClear, DWORD RenderLockFlags, BYTE* InHitData, INT* InHitSize)
 {
 	guard(UD3D11RenderDevice::Lock);
@@ -1548,25 +1587,7 @@ void UD3D11RenderDevice::Lock(FPlane InFlashScale, FPlane InFlashFog, FPlane Scr
 	box.bottom = CurrentSizeY;
 	Context->RSSetScissorRects(1, &box);
 
-	if (!SceneVertices)
-	{
-		D3D11_MAPPED_SUBRESOURCE mappedVertexBuffer = {};
-		HRESULT result = Context->Map(ScenePass.VertexBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedVertexBuffer);
-		if (SUCCEEDED(result))
-		{
-			SceneVertices = (SceneVertex*)mappedVertexBuffer.pData;
-		}
-	}
-
-	if (!SceneIndexes)
-	{
-		D3D11_MAPPED_SUBRESOURCE mappedIndexBuffer = {};
-		HRESULT result = Context->Map(ScenePass.IndexBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedIndexBuffer);
-		if (SUCCEEDED(result))
-		{
-			SceneIndexes = (uint32_t*)mappedIndexBuffer.pData;
-		}
-	}
+	MapVertices(true);
 
 	SceneConstants.HitIndex = 0;
 	ForceHitIndex = -1;
@@ -1674,8 +1695,16 @@ void UD3D11RenderDevice::Unlock(UBOOL Blit)
 {
 	guard(UD3D11RenderDevice::Unlock);
 
+	if (!IsLocked) // Don't trust the engine.
+		return;
+
 	if (Blit || HitData)
 		DrawBatches();
+
+	UnmapVertices();
+
+	SceneVertexPos = 0;
+	SceneIndexPos = 0;
 
 	if (Blit)
 	{
@@ -1748,21 +1777,6 @@ void UD3D11RenderDevice::Unlock(UBOOL Blit)
 		Batch.Detailtex = nullptr;
 		Batch.Macrotex = nullptr;
 		Batch.SceneIndexStart = 0;
-
-		if (SceneVertices)
-		{
-			Context->Unmap(ScenePass.VertexBuffer, 0);
-			SceneVertices = nullptr;
-		}
-
-		if (SceneIndexes)
-		{
-			Context->Unmap(ScenePass.IndexBuffer, 0);
-			SceneIndexes = nullptr;
-		}
-
-		SceneVertexPos = 0;
-		SceneIndexPos = 0;
 
 		UpdateLODBias();
 	}
@@ -3056,6 +3070,8 @@ void UD3D11RenderDevice::ReadPixels(FColor* Pixels)
 {
 	guard(UD3D11RenderDevice::GetStats);
 
+	UnmapVertices();
+
 	ID3D11Texture2D* stagingTexture = nullptr;
 
 	D3D11_TEXTURE2D_DESC texDesc = {};
@@ -3150,6 +3166,9 @@ void UD3D11RenderDevice::ReadPixels(FColor* Pixels)
 	}
 
 	stagingTexture->Release();
+
+	if (IsLocked)
+		MapVertices(false);
 
 	unguard;
 }
@@ -3260,26 +3279,13 @@ void UD3D11RenderDevice::DrawBatches(bool nextBuffer)
 		ActiveTimer->Unclock();
 	Timers.DrawBatches.Clock();
 
-	Context->Unmap(ScenePass.VertexBuffer, 0); SceneVertices = nullptr;
-	Context->Unmap(ScenePass.IndexBuffer, 0); SceneIndexes = nullptr;
+	UnmapVertices();
 
 	for (const DrawBatchEntry& entry : QueuedBatches)
 		DrawEntry(entry);
 	QueuedBatches.clear();
 
-	D3D11_MAPPED_SUBRESOURCE mappedVertexBuffer = {};
-	HRESULT result = Context->Map(ScenePass.VertexBuffer, 0, nextBuffer ? D3D11_MAP_WRITE_DISCARD : D3D11_MAP_WRITE_NO_OVERWRITE, 0, &mappedVertexBuffer);
-	if (SUCCEEDED(result))
-	{
-		SceneVertices = (SceneVertex*)mappedVertexBuffer.pData;
-	}
-
-	D3D11_MAPPED_SUBRESOURCE mappedIndexBuffer = {};
-	result = Context->Map(ScenePass.IndexBuffer, 0, nextBuffer ? D3D11_MAP_WRITE_DISCARD : D3D11_MAP_WRITE_NO_OVERWRITE, 0, &mappedIndexBuffer);
-	if (SUCCEEDED(result))
-	{
-		SceneIndexes = (uint32_t*)mappedIndexBuffer.pData;
-	}
+	MapVertices(nextBuffer);
 
 	if (nextBuffer)
 	{
