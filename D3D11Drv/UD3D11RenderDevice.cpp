@@ -666,6 +666,11 @@ void UD3D11RenderDevice::Exit()
 	debugf(TEXT("D3D11Drv: exit called"));
 
 	UnmapVertices();
+
+	ReleaseSwapChainResources();
+	if (CurrentFullscreen && SwapChain)
+		SwapChain->SetFullscreenState(FALSE, nullptr);
+
 	PrintDebugLayerMessages();
 
 	if (Context)
