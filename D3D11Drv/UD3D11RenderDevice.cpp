@@ -1833,11 +1833,10 @@ void UD3D11RenderDevice::Unlock(UBOOL Blit)
 	if (!IsLocked) // Don't trust the engine.
 		return;
 
-	if (Blit || HitData)
-		DrawBatches();
-
+	DrawBatches();
 	UnmapVertices();
 
+	Batch.SceneIndexStart = 0;
 	SceneVertexPos = 0;
 	SceneIndexPos = 0;
 
