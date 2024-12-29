@@ -415,6 +415,11 @@ private:
 	UBOOL CurrentFullscreen = 0;
 	int CurrentSizeX = 0;
 	int CurrentSizeY = 0;
+
+	struct DestructorLog
+	{
+		~DestructorLog() { debugf(TEXT("D3D11Drv: destroying instance")); }
+	} logDestruction;
 };
 
 inline void ThrowIfFailed(HRESULT result, const char* msg) { if (FAILED(result)) throw std::runtime_error(msg); }

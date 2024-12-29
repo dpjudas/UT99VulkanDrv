@@ -177,17 +177,29 @@ UBOOL UD3D11RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 			Device.TypedInitPtr(),
 			&FeatureLevel,
 			Context.TypedInitPtr());
+		if (FAILED(result))
+			debugf(TEXT("D3D11Drv: Could not create a modern D3D11 device"));
 
 		// Wonderful API you got here, Microsoft. Good job.
 		ComPtr<IDXGIDevice2> dxgiDevice;
 		ComPtr<IDXGIAdapter> dxgiAdapter;
 		ComPtr<IDXGIFactory2> dxgiFactory;
+
 		if (SUCCEEDED(result))
 			result = Device->QueryInterface(dxgiDevice.GetIID(), dxgiDevice.InitPtr());
+		else
+			debugf(TEXT("D3D11Drv: Could not get IDXGIDevice2 interface for the D3D11 device"));
+
 		if (SUCCEEDED(result))
 			result = dxgiDevice->GetParent(dxgiAdapter.GetIID(), dxgiAdapter.InitPtr());
+		else
+			debugf(TEXT("D3D11Drv: Could not get IDXGIAdapter interface for the D3D11 device"));
+
 		if (SUCCEEDED(result))
 			result = dxgiAdapter->GetParent(dxgiFactory.GetIID(), dxgiFactory.InitPtr());
+		else
+			debugf(TEXT("D3D11Drv: Could not get IDXGIFactory2 interface for the D3D11 device"));
+
 		if (SUCCEEDED(result))
 		{
 			ComPtr<IDXGIFactory5> dxgiFactory5;
@@ -200,6 +212,14 @@ UBOOL UD3D11RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 				{
 					DxgiSwapChainAllowTearing = support != 0;
 				}
+				else
+				{
+					debugf(TEXT("D3D11Drv: Device does not support DXGI_FEATURE_PRESENT_ALLOW_TEARING"));
+				}
+			}
+			else
+			{
+				debugf(TEXT("D3D11Drv: Could not get IDXGIFactory5 interface for the D3D11 device"));
 			}
 
 			UINT swapChainFlags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
@@ -224,6 +244,7 @@ UBOOL UD3D11RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 			}
 			else
 			{
+				debugf(TEXT("D3D11Drv: CreateSwapChainForHwnd failed"));
 				DxgiSwapChainAllowTearing = false;
 			}
 		}
@@ -245,6 +266,8 @@ UBOOL UD3D11RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 		// We still don't have a swap chain. Let's try the older Windows 7 API
 		if (!SwapChain)
 		{
+			debugf(TEXT("D3D11Drv: Modern D3D11 device creation failed. Falling back to Windows 7"));
+
 			DXGI_SWAP_CHAIN_DESC swapDesc = {};
 			swapDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 			swapDesc.BufferDesc.Width = NewX;
@@ -291,6 +314,8 @@ UBOOL UD3D11RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 					Context.TypedInitPtr());
 				if (SUCCEEDED(result))
 					break;
+
+				debugf(TEXT("D3D11Drv: Could not use DXGI_SWAP_EFFECT_FLIP_DISCARD. Falling back to DXGI_SWAP_EFFECT_DISCARD"));
 			}
 			ThrowIfFailed(result, "D3D11CreateDeviceAndSwapChain failed");
 		}
@@ -638,8 +663,13 @@ void UD3D11RenderDevice::Exit()
 {
 	guard(UD3D11RenderDevice::Exit);
 
+	debugf(TEXT("D3D11Drv: exit called"));
+
 	UnmapVertices();
 	PrintDebugLayerMessages();
+
+	if (Context)
+		Context->ClearState();
 
 	Uploads.reset();
 	Textures.reset();
@@ -652,7 +682,6 @@ void UD3D11RenderDevice::Exit()
 	SwapChain.reset();
 	SwapChain1.reset();
 	Context.reset();
-	Device.reset();
 
 	if (DebugLayer)
 	{
@@ -662,6 +691,14 @@ void UD3D11RenderDevice::Exit()
 
 	InfoQueue.reset();
 	DebugLayer.reset();
+
+	if (Device)
+	{
+		Device->AddRef();
+		int count = Device->Release();
+		Device.reset();
+		debugf(TEXT("D3D11Drv: D3D11Drv.Device refcount is now %d"), count - 1);
+	}
 
 	unguard;
 }
