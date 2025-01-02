@@ -234,7 +234,7 @@ UBOOL UD3D11RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 			swapDesc.BufferCount = BufferCount;
 			swapDesc.SampleDesc.Count = 1;
 			swapDesc.Scaling = DXGI_SCALING_STRETCH;
-			swapDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+			swapDesc.SwapEffect = GIsEditor ? DXGI_SWAP_EFFECT_DISCARD : DXGI_SWAP_EFFECT_FLIP_DISCARD;
 			swapDesc.Flags = swapChainFlags;
 			swapDesc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
 			result = dxgiFactory->CreateSwapChainForHwnd(Device, (HWND)Viewport->GetWindow(), &swapDesc, nullptr, nullptr, SwapChain1.TypedInitPtr());
@@ -296,7 +296,7 @@ UBOOL UD3D11RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 
 			// First try create a swap chain for Windows 8 and newer. If that fails, try the old for Windows 7
 			HRESULT result = E_FAIL;
-			for (DXGI_SWAP_EFFECT swapeffect : { DXGI_SWAP_EFFECT_FLIP_DISCARD, DXGI_SWAP_EFFECT_DISCARD })
+			for (DXGI_SWAP_EFFECT swapeffect : { GIsEditor ? DXGI_SWAP_EFFECT_DISCARD : DXGI_SWAP_EFFECT_FLIP_DISCARD, DXGI_SWAP_EFFECT_DISCARD })
 			{
 				swapDesc.SwapEffect = swapeffect;
 
