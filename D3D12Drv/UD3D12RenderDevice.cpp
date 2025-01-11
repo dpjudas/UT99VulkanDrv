@@ -5,10 +5,6 @@
 #include "UTF16.h"
 #include "FileResource.h"
 #include "halffloat.h"
-#include <set>
-#include <emmintrin.h>
-#include <functional>
-#include <dxgi1_5.h>
 
 IMPLEMENT_CLASS(UD3D12RenderDevice);
 
@@ -275,6 +271,12 @@ UBOOL UD3D12RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 
 		Textures.reset(new TextureManager(this));
 		Uploads.reset(new UploadManager(this));
+	}
+	catch (_com_error error)
+	{
+		debugf(TEXT("Could not create d3d12 renderer: [_com_error] %s"), error.ErrorMessage());
+		Exit();
+		return 0;
 	}
 	catch (const std::exception& e)
 	{
