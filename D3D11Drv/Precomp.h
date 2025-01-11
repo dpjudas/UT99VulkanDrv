@@ -13,6 +13,8 @@
 #include <dxgi1_2.h>
 #include <dxgi1_4.h>
 #include <d3dcompiler.h>
+#include <dxgi1_5.h>
+#include <comdef.h>
 #undef min
 #undef max
 #include <mutex>
@@ -21,6 +23,12 @@
 #include <memory>
 #include <map>
 #include <unordered_map>
+#include <set>
+#include <functional>
+#ifdef USE_SSE2
+#include <emmintrin.h>
+//#include <immintrin.h>
+#endif
 #pragma pack(pop)
 
 #define UTGLR_NO_APP_MALLOC

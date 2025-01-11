@@ -5,15 +5,10 @@
 #include "UTF16.h"
 #include "FileResource.h"
 #include "halffloat.h"
-#include <set>
-#include <emmintrin.h>
-#include <functional>
-#include <dxgi1_5.h>
 
 #ifdef USE_SSE2
 // Unfortunately this code is slower than what the compiler generates on its own ;(
 #undef USE_SSE2
-//#include <immintrin.h>
 #endif
 
 IMPLEMENT_CLASS(UD3D11RenderDevice);
@@ -358,6 +353,12 @@ UBOOL UD3D11RenderDevice::Init(UViewport* InViewport, INT NewX, INT NewY, INT Ne
 
 		Textures.reset(new TextureManager(this));
 		Uploads.reset(new UploadManager(this));
+	}
+	catch (_com_error error)
+	{
+		debugf(TEXT("Could not create d3d11 renderer: [_com_error] %s"), error.ErrorMessage());
+		Exit();
+		return 0;
 	}
 	catch (const std::exception& e)
 	{
