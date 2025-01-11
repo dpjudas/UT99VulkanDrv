@@ -1021,6 +1021,7 @@ void UVulkanRenderDevice::DrawComplexSurface(FSceneNode* Frame, FSurfaceInfo& Su
 				vptr->TexCoord4.s = (u - DetailUPan) * DetailUMult;
 				vptr->TexCoord4.t = (v - DetailVPan) * DetailVMult;
 				vptr->Color = color;
+				vptr->TextureBinds = textureBinds;
 				vptr++;
 			}
 
@@ -1797,6 +1798,7 @@ void UVulkanRenderDevice::BlitSceneToPostprocess()
 	auto cmdbuffer = Commands->GetDrawCommands();
 
 	PipelineBarrier barrer0;
+	VkPipelineStageFlags srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 	barrer0.AddImage(
 		buffers->ColorBuffer.get(),
 		VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
@@ -1817,6 +1819,7 @@ void UVulkanRenderDevice::BlitSceneToPostprocess()
 			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 			VK_ACCESS_TRANSFER_READ_BIT,
 			VK_ACCESS_TRANSFER_WRITE_BIT);
+		srcStageMask |= VK_ACCESS_TRANSFER_WRITE_BIT;
 	}
 	barrer0.AddImage(
 		buffers->PPImage[0].get(),
@@ -1826,7 +1829,7 @@ void UVulkanRenderDevice::BlitSceneToPostprocess()
 		VK_ACCESS_TRANSFER_WRITE_BIT);
 	barrer0.Execute(
 		Commands->GetDrawCommands(),
-		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+		srcStageMask,
 		VK_PIPELINE_STAGE_TRANSFER_BIT);
 
 	if (buffers->SceneSamples != VK_SAMPLE_COUNT_1_BIT)
