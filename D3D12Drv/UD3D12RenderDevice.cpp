@@ -2879,11 +2879,16 @@ void UD3D12RenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT X
 
 	CachedTexture* tex = Textures->GetTexture(&Info, !!(PolyFlags & PF_Masked));
 
-	SetPipeline(PolyFlags);
-	SetDescriptorSet(PolyFlags, tex, nullptr, nullptr, nullptr, true);
-
 	float UMult = tex ? GetUMult(Info) : 0.0f;
 	float VMult = tex ? GetVMult(Info) : 0.0f;
+	float u0 = U * UMult;
+	float v0 = V * VMult;
+	float u1 = (U + UL) * UMult;
+	float v1 = (V + VL) * VMult;
+	bool clamp = (u0 >= 0.0f && u1 <= 1.00001f && v0 >= 0.0f && v1 <= 1.00001f);
+
+	SetPipeline(PolyFlags);
+	SetDescriptorSet(PolyFlags, tex, nullptr, nullptr, nullptr, clamp);
 
 	float r, g, b, a;
 	if (PolyFlags & PF_Modulated)
