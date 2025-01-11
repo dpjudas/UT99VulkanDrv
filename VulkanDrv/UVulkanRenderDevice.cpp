@@ -1299,7 +1299,7 @@ void UVulkanRenderDevice::DrawTile(FSceneNode* Frame, FTextureInfo& Info, FLOAT 
 	float v0 = V * VMult;
 	float u1 = (U + UL) * UMult;
 	float v1 = (V + VL) * VMult;
-	bool clamp = (u0 >= 0.0f && u1 <= 1.00001f && v0 >= 0.0f && v1 <= 1.0f + 1.00001f);
+	bool clamp = (u0 >= 0.0f && u1 <= 1.00001f && v0 >= 0.0f && v1 <= 1.00001f);
 
 	SetPipeline(RenderPasses->GetPipeline(PolyFlags));
 	ivec4 textureBinds = GetTextureIndexes(PolyFlags, tex, clamp);
