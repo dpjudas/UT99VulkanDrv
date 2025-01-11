@@ -42,8 +42,7 @@ public:
 
 	ComPtr& operator=(ComPtr&& move) noexcept
 	{
-		Ptr = move.Ptr;
-		move.Ptr = nullptr;
+		std::swap(Ptr, move.Ptr);
 		return *this;
 	}
 
