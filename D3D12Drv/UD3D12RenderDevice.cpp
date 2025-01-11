@@ -560,6 +560,8 @@ void UD3D12RenderDevice::SubmitCommands(bool present)
 
 void UD3D12RenderDevice::WaitForFence(UINT64 value)
 {
+	if (!Commands.Fence)
+		return;
 	UINT64 completedValue = Commands.Fence->GetCompletedValue();
 	if (completedValue < value)
 	{
