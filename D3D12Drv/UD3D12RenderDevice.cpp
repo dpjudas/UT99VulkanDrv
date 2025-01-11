@@ -2413,8 +2413,6 @@ void UD3D12RenderDevice::SetHitLocation()
 	{
 		SceneConstants.HitIndex = 0;
 	}
-
-	Commands.Current->Draw->SetGraphicsRoot32BitConstants(2, sizeof(ScenePushConstants) / sizeof(uint32_t), &SceneConstants, 0);
 }
 
 #if defined(OLDUNREAL469SDK)
@@ -3248,7 +3246,6 @@ void UD3D12RenderDevice::EndFlash()
 
 		SceneConstants.ObjectToProjection = mat4::identity();
 		SceneConstants.NearClip = vec4(0.0f, 0.0f, 0.0f, 1.0f);
-		Commands.Current->Draw->SetGraphicsRoot32BitConstants(2, sizeof(ScenePushConstants) / sizeof(uint32_t), &SceneConstants, 0);
 
 		SetPipeline(PF_Highlighted);
 		SetDescriptorSet(0);
