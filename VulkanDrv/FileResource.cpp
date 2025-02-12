@@ -74,10 +74,10 @@ std::string FileResource::readAllText(const std::string& filename)
 				return vec4(clamp((c.rgb - cutoff) / (1.0 - cutoff), 0.0, 1.0), c.a);
 			}
 
-			vec4 textureTex(vec2 uv) { return texture(textures[textureBinds.x], uv); }
-			vec4 textureMacro(vec2 uv) { return texture(textures[textureBinds.y], uv); }
-			vec4 textureDetail(vec2 uv) { return texture(textures[textureBinds.z], uv); }
-			vec4 textureLightmap(vec2 uv) { return texture(textures[textureBinds.w], uv); }
+			vec4 textureTex(vec2 uv) { return texture(textures[nonuniformEXT(textureBinds.x)], uv); }
+			vec4 textureMacro(vec2 uv) { return texture(textures[nonuniformEXT(textureBinds.y)], uv); }
+			vec4 textureDetail(vec2 uv) { return texture(textures[nonuniformEXT(textureBinds.z)], uv); }
+			vec4 textureLightmap(vec2 uv) { return texture(textures[nonuniformEXT(textureBinds.w)], uv); }
 
 			void main()
 			{
